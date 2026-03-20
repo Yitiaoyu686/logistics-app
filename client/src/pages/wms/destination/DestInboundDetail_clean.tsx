@@ -1,0 +1,1 @@
+export { DestInboundDetail } from './DestInboundDetail';

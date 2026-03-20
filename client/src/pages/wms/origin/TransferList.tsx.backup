@@ -1,0 +1,943 @@
+import React, { useState } from 'react';
+import {
+  Card, Table, Button, Select, Tag, Space, Row, Col,
+  Statistic, Modal, Form, Input, Radio, InputNumber, message, Descriptions,
+  Drawer, Timeline
+} from 'antd';
+import {
+  SwapOutlined, HomeOutlined, ShopOutlined, ClockCircleOutlined,
+  CarOutlined, CheckCircleOutlined, PlusOutlined, EyeOutlined,
+  SendOutlined, InboxOutlined
+} from '@ant-design/icons';
+import dayjs from 'dayjs';
+
+const { Option } = Select;
+const { TextArea } = Input;
+
+// 调拨方向
+type TransferDirection = 'SATELLITE_TO_MAIN' | 'MAIN_TO_SATELLITE';
+
+// 调拨状态
+type TransferStatus = 'PENDING' | 'IN_TRANSIT' | 'ARRIVED' | 'CONFIRMED';
+
+// 发货方式（针对卫星仓有装箱号的情况）
+type ShippingMethod = 'DIRECT' | 'VIA_MAIN';
+
+// 流转记录
+interface FlowRecord {
+  time: string;
+  action: string;
+  operator: string;
+  detail?: string;
+}
+
+// 下属订单信息
+interface TransferOrderItem {
+  subOrderNo: string;
+  masterOrderNo: string;
+  trackingNo: string;
+  clientName: string;
+  pieces: number;
+  weight: number;
+  volume: number;
+}
+
+// 调拨记录
+interface TransferRecord {
+  id: string;
+  transferNo: string;
+  direction: TransferDirection;
+  sourceWarehouse: string;
+  targetWarehouse: string;
+  orderItems: TransferOrderItem[]; // 改为多个订单
+  shippingUnitNo?: string;
+  totalPieces: number;
+  totalWeight: number;
+  totalVolume: number;
+  status: TransferStatus;
+  shippingMethod?: ShippingMethod;
+  reason?: string;
+  remark?: string;
+  operator?: string;
+  createdAt: string;
+  departureTime?: string;
+  arrivalTime?: string;
+  confirmedTime?: string;
+  flowRecords?: FlowRecord[]; // 流转记录
+}
+
+// Mock 数据
+const MOCK_TRANSFER_RECORDS: TransferRecord[] = [
+  {
+    id: 'TRF001',
+    transferNo: 'TRF-20240115-001',
+    direction: 'SATELLITE_TO_MAIN',
+    sourceWarehouse: '佛山卫星仓',
+    targetWarehouse: '广州总仓',
+    orderItems: [
+      {
+        subOrderNo: 'ORD-20240115-001-01',
+        masterOrderNo: 'ORD-20240115-001',
+        trackingNo: 'SF1012605193752',
+        clientName: '张三贸易公司',
+        pieces: 1,
+        weight: 1.0,
+        volume: 0.0086
+      },
+      {
+        subOrderNo: 'ORD-20240115-001-02',
+        masterOrderNo: 'ORD-20240115-001',
+        trackingNo: '4301568788544',
+        clientName: '张三贸易公司',
+        pieces: 2,
+        weight: 1.5,
+        volume: 0.015
+      },
+      {
+        subOrderNo: 'ORD-20240115-002-01',
+        masterOrderNo: 'ORD-20240115-002',
+        trackingNo: 'YT4144353928655',
+        clientName: '李四电子商务',
+        pieces: 1,
+        weight: 0.8,
+        volume: 0.0147
+      }
+    ],
+    shippingUnitNo: 'MSKU1234567',
+    totalPieces: 4,
+    totalWeight: 3.3,
+    totalVolume: 0.0383,
+    status: 'IN_TRANSIT',
+    shippingMethod: 'VIA_MAIN',
+    reason: '集中发货',
+    operator: '张仓管',
+    createdAt: '2024-01-15 09:00:00',
+    departureTime: '2024-01-15 10:30:00',
+    flowRecords: [
+      { time: '2024-01-15 09:00:00', action: '创建调拨', operator: '张仓管', detail: '创建调拨任务，包含3个订单' },
+      { time: '2024-01-15 10:30:00', action: '发货', operator: '张仓管', detail: '已从佛山卫星仓发出' }
+    ]
+  },
+  {
+    id: 'TRF002',
+    transferNo: 'TRF-20240115-002',
+    direction: 'MAIN_TO_SATELLITE',
+    sourceWarehouse: '广州总仓',
+    targetWarehouse: '深圳卫星仓',
+    orderItems: [
+      {
+        subOrderNo: 'ORD-20240115-003-01',
+        masterOrderNo: 'ORD-20240115-003',
+        trackingNo: 'ZT9876543210',
+        clientName: '王五科技',
+        pieces: 3,
+        weight: 2.0,
+        volume: 0.0297
+      }
+    ],
+    totalPieces: 3,
+    totalWeight: 2.0,
+    totalVolume: 0.0297,
+    status: 'CONFIRMED',
+    reason: '就近发货',
+    operator: '李操作',
+    createdAt: '2024-01-14 14:00:00',
+    departureTime: '2024-01-14 15:00:00',
+    arrivalTime: '2024-01-14 18:30:00',
+    confirmedTime: '2024-01-14 19:00:00',
+    flowRecords: [
+      { time: '2024-01-14 14:00:00', action: '创建调拨', operator: '李操作', detail: '创建调拨任务，包含1个订单' },
+      { time: '2024-01-14 15:00:00', action: '发货', operator: '李操作', detail: '已从广州总仓发出' },
+      { time: '2024-01-14 18:30:00', action: '到达', operator: '系统', detail: '已到达深圳卫星仓' },
+      { time: '2024-01-14 19:00:00', action: '确认收货', operator: '王仓管', detail: '深圳卫星仓已确认收货' }
+    ]
+  }
+];
+    id: 'TRF001',
+    transferNo: 'TRF-20240115-001',
+    direction: 'SATELLITE_TO_MAIN',
+    sourceWarehouse: '佛山卫星仓',
+    targetWarehouse: '广州总仓',
+    orderId: 'ORD-20240101',
+    trackingNo: 'SF1234567890',
+    shippingUnitNo: 'MSKU1234567',
+    pieces: 5,
+    weight: 125.5,
+    volume: 0.85,
+    status: 'IN_TRANSIT',
+    shippingMethod: 'VIA_MAIN',
+    reason: '集中发货',
+    operator: '张仓管',
+    createdAt: '2024-01-15 09:00:00',
+    departureTime: '2024-01-15 10:30:00'
+  },
+  {
+    id: 'TRF002',
+    transferNo: 'TRF-20240115-002',
+    direction: 'MAIN_TO_SATELLITE',
+    sourceWarehouse: '广州总仓',
+    targetWarehouse: '深圳卫星仓',
+    orderId: 'ORD-20240102',
+    trackingNo: 'YTO9876543210',
+    pieces: 3,
+    weight: 68.2,
+    volume: 0.45,
+    status: 'CONFIRMED',
+    reason: '就近发货',
+    operator: '李操作',
+    createdAt: '2024-01-14 14:00:00',
+    departureTime: '2024-01-14 15:00:00',
+    arrivalTime: '2024-01-14 18:30:00',
+    confirmedTime: '2024-01-14 19:00:00'
+  },
+  {
+    id: 'TRF003',
+    transferNo: 'TRF-20240115-003',
+    direction: 'SATELLITE_TO_MAIN',
+    sourceWarehouse: '东莞卫星仓',
+    targetWarehouse: '广州总仓',
+    orderId: 'ORD-20240103',
+    trackingNo: 'ZTO5555666677',
+    shippingUnitNo: 'TEMU9876543',
+    pieces: 8,
+    weight: 186.8,
+    volume: 1.25,
+    status: 'ARRIVED',
+    shippingMethod: 'DIRECT',
+    reason: '已装箱直接发货',
+    remark: '客户要求加急',
+    operator: '王仓管',
+    createdAt: '2024-01-13 08:00:00',
+    departureTime: '2024-01-13 09:00:00',
+    arrivalTime: '2024-01-15 16:00:00'
+  }
+];
+
+// 状态配置
+const STATUS_CONFIG: Record<TransferStatus, { text: string; color: string; icon: React.ReactNode }> = {
+  PENDING: { text: '待调拨', color: 'default', icon: <ClockCircleOutlined /> },
+  IN_TRANSIT: { text: '运输中', color: 'processing', icon: <CarOutlined /> },
+  ARRIVED: { text: '已到达', color: 'success', icon: <InboxOutlined /> },
+  CONFIRMED: { text: '已确认', color: 'success', icon: <CheckCircleOutlined /> }
+};
+
+// 方向配置
+const DIRECTION_CONFIG: Record<TransferDirection, { text: string; color: string; icon: React.ReactNode }> = {
+  SATELLITE_TO_MAIN: { text: '卫星仓→总仓', color: 'blue', icon: <ShopOutlined /> },
+  MAIN_TO_SATELLITE: { text: '总仓→卫星仓', color: 'green', icon: <HomeOutlined /> }
+};
+
+// 发货方式配置
+const SHIPPING_METHOD_CONFIG: Record<ShippingMethod, { text: string; color: string }> = {
+  VIA_MAIN: { text: '先送总仓', color: 'default' },
+  DIRECT: { text: '直接发货', color: 'orange' }
+};
+
+export const TransferList: React.FC = () => {
+  const [loading, setLoading] = useState(false);
+  const [records, setRecords] = useState<TransferRecord[]>(MOCK_TRANSFER_RECORDS);
+  const [filteredRecords, setFilteredRecords] = useState<TransferRecord[]>(MOCK_TRANSFER_RECORDS);
+
+  // 筛选条件
+  const [filterDirection, setFilterDirection] = useState<TransferDirection | 'ALL'>('ALL');
+  const [filterStatus, setFilterStatus] = useState<TransferStatus | 'ALL'>('ALL');
+
+  // 创建Modal
+  const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [form] = Form.useForm();
+
+  // 详情Modal
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState<TransferRecord | null>(null);
+
+  // 统计数据
+  const pendingCount = records.filter(r => r.status === 'PENDING').length;
+  const inTransitCount = records.filter(r => r.status === 'IN_TRANSIT').length;
+  const arrivedCount = records.filter(r => r.status === 'ARRIVED').length;
+  const confirmedCount = records.filter(r => r.status === 'CONFIRMED').length;
+
+  // 筛选逻辑
+  const handleFilter = () => {
+    let filtered = [...records];
+
+    if (filterDirection !== 'ALL') {
+      filtered = filtered.filter(r => r.direction === filterDirection);
+    }
+
+    if (filterStatus !== 'ALL') {
+      filtered = filtered.filter(r => r.status === filterStatus);
+    }
+
+    setFilteredRecords(filtered);
+  };
+
+  // 创建调拨单
+  const handleCreate = async () => {
+    try {
+      const values = await form.validateFields();
+      setLoading(true);
+
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const newRecord: TransferRecord = {
+        id: `TRF${Date.now()}`,
+        transferNo: `TRF-${dayjs().format('YYYYMMDD')}-${String(records.length + 1).padStart(3, '0')}`,
+        direction: values.direction,
+        sourceWarehouse: values.sourceWarehouse,
+        targetWarehouse: values.targetWarehouse,
+        orderId: values.orderId,
+        trackingNo: values.trackingNo,
+        shippingUnitNo: values.shippingUnitNo,
+        pieces: values.pieces,
+        weight: values.weight,
+        volume: values.volume,
+        status: 'PENDING',
+        shippingMethod: values.shippingMethod,
+        reason: values.reason,
+        remark: values.remark,
+        operator: '当前用户',
+        createdAt: dayjs().format('YYYY-MM-DD HH:mm:ss')
+      };
+
+      setRecords([newRecord, ...records]);
+      setFilteredRecords([newRecord, ...filteredRecords]);
+      setCreateModalVisible(false);
+      form.resetFields();
+      message.success('调拨单创建成功');
+      setLoading(false);
+    } catch (error) {
+      setLoading(false);
+    }
+  };
+
+  // 查看详情
+  const handleViewDetail = (record: TransferRecord) => {
+    setSelectedRecord(record);
+    setDetailModalVisible(true);
+  };
+
+  // 确认到达
+  const handleConfirmArrival = (record: TransferRecord) => {
+    Modal.confirm({
+      title: '确认到达',
+      content: `确定 ${record.transferNo} 已到达目标仓库吗？`,
+      onOk: () => {
+        setRecords(prevRecords =>
+          prevRecords.map(r =>
+            r.id === record.id
+              ? { ...r, status: 'ARRIVED' as TransferStatus, arrivalTime: dayjs().format('YYYY-MM-DD HH:mm:ss') }
+              : r
+          )
+        );
+        setFilteredRecords(prevRecords =>
+          prevRecords.map(r =>
+            r.id === record.id
+              ? { ...r, status: 'ARRIVED' as TransferStatus, arrivalTime: dayjs().format('YYYY-MM-DD HH:mm:ss') }
+              : r
+          )
+        );
+        message.success('已确认到达');
+      }
+    });
+  };
+
+  // 确认入库
+  const handleConfirmReceive = (record: TransferRecord) => {
+    Modal.confirm({
+      title: '确认入库',
+      content: `确定 ${record.transferNo} 已入库吗？`,
+      onOk: () => {
+        setRecords(prevRecords =>
+          prevRecords.map(r =>
+            r.id === record.id
+              ? { ...r, status: 'CONFIRMED' as TransferStatus, confirmedTime: dayjs().format('YYYY-MM-DD HH:mm:ss') }
+              : r
+          )
+        );
+        setFilteredRecords(prevRecords =>
+          prevRecords.map(r =>
+            r.id === record.id
+              ? { ...r, status: 'CONFIRMED' as TransferStatus, confirmedTime: dayjs().format('YYYY-MM-DD HH:mm:ss') }
+              : r
+          )
+        );
+        message.success('入库确认成功');
+      }
+    });
+  };
+
+  // 发起调拨
+  const handleStartTransfer = (record: TransferRecord) => {
+    Modal.confirm({
+      title: '发起调拨',
+      content: `确定开始调拨 ${record.transferNo} 吗？`,
+      onOk: () => {
+        setRecords(prevRecords =>
+          prevRecords.map(r =>
+            r.id === record.id
+              ? { ...r, status: 'IN_TRANSIT' as TransferStatus, departureTime: dayjs().format('YYYY-MM-DD HH:mm:ss') }
+              : r
+          )
+        );
+        setFilteredRecords(prevRecords =>
+          prevRecords.map(r =>
+            r.id === record.id
+              ? { ...r, status: 'IN_TRANSIT' as TransferStatus, departureTime: dayjs().format('YYYY-MM-DD HH:mm:ss') }
+              : r
+          )
+        );
+        message.success('调拨已发起');
+      }
+    });
+  };
+
+  // 表格列定义
+  const columns = [
+    {
+      title: '调拨单号',
+      dataIndex: 'transferNo',
+      key: 'transferNo',
+      width: 180,
+      render: (text: string) => <strong>{text}</strong>
+    },
+    {
+      title: '调拨方向',
+      dataIndex: 'direction',
+      key: 'direction',
+      width: 150,
+      render: (direction: TransferDirection) => {
+        const config = DIRECTION_CONFIG[direction];
+        return (
+          <Tag color={config.color} icon={config.icon}>
+            {config.text}
+          </Tag>
+        );
+      }
+    },
+    {
+      title: '源仓库',
+      dataIndex: 'sourceWarehouse',
+      key: 'sourceWarehouse',
+      width: 120
+    },
+    {
+      title: '目标仓库',
+      dataIndex: 'targetWarehouse',
+      key: 'targetWarehouse',
+      width: 120
+    },
+    {
+      title: '订单号',
+      dataIndex: 'trackingNo',
+      key: 'trackingNo',
+      width: 150
+    },
+    {
+      title: '装箱号',
+      dataIndex: 'shippingUnitNo',
+      key: 'shippingUnitNo',
+      width: 150,
+      render: (text: string, record: TransferRecord) => (
+        <div>
+          <div>{text || '-'}</div>
+          {text && record.shippingMethod && (
+            <Tag
+              size="small"
+              color={SHIPPING_METHOD_CONFIG[record.shippingMethod].color}
+              style={{ marginTop: 4 }}
+            >
+              {SHIPPING_METHOD_CONFIG[record.shippingMethod].text}
+            </Tag>
+          )}
+        </div>
+      )
+    },
+    {
+      title: '货物信息',
+      key: 'cargo',
+      width: 150,
+      render: (record: TransferRecord) => (
+        <div>
+          <div>{record.pieces} 件</div>
+          <div style={{ fontSize: 12, color: '#999' }}>
+            {record.weight.toFixed(2)} kg / {record.volume.toFixed(3)} m³
+          </div>
+        </div>
+      )
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      width: 120,
+      render: (status: TransferStatus) => {
+        const config = STATUS_CONFIG[status];
+        return (
+          <Tag color={config.color} icon={config.icon}>
+            {config.text}
+          </Tag>
+        );
+      }
+    },
+    {
+      title: '调拨原因',
+      dataIndex: 'reason',
+      key: 'reason',
+      width: 150,
+      ellipsis: true,
+      render: (text: string) => text || '-'
+    },
+    {
+      title: '操作人',
+      dataIndex: 'operator',
+      key: 'operator',
+      width: 100
+    },
+    {
+      title: '创建时间',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      width: 160,
+      render: (text: string) => dayjs(text).format('YYYY-MM-DD HH:mm')
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 200,
+      fixed: 'right' as const,
+      render: (record: TransferRecord) => (
+        <Space size="small" wrap>
+          <Button
+            type="link"
+            size="small"
+            icon={<EyeOutlined />}
+            onClick={() => handleViewDetail(record)}
+          >
+            详情
+          </Button>
+          {record.status === 'PENDING' && (
+            <Button
+              type="link"
+              size="small"
+              icon={<SendOutlined />}
+              onClick={() => handleStartTransfer(record)}
+            >
+              发起
+            </Button>
+          )}
+          {record.status === 'IN_TRANSIT' && (
+            <Button
+              type="link"
+              size="small"
+              onClick={() => handleConfirmArrival(record)}
+            >
+              确认到达
+            </Button>
+          )}
+          {record.status === 'ARRIVED' && (
+            <Button
+              type="link"
+              size="small"
+              onClick={() => handleConfirmReceive(record)}
+            >
+              确认入库
+            </Button>
+          )}
+        </Space>
+      )
+    }
+  ];
+
+  return (
+    <div>
+      {/* 统计卡片 */}
+      <Row gutter={16} style={{ marginBottom: 16 }}>
+        <Col span={6}>
+          <Card>
+            <Statistic
+              title="待调拨"
+              value={pendingCount}
+              suffix="票"
+              valueStyle={{ color: '#999' }}
+              prefix={<ClockCircleOutlined />}
+            />
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card>
+            <Statistic
+              title="运输中"
+              value={inTransitCount}
+              suffix="票"
+              valueStyle={{ color: '#1890ff' }}
+              prefix={<CarOutlined />}
+            />
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card>
+            <Statistic
+              title="已到达"
+              value={arrivedCount}
+              suffix="票"
+              valueStyle={{ color: '#52c41a' }}
+              prefix={<InboxOutlined />}
+            />
+          </Card>
+        </Col>
+        <Col span={6}>
+          <Card>
+            <Statistic
+              title="已确认"
+              value={confirmedCount}
+              suffix="票"
+              valueStyle={{ color: '#722ed1' }}
+              prefix={<CheckCircleOutlined />}
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      {/* 筛选与操作区域 */}
+      <Card style={{ marginBottom: 16 }}>
+        <Space wrap>
+          <Select
+            value={filterDirection}
+            onChange={value => {
+              setFilterDirection(value);
+              setTimeout(handleFilter, 0);
+            }}
+            style={{ width: 150 }}
+          >
+            <Option value="ALL">全部方向</Option>
+            <Option value="SATELLITE_TO_MAIN">卫星仓→总仓</Option>
+            <Option value="MAIN_TO_SATELLITE">总仓→卫星仓</Option>
+          </Select>
+          <Select
+            value={filterStatus}
+            onChange={value => {
+              setFilterStatus(value);
+              setTimeout(handleFilter, 0);
+            }}
+            style={{ width: 120 }}
+          >
+            <Option value="ALL">全部状态</Option>
+            <Option value="PENDING">待调拨</Option>
+            <Option value="IN_TRANSIT">运输中</Option>
+            <Option value="ARRIVED">已到达</Option>
+            <Option value="CONFIRMED">已确认</Option>
+          </Select>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setCreateModalVisible(true)}
+          >
+            创建调拨单
+          </Button>
+        </Space>
+      </Card>
+
+      {/* 数据表格 */}
+      <Card>
+        <Table
+          rowKey="id"
+          columns={columns}
+          dataSource={filteredRecords}
+          loading={loading}
+          scroll={{ x: 1800 }}
+          pagination={{
+            pageSize: 20,
+            showSizeChanger: true,
+            showTotal: total => `共 ${total} 条记录`
+          }}
+        />
+      </Card>
+
+      {/* 创建调拨单Modal */}
+      <Modal
+        title={
+          <Space>
+            <SwapOutlined />
+            <span>创建调拨单</span>
+          </Space>
+        }
+        open={createModalVisible}
+        onOk={handleCreate}
+        onCancel={() => {
+          setCreateModalVisible(false);
+          form.resetFields();
+        }}
+        confirmLoading={loading}
+        width={700}
+      >
+        <Form form={form} layout="vertical" style={{ marginTop: 24 }}>
+          <Form.Item
+            label="调拨方向"
+            name="direction"
+            rules={[{ required: true, message: '请选择调拨方向' }]}
+          >
+            <Radio.Group>
+              <Radio value="SATELLITE_TO_MAIN">
+                <Space>
+                  <ShopOutlined />
+                  卫星仓 → 总仓
+                </Space>
+              </Radio>
+              <Radio value="MAIN_TO_SATELLITE">
+                <Space>
+                  <HomeOutlined />
+                  总仓 → 卫星仓
+                </Space>
+              </Radio>
+            </Radio.Group>
+          </Form.Item>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                label="源仓库"
+                name="sourceWarehouse"
+                rules={[{ required: true, message: '请选择源仓库' }]}
+              >
+                <Select placeholder="请选择源仓库">
+                  <Option value="广州总仓">广州总仓</Option>
+                  <Option value="佛山卫星仓">佛山卫星仓</Option>
+                  <Option value="深圳卫星仓">深圳卫星仓</Option>
+                  <Option value="东莞卫星仓">东莞卫星仓</Option>
+                  <Option value="中山卫星仓">中山卫星仓</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                label="目标仓库"
+                name="targetWarehouse"
+                rules={[{ required: true, message: '请选择目标仓库' }]}
+              >
+                <Select placeholder="请选择目标仓库">
+                  <Option value="广州总仓">广州总仓</Option>
+                  <Option value="佛山卫星仓">佛山卫星仓</Option>
+                  <Option value="深圳卫星仓">深圳卫星仓</Option>
+                  <Option value="东莞卫星仓">东莞卫星仓</Option>
+                  <Option value="中山卫星仓">中山卫星仓</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item label="订单ID" name="orderId">
+                <Input placeholder="请输入订单ID" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="订单号" name="trackingNo">
+                <Input placeholder="请输入订单号" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Form.Item label="装箱号" name="shippingUnitNo">
+            <Input placeholder="如果已装箱，请输入装箱号" />
+          </Form.Item>
+
+          <Form.Item
+            noStyle
+            shouldUpdate={(prevValues, currentValues) =>
+              prevValues.shippingUnitNo !== currentValues.shippingUnitNo ||
+              prevValues.direction !== currentValues.direction
+            }
+          >
+            {({ getFieldValue }) => {
+              const hasShippingUnit = getFieldValue('shippingUnitNo');
+              const direction = getFieldValue('direction');
+
+              // 只有卫星仓到总仓且有装箱号时才显示发货方式选择
+              if (hasShippingUnit && direction === 'SATELLITE_TO_MAIN') {
+                return (
+                  <Form.Item
+                    label="发货方式"
+                    name="shippingMethod"
+                    rules={[{ required: true, message: '请选择发货方式' }]}
+                    extra="卫星仓有装箱号时，可选择直接发货或先送总仓集中发货"
+                  >
+                    <Radio.Group>
+                      <Radio value="VIA_MAIN">先送总仓（集中发货）</Radio>
+                      <Radio value="DIRECT">直接发货（跳过总仓）</Radio>
+                    </Radio.Group>
+                  </Form.Item>
+                );
+              }
+              return null;
+            }}
+          </Form.Item>
+
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item
+                label="件数"
+                name="pieces"
+                rules={[{ required: true, message: '请输入件数' }]}
+              >
+                <InputNumber
+                  min={1}
+                  precision={0}
+                  style={{ width: '100%' }}
+                  placeholder="件数"
+                />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                label="重量(kg)"
+                name="weight"
+                rules={[{ required: true, message: '请输入重量' }]}
+              >
+                <InputNumber
+                  min={0}
+                  step={0.1}
+                  precision={2}
+                  style={{ width: '100%' }}
+                  placeholder="重量"
+                />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                label="体积(m³)"
+                name="volume"
+                rules={[{ required: true, message: '请输入体积' }]}
+              >
+                <InputNumber
+                  min={0}
+                  step={0.01}
+                  precision={3}
+                  style={{ width: '100%' }}
+                  placeholder="体积"
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Form.Item
+            label="调拨原因"
+            name="reason"
+            rules={[{ required: true, message: '请输入调拨原因' }]}
+          >
+            <Select placeholder="请选择调拨原因">
+              <Option value="集中发货">集中发货</Option>
+              <Option value="就近发货">就近发货</Option>
+              <Option value="库存调整">库存调整</Option>
+              <Option value="紧急补货">紧急补货</Option>
+              <Option value="已装箱直接发货">已装箱直接发货</Option>
+              <Option value="其他">其他</Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item label="备注" name="remark">
+            <TextArea rows={3} placeholder="补充说明" maxLength={300} showCount />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 详情Modal */}
+      <Modal
+        title={
+          <Space>
+            <EyeOutlined />
+            <span>调拨详情</span>
+          </Space>
+        }
+        open={detailModalVisible}
+        onCancel={() => {
+          setDetailModalVisible(false);
+          setSelectedRecord(null);
+        }}
+        footer={null}
+        width={800}
+      >
+        {selectedRecord && (
+          <div>
+            <Descriptions column={2} bordered>
+              <Descriptions.Item label="调拨单号" span={2}>
+                <strong>{selectedRecord.transferNo}</strong>
+              </Descriptions.Item>
+              <Descriptions.Item label="调拨方向" span={2}>
+                <Tag color={DIRECTION_CONFIG[selectedRecord.direction].color}>
+                  {DIRECTION_CONFIG[selectedRecord.direction].text}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="源仓库">
+                {selectedRecord.sourceWarehouse}
+              </Descriptions.Item>
+              <Descriptions.Item label="目标仓库">
+                {selectedRecord.targetWarehouse}
+              </Descriptions.Item>
+              <Descriptions.Item label="订单ID">
+                {selectedRecord.orderId || '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="订单号">
+                {selectedRecord.trackingNo || '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="装箱号" span={2}>
+                {selectedRecord.shippingUnitNo || '-'}
+                {selectedRecord.shippingUnitNo && selectedRecord.shippingMethod && (
+                  <Tag
+                    color={SHIPPING_METHOD_CONFIG[selectedRecord.shippingMethod].color}
+                    style={{ marginLeft: 8 }}
+                  >
+                    {SHIPPING_METHOD_CONFIG[selectedRecord.shippingMethod].text}
+                  </Tag>
+                )}
+              </Descriptions.Item>
+              <Descriptions.Item label="件数">
+                {selectedRecord.pieces} 件
+              </Descriptions.Item>
+              <Descriptions.Item label="重量">
+                {selectedRecord.weight.toFixed(2)} kg
+              </Descriptions.Item>
+              <Descriptions.Item label="体积">
+                {selectedRecord.volume.toFixed(3)} m³
+              </Descriptions.Item>
+              <Descriptions.Item label="状态">
+                <Tag color={STATUS_CONFIG[selectedRecord.status].color}>
+                  {STATUS_CONFIG[selectedRecord.status].text}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="调拨原因" span={2}>
+                {selectedRecord.reason || '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="操作人">
+                {selectedRecord.operator}
+              </Descriptions.Item>
+              <Descriptions.Item label="创建时间">
+                {dayjs(selectedRecord.createdAt).format('YYYY-MM-DD HH:mm')}
+              </Descriptions.Item>
+              {selectedRecord.departureTime && (
+                <Descriptions.Item label="发货时间" span={2}>
+                  {dayjs(selectedRecord.departureTime).format('YYYY-MM-DD HH:mm')}
+                </Descriptions.Item>
+              )}
+              {selectedRecord.arrivalTime && (
+                <Descriptions.Item label="到达时间" span={2}>
+                  {dayjs(selectedRecord.arrivalTime).format('YYYY-MM-DD HH:mm')}
+                </Descriptions.Item>
+              )}
+              {selectedRecord.confirmedTime && (
+                <Descriptions.Item label="确认时间" span={2}>
+                  {dayjs(selectedRecord.confirmedTime).format('YYYY-MM-DD HH:mm')}
+                </Descriptions.Item>
+              )}
+              {selectedRecord.remark && (
+                <Descriptions.Item label="备注" span={2}>
+                  {selectedRecord.remark}
+                </Descriptions.Item>
+              )}
+            </Descriptions>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+};

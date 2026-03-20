@@ -1,0 +1,171 @@
+import React, { useState } from 'react';
+import {
+  Drawer, Card, Row, Col, Descriptions, Table, Tag, Space, Typography,
+  Statistic, Divider, Collapse, Button, Timeline
+} from 'antd';
+import {
+  ClockCircleOutlined, CheckCircleOutlined, EnvironmentOutlined,
+  FileTextOutlined, DollarOutlined, InboxOutlined, CarOutlined,
+  UserOutlined, PhoneOutlined, DownOutlined, UpOutlined
+} from '@ant-design/icons';
+import dayjs from 'dayjs';
+import type { SubOrder, OrderItem, ExpressPackage } from '../../types/core';
+import { MOCK_EXPRESS_PACKAGES } from '../../data/orderMock';
+
+const { Text, Title } = Typography;
+const { Panel } = Collapse;
+
+interface SubOrderDetailProps {
+  visible: boolean;
+  subOrder: SubOrder | null;
+  onClose: () => void;
+}
+
+export const SubOrderDetail: React.FC<SubOrderDetailProps> = ({
+  visible,
+  subOrder,
+  onClose
+}) => {
+  const [timelineExpanded, setTimelineExpanded] = useState(false);
+
+  if (!subOrder) return null;
+
+  // 筛选该子订单关联的快递包裹
+  const relatedPackages = MOCK_EXPRESS_PACKAGES.filter(
+    pkg => pkg.subOrderId === subOrder.id
+  );
+
+  // Status display
+  const getStatusColor = (status: string) => {
+    const colorMap: Record<string, string> = {
+      'PENDING_INBOUND': 'default',
+      'INBOUND': 'cyan',
+      'PENDING_PACKING': 'warning',
+      'PACKED': 'orange',
+      'PENDING_DEPARTURE': 'processing',
+      'IN_TRANSIT': 'blue',
+      'CUSTOMS_CLEARANCE': 'purple',
+      'ARRIVED': 'geekblue',
+      'PENDING_DELIVERY': 'lime',
+      'DELIVERING': 'cyan',
+      'DELIVERED': 'success',
+      'EXCEPTION': 'error'
+    };
+    return colorMap[status] || 'default';
+  };
+
+  const getStatusText = (status: string) => {
+    const textMap: Record<string, string> = {
+      'PENDING_INBOUND': '待入库',
+      'INBOUND': '已入库',
+      'PENDING_PACKING': '待装箱',
+      'PACKED': '已装箱',
+      'PENDING_DEPARTURE': '待发货',
+      'IN_TRANSIT': '运输中',
+      'CUSTOMS_CLEARANCE': '清关中',
+      'ARRIVED': '已到达',
+      'PENDING_DELIVERY': '待配送',
+      'DELIVERING': '配送中',
+      'DELIVERED': '已签收',
+      'EXCEPTION': '异常'
+    };
+    return textMap[status] || status;
+  };
+
+  return (
+    <Drawer
+      title={
+        <Space>
+          <FileTextOutlined />
+          <span>子订单详情</span>
+        </Space>
+      }
+      open={visible}
+      onClose={onClose}
+      width={1200}
+      extra={
+        <Space>
+          <Button onClick={onClose}>关闭</Button>
+        </Space>
+      }
+    >
+      <Space direction="vertical" size="large" style={{ width: '100%' }}>
+        {/* 顶部：子订单号和状态 */}
+        <Card bordered={false} style={{ background: '#fafafa' }}>
+          <Row align="middle" justify="space-between">
+            <Col>
+              <Space direction="vertical" size={0}>
+                <Text type="secondary" style={{ fontSize: 12 }}>子订单号</Text>
+                <Title level={4} style={{ margin: 0 }}>{subOrder.subOrderNo}</Title>
+              </Space>
+            </Col>
+            <Col>
+              <Tag color={getStatusColor(subOrder.status)} style={{ fontSize: 14, padding: '4px 12px' }}>
+                {getStatusText(subOrder.status)}
+              </Tag>
+            </Col>
+          </Row>
+          <Divider style={{ margin: '16px 0' }} />
+          <Row gutter={16}>
+            <Col span={6}>
+              <Statistic
+                title="总件数"
+                value={subOrder.pieces}
+                suffix="件"
+              />
+            </Col>
+            <Col span={6}>
+              <Statistic
+                title="总重量"
+                value={subOrder.weight}
+                suffix="kg"
+                precision={2}
+              />
+            </Col>
+            <Col span={6}>
+              <Statistic
+                title="总体积"
+                value={subOrder.volume}
+                suffix="m³"
+                precision={3}
+              />
+            </Col>
+            <Col span={6}>
+              <Statistic
+                title="货值"
+                value={subOrder.value}
+                prefix="$"
+                precision={2}
+              />
+            </Col>
+          </Row>
+        </Card>
+
+        {/* 运输路线 */}
+        <Card
+          bordered={false}
+          style={{
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            color: 'white'
+          }}
+        >
+          <Row align="middle" justify="center">
+            <Col>
+              <Space size="large" align="center">
+                <div style={{ textAlign: 'center' }}>
+                  <EnvironmentOutlined style={{ fontSize: 24, marginBottom: 8 }} />
+                  <div style={{ fontSize: 16, fontWeight: 'bold' }}>
+                    {subOrder.route?.split('→')[0]?.trim() || '起运地'}
+                  </div>
+                </div>
+                <CarOutlined style={{ fontSize: 32 }} />
+                <div style={{ textAlign: 'center' }}>
+                  <EnvironmentOutlined style={{ fontSize: 24, marginBottom: 8 }} />
+                  <div style={{ fontSize: 16, fontWeight: 'bold' }}>
+                    {subOrder.route?.split('→')[1]?.trim() || '目的地'}
+                  </div>
+                </div>
+              </Space>
+            </Col>
+          </Row>
+        </Card>

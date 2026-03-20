@@ -1,0 +1,22 @@
+{
+  "feature_name": "origin-task-management",
+  "created_at": "2026-03-17T10:00:00+08:00",
+  "updated_at": "2026-03-17T10:00:00+08:00",
+  "language": "zh-CN",
+  "phase": "implementation",
+  "approvals": {
+    "requirements": {
+      "generated": true,
+      "approved": true
+    },
+    "design": {
+      "generated": true,
+      "approved": true
+    },
+    "tasks": {
+      "generated": true,
+      "approved": true
+    }
+  },
+  "ready_for_implementation": true
+}
