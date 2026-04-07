@@ -79,7 +79,7 @@ export interface LegacyJob {
 export interface LegacyTask {
   id: string;
   jobs: LegacyJob[];
-  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'SUSPENDED';
   createdBy: string;
   createdAt: string;
   updatedAt: string;

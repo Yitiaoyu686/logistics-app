@@ -277,6 +277,13 @@ const STATUS_LABEL: Record<TaskStatus, string> = {
   PENDING: '待执行',
   IN_PROGRESS: '执行中',
   COMPLETED: '已完成',
+  SUSPENDED: '已暂停',
+};
+const STATUS_COLOR: Record<TaskStatus, string> = {
+  PENDING: 'warning',
+  IN_PROGRESS: 'processing',
+  COMPLETED: 'success',
+  SUSPENDED: 'red',
 };
 
 const SERVICE_LABEL: Record<LegacyJob['serviceType'], string> = {
@@ -1372,6 +1379,18 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
               <Button type="link" size="small" danger icon={<DeleteOutlined />} onClick={() => openDelete(row)}>删除</Button>
             </>
           ) : null}
+          {row.status !== 'SUSPENDED' && row.status !== 'COMPLETED' && (
+            <Button type="link" size="small" style={{ color: '#fa8c16' }} onClick={() => {
+              const t = tasks.find(t => t.id === row.taskId);
+              if (t) { t.status = 'SUSPENDED'; setTasks([...tasks]); message.success('任务已暂停'); }
+            }}>暂停</Button>
+          )}
+          {row.status === 'SUSPENDED' && (
+            <Button type="link" size="small" style={{ color: '#52c41a' }} onClick={() => {
+              const t = tasks.find(t => t.id === row.taskId);
+              if (t) { t.status = 'IN_PROGRESS'; setTasks([...tasks]); message.success('任务已恢复'); }
+            }}>恢复</Button>
+          )}
         </Space>
       ),
     },
@@ -2213,7 +2232,7 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
                     <Descriptions.Item label="任务编号">{selectedTask.id}</Descriptions.Item>
                     <Descriptions.Item label="JOB号">{selectedJob.jobNo}</Descriptions.Item>
                     <Descriptions.Item label="操作站点">{selectedJob.stationName}</Descriptions.Item>
-                    <Descriptions.Item label="执行状态">{STATUS_LABEL[selectedTask.status]}</Descriptions.Item>
+                    <Descriptions.Item label="执行状态"><Tag color={STATUS_COLOR[selectedTask.status]}>{STATUS_LABEL[selectedTask.status]}</Tag></Descriptions.Item>
                     <Descriptions.Item label="服务类型">{SERVICE_LABEL[selectedJob.serviceType]}</Descriptions.Item>
                     <Descriptions.Item label="线路">{selectedJob.routeName}</Descriptions.Item>
                     <Descriptions.Item label="创建人">{selectedTask.createdBy}</Descriptions.Item>
