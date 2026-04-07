@@ -672,6 +672,74 @@ export const ReceivableAging: React.FC = () => {
           }}
         />
       </Card>
+
+      {/* 历史年度欠款汇总 */}
+      <Card
+        size="small"
+        style={{ borderRadius: 8, marginTop: 16 }}
+        title="历史年度欠款汇总"
+      >
+        <Table
+          dataSource={[
+            { key: '1', year: '18-19年', air: 12500.00, sea: 35800.00, total: 48300.00 },
+            { key: '2', year: '20年', air: 8900.00, sea: 22400.00, total: 31300.00 },
+            { key: '3', year: '21年', air: 15600.00, sea: 41200.00, total: 56800.00 },
+            { key: '4', year: '22年', air: 21300.00, sea: 53700.00, total: 75000.00 },
+            { key: '5', year: '23年', air: 18700.00, sea: 46500.00, total: 65200.00 },
+            { key: '6', year: '24年', air: 25100.00, sea: 61800.00, total: 86900.00 },
+            { key: '7', year: '合计', air: 102100.00, sea: 261400.00, total: 363500.00, isSummary: true },
+          ]}
+          columns={[
+            {
+              title: '年度',
+              dataIndex: 'year',
+              key: 'year',
+              width: 150,
+              render: (val: string, record: any) => (
+                <span style={{ fontWeight: record.isSummary ? 'bold' : 'normal' }}>{val}</span>
+              ),
+            },
+            {
+              title: '空运欠款(¥)',
+              dataIndex: 'air',
+              key: 'air',
+              width: 150,
+              align: 'right' as const,
+              render: (val: number, record: any) => (
+                <span style={{ fontWeight: record.isSummary ? 'bold' : 'normal' }}>
+                  {formatMoney(val)}
+                </span>
+              ),
+            },
+            {
+              title: '海运欠款(¥)',
+              dataIndex: 'sea',
+              key: 'sea',
+              width: 150,
+              align: 'right' as const,
+              render: (val: number, record: any) => (
+                <span style={{ fontWeight: record.isSummary ? 'bold' : 'normal' }}>
+                  {formatMoney(val)}
+                </span>
+              ),
+            },
+            {
+              title: '合计(¥)',
+              dataIndex: 'total',
+              key: 'total',
+              width: 150,
+              align: 'right' as const,
+              render: (val: number, record: any) => (
+                <span style={{ fontWeight: record.isSummary ? 'bold' : 'normal' }}>
+                  {formatMoney(val)}
+                </span>
+              ),
+            },
+          ]}
+          pagination={false}
+          size="small"
+        />
+      </Card>
     </div>
   );
 };

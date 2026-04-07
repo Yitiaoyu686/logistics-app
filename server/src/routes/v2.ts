@@ -303,6 +303,7 @@ function normalizeCustomerRow(row: any): any {
       phone: row.contactPhone || '',
       email: row.contactEmail || undefined,
     },
+    enterpriseInfo: row.enterpriseInfo ? (() => { try { return JSON.parse(row.enterpriseInfo); } catch { return undefined; } })() : undefined,
   };
 }
 
@@ -327,6 +328,7 @@ function loadCustomerCore(db: Database.Database, id: string): any | null {
       c.contact_phone AS contactPhone,
       c.contact_email AS contactEmail,
       c.enter_pool_time AS enterPoolTime,
+      c.enterprise_info AS enterpriseInfo,
       c.created_at AS createdAt,
       c.updated_at AS updatedAt,
       (
@@ -722,6 +724,7 @@ router.get('/oms/customers', (req, res) => {
       c.contact_phone AS contactPhone,
       c.contact_email AS contactEmail,
       c.enter_pool_time AS enterPoolTime,
+      c.enterprise_info AS enterpriseInfo,
       c.created_at AS createdAt,
       c.updated_at AS updatedAt,
       (
@@ -897,17 +900,22 @@ router.post('/oms/customers', (req, res) => {
   const enterPoolTime = poolType === 'PUBLIC' ? now : null;
 
   const tx = db.transaction(() => {
+    const eiJson = body.enterpriseInfo && typeof body.enterpriseInfo === 'object' && body.enterpriseInfo.entityType
+      ? JSON.stringify(body.enterpriseInfo)
+      : null;
     db.prepare(`
       INSERT INTO crm_customer (
         id, customer_code, customer_name, customer_type, owner_user_id,
         source, pool_type, status, country, address, industry,
         contact_name, contact_phone, contact_email, company_type, credit_level, remark, enter_pool_time,
+        enterprise_info,
         created_at, updated_at
       )
       VALUES (
         ?, ?, ?, 'COMPANY', ?,
         ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?, ?,
+        ?,
         ?, ?
       )
     `).run(
@@ -928,6 +936,7 @@ router.post('/oms/customers', (req, res) => {
       toCleanText(body.creditLevel),
       toCleanText(body.remark),
       enterPoolTime,
+      eiJson,
       now,
       now
     );
@@ -1038,6 +1047,13 @@ router.put('/oms/customers/:id', (req, res) => {
       setField('updated_at', now);
       params.push(req.params.id);
       db.prepare(`UPDATE crm_customer SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'enterpriseInfo')) {
+      const eiJson = body.enterpriseInfo && typeof body.enterpriseInfo === 'object' && body.enterpriseInfo.entityType
+        ? JSON.stringify(body.enterpriseInfo)
+        : null;
+      db.prepare('UPDATE crm_customer SET enterprise_info = ?, updated_at = ? WHERE id = ?').run(eiJson, now, req.params.id);
     }
 
     if (body.logisticsInfo && typeof body.logisticsInfo === 'object') {
@@ -3595,23 +3611,26 @@ router.get('/pod/dpns', (req, res) => {
   if (route) {
     const routeLike = `%${String(route).trim()}%`;
     where += `
-      AND EXISTS (
-        SELECT 1
-        FROM pod_dpn_item di3
-        LEFT JOIN oms_sub_order so3 ON so3.id = di3.sub_order_id
-        LEFT JOIN tms_job_order_rel jr3 ON jr3.sub_order_id = so3.id
-        LEFT JOIN tms_job j3 ON j3.id = jr3.job_id
-        LEFT JOIN md_site pol3 ON pol3.id = j3.pol_site_id
-        LEFT JOIN md_site pod3 ON pod3.id = j3.pod_site_id
-        WHERE di3.dpn_id = d.id
-          AND (
-            IFNULL(pol3.name, '') LIKE ?
-            OR IFNULL(pod3.name, '') LIKE ?
-            OR (IFNULL(pol3.name, '') || '-' || IFNULL(pod3.name, '')) LIKE ?
-          )
+      AND (
+        IFNULL(d.remark, '') LIKE ?
+        OR EXISTS (
+          SELECT 1
+          FROM pod_dpn_item di3
+          LEFT JOIN oms_sub_order so3 ON so3.id = di3.sub_order_id
+          LEFT JOIN tms_job_order_rel jr3 ON jr3.sub_order_id = so3.id
+          LEFT JOIN tms_job j3 ON j3.id = jr3.job_id
+          LEFT JOIN md_site pol3 ON pol3.id = j3.pol_site_id
+          LEFT JOIN md_site pod3 ON pod3.id = j3.pod_site_id
+          WHERE di3.dpn_id = d.id
+            AND (
+              IFNULL(pol3.name, '') LIKE ?
+              OR IFNULL(pod3.name, '') LIKE ?
+              OR (IFNULL(pol3.name, '') || '-' || IFNULL(pod3.name, '')) LIKE ?
+            )
+        )
       )
     `;
-    params.push(routeLike, routeLike, routeLike);
+    params.push(routeLike, routeLike, routeLike, routeLike);
   }
 
   const logistics = String(logisticsStatus || '').trim().toUpperCase();
@@ -3764,13 +3783,50 @@ router.get('/pod/dpns/:id', (req, res) => {
       i.*,
       so.sub_order_no,
       so.sub_status,
+      so.route_code,
+      so.volume_cbm AS sub_volume_cbm,
+      so.volume_weight_kg AS sub_volume_weight_kg,
+      so.actual_weight_kg AS sub_actual_weight_kg,
+      so.pieces AS sub_pieces,
       o.order_no,
-      o.display_order_no
+      o.display_order_no,
+      o.route_code AS order_route_code,
+      su.real_name AS sales_user_name,
+      cu.real_name AS creator_user_name,
+      j.job_no,
+      pol.name AS pol_name,
+      pod.name AS pod_name,
+      pkg.dimension_cm,
+      pkg.volume_cbm AS pkg_volume_cbm,
+      pkg.volume_weight_kg AS pkg_volume_weight_kg,
+      pkg.gross_weight_kg AS pkg_gross_weight_kg
     FROM pod_dpn_item i
     LEFT JOIN oms_sub_order so ON so.id = i.sub_order_id
     LEFT JOIN oms_order o ON o.id = i.order_id
+    LEFT JOIN sys_user su ON su.id = o.sales_user_id
+    LEFT JOIN sys_user cu ON cu.id = o.creator_user_id
+    LEFT JOIN tms_job_order_rel jr ON jr.sub_order_id = so.id
+    LEFT JOIN tms_job j ON j.id = jr.job_id
+    LEFT JOIN md_site pol ON pol.id = j.pol_site_id
+    LEFT JOIN md_site pod ON pod.id = j.pod_site_id
+    LEFT JOIN (
+      SELECT
+        sub_order_id,
+        GROUP_CONCAT(
+          DISTINCT CASE
+            WHEN length_cm IS NOT NULL AND width_cm IS NOT NULL AND height_cm IS NOT NULL
+            THEN printf('%g*%g*%g', length_cm, width_cm, height_cm)
+            ELSE NULL
+          END
+        ) AS dimension_cm,
+        SUM(COALESCE(volume_cbm, 0)) AS volume_cbm,
+        SUM(COALESCE(volume_weight_kg, 0)) AS volume_weight_kg,
+        SUM(COALESCE(gross_weight_kg, 0)) AS gross_weight_kg
+      FROM oms_order_package_actual
+      GROUP BY sub_order_id
+    ) pkg ON pkg.sub_order_id = so.id
     WHERE i.dpn_id = ?
-    ORDER BY datetime(i.created_at) DESC
+    ORDER BY IFNULL(j.job_no, ''), so.sub_order_no, datetime(i.created_at) DESC
   `).all(dpn.id) as any[];
 
   const deliveryTasks = db.prepare(`
@@ -3790,6 +3846,8 @@ router.get('/pod/delivery-tasks', (req, res) => {
     warehouseId,
     taskStatus,
     dpnStatus,
+    paymentStatus,
+    deliveryMethod,
     keyword,
     page = '1',
     pageSize = '20',
@@ -3818,6 +3876,14 @@ router.get('/pod/delivery-tasks', (req, res) => {
   if (dpnStatus) {
     where += ' AND d.dpn_status = ?';
     params.push(String(dpnStatus));
+  }
+  if (paymentStatus) {
+    where += ' AND d.payment_status = ?';
+    params.push(String(paymentStatus));
+  }
+  if (deliveryMethod) {
+    where += ' AND d.delivery_method = ?';
+    params.push(String(deliveryMethod));
   }
 
   if (keyword) {
@@ -3865,11 +3931,19 @@ router.get('/pod/delivery-tasks', (req, res) => {
       d.dpn_status,
       d.business_line,
       d.warehouse_id,
+      d.delivery_method,
       d.recipient_name,
       d.recipient_phone,
       d.recipient_address,
+      d.total_receivable_amount,
+      d.currency_code,
+      d.payment_status,
       d.total_pieces,
       d.total_weight_kg,
+      c.customer_name,
+      city.name_cn AS city_name,
+      country.name_en AS country_name_en,
+      country.name_cn AS country_name_cn,
       wh.name AS warehouse_name,
       (
         SELECT COUNT(*)
@@ -3883,7 +3957,10 @@ router.get('/pod/delivery-tasks', (req, res) => {
       ) AS sub_order_count
     FROM pod_delivery_task t
     JOIN pod_dpn d ON d.id = t.dpn_id
+    LEFT JOIN crm_customer c ON c.id = d.customer_id
     LEFT JOIN md_warehouse wh ON wh.id = d.warehouse_id
+    LEFT JOIN md_city city ON city.id = d.city_id
+    LEFT JOIN md_country country ON country.id = d.country_id
     ${where}
     ORDER BY datetime(t.updated_at) DESC, t.updated_at DESC
     LIMIT ? OFFSET ?
@@ -3968,12 +4045,26 @@ router.get('/pod/dpn-candidates', (req, res) => {
       o.display_order_no,
       o.customer_id,
       c.customer_code,
-      c.customer_name
+      c.customer_name,
+      COALESCE(rel.job_id, so.job_id) AS job_id,
+      j.job_no,
+      pol.name AS pol_site_name,
+      pod.name AS pod_site_name
     FROM oms_sub_order so
     JOIN oms_order o ON o.id = so.order_id
     LEFT JOIN crm_customer c ON c.id = o.customer_id
+    LEFT JOIN tms_job_order_rel rel ON rel.id = (
+      SELECT r.id
+      FROM tms_job_order_rel r
+      WHERE r.sub_order_id = so.id
+      ORDER BY COALESCE(r.sequence_no, 0) DESC, datetime(r.created_at) DESC, r.id DESC
+      LIMIT 1
+    )
+    LEFT JOIN tms_job j ON j.id = COALESCE(rel.job_id, so.job_id)
+    LEFT JOIN md_site pol ON pol.id = j.pol_site_id
+    LEFT JOIN md_site pod ON pod.id = j.pod_site_id
     ${where}
-    ORDER BY datetime(so.updated_at) DESC, datetime(so.created_at) DESC, so.id DESC
+    ORDER BY IFNULL(j.job_no, ''), IFNULL(pod.name, ''), so.sub_order_no, datetime(so.updated_at) DESC, datetime(so.created_at) DESC, so.id DESC
     LIMIT ? OFFSET ?
   `).all(...params, sizeNum, offset);
 
@@ -4148,10 +4239,45 @@ router.post('/pod/dpns/draft', (req, res) => {
   const now = nowIso();
   const body = req.body || {};
 
-  const customerId = String(body.customerId || '').trim();
-  const warehouseId = String(body.warehouseId || '').trim();
-  if (!customerId || !warehouseId) {
-    error(res, 'customerId and warehouseId are required');
+  const ensureAutoDraftCustomer = () => {
+    const autoCustomerId = 'CRM-AUTO-DPN-DRAFT';
+    const existing = db.prepare('SELECT id FROM crm_customer WHERE id = ? OR customer_code = ? LIMIT 1')
+      .get(autoCustomerId, 'AUTO_DPN_DRAFT') as any;
+    if (existing?.id) return String(existing.id);
+
+    db.prepare(`
+      INSERT INTO crm_customer (
+        id, customer_code, customer_name, customer_type, owner_user_id, source, pool_type, status, created_at, updated_at
+      )
+      VALUES (?, 'AUTO_DPN_DRAFT', 'DPN草稿客户', 'COMPANY', NULL, 'SYSTEM', 'PRIVATE', 'ACTIVE', ?, ?)
+    `).run(autoCustomerId, now, now);
+    return autoCustomerId;
+  };
+
+  const resolveDraftWarehouseId = () => {
+    const preferred = db.prepare(`
+      SELECT id
+      FROM md_warehouse
+      WHERE warehouse_type = 'DESTINATION' AND status = 'ACTIVE'
+      ORDER BY datetime(updated_at) DESC, datetime(created_at) DESC
+      LIMIT 1
+    `).get() as any;
+    if (preferred?.id) return String(preferred.id);
+
+    const fallback = db.prepare(`
+      SELECT id
+      FROM md_warehouse
+      WHERE status = 'ACTIVE'
+      ORDER BY datetime(updated_at) DESC, datetime(created_at) DESC
+      LIMIT 1
+    `).get() as any;
+    return fallback?.id ? String(fallback.id) : '';
+  };
+
+  const customerId = String(body.customerId || '').trim() || ensureAutoDraftCustomer();
+  const warehouseId = String(body.warehouseId || '').trim() || resolveDraftWarehouseId();
+  if (!warehouseId) {
+    error(res, 'warehouseId is required');
     return;
   }
 
@@ -4261,7 +4387,16 @@ router.post('/pod/dpns/:id/bind-sub-orders', (req, res) => {
     return;
   }
 
-  const customerMismatch = subs.filter((s) => String(s.order_customer_id) !== String(dpn.customer_id));
+  const isAutoDraftCustomer = String(dpn.customer_id) === 'CRM-AUTO-DPN-DRAFT';
+  const customerIds = Array.from(new Set(subs.map((s) => String(s.order_customer_id))));
+  if (isAutoDraftCustomer && customerIds.length > 1) {
+    error(res, 'auto draft DPN 只允许绑定同一客户的子单');
+    return;
+  }
+
+  const customerMismatch = isAutoDraftCustomer
+    ? []
+    : subs.filter((s) => String(s.order_customer_id) !== String(dpn.customer_id));
   if (customerMismatch.length > 0) {
     error(
       res,
@@ -4342,15 +4477,17 @@ router.post('/pod/dpns/:id/bind-sub-orders', (req, res) => {
     `).get(dpn.id) as any;
 
     const nextStatus = String(dpn.dpn_status) === 'DRAFT' ? 'PENDING_ASSIGN' : String(dpn.dpn_status || 'PENDING_ASSIGN');
+    const finalCustomerId = isAutoDraftCustomer ? customerIds[0] : String(dpn.customer_id);
     db.prepare(`
       UPDATE pod_dpn
-      SET total_pieces = ?,
+      SET customer_id = ?,
+          total_pieces = ?,
           total_weight_kg = ?,
           dpn_status = ?,
           status_updated_at = ?,
           updated_at = ?
       WHERE id = ?
-    `).run(Number(agg?.totalPieces || 0), Number(agg?.totalWeight || 0), nextStatus, now, now, dpn.id);
+    `).run(finalCustomerId, Number(agg?.totalPieces || 0), Number(agg?.totalWeight || 0), nextStatus, now, now, dpn.id);
 
     orderIds.forEach((oid) => refreshOrderStatusByOrderId(db, oid, now));
   });

@@ -10,6 +10,7 @@ import {
   InputNumber,
   Modal,
   Row,
+  Segmented,
   Select,
   Space,
   Statistic,
@@ -29,7 +30,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { UploadFile } from 'antd/es/upload/interface';
-import { feeApi, jobApi, orderApi } from '../../api';
+import { feeApi, jobApi, orderApi, v2OmsApi } from '../../api';
 import { FeeLedgerDetailDrawer } from '../tms/FeeLedgerDetailDrawer';
 import type { FeeDetailInfoItem, FeeLedgerEntry, FeeLedgerReceipt } from '../tms/FeeLedgerDetailDrawer';
 import { getUiFeeStatus, loadFeeWorkflowState } from '../tms/feeWorkflowDemo';
@@ -269,6 +270,11 @@ const mapToOrderRows = (rows: FeeRow[], workflowState: FeeWorkflowState): OrderR
     .sort((a, b) => b.outstandingCNY - a.outstandingCNY);
 };
 
+const fmt = (v: number) => v.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/* ============================================================
+ * ReceivableManagement - 应收明细
+ * ============================================================ */
 export const ReceivableManagement: React.FC<{ businessMode?: 'ALL' | 'AIR' | 'SEA' }> = ({ businessMode = 'ALL' }) => {
   const [loading, setLoading] = useState(false);
   const [baseRows, setBaseRows] = useState<OrderReceivableRow[]>([]);
@@ -309,6 +315,24 @@ export const ReceivableManagement: React.FC<{ businessMode?: 'ALL' | 'AIR' | 'SE
       try {
         const res = await feeApi.list({ feeDirection: 'RECEIVABLE' });
         const feeRows = ((res as any).data || res || []) as FeeRow[];
+
+        // 补充缺失的客户名：一次性加载订单列表建立映射
+        try {
+          const ordersRes = await v2OmsApi.listOrders() as any;
+          const orders = Array.isArray(ordersRes?.data) ? ordersRes.data : Array.isArray(ordersRes) ? ordersRes : [];
+          const orderMap = new Map<string, string>();
+          orders.forEach((o: any) => {
+            const no = o.order_no || o.orderNo || o.display_order_no;
+            const name = o.customer_name || o.customerName;
+            if (no && name) orderMap.set(no, name);
+          });
+          feeRows.forEach(r => {
+            if (!r.customerName && r.relatedNo && orderMap.has(r.relatedNo)) {
+              r.customerName = orderMap.get(r.relatedNo)!;
+            }
+          });
+        } catch { /* 订单查询失败不影响主流程 */ }
+
         setBaseRows(mapToOrderRows(feeRows, workflowState));
       } catch {
         message.error('获取应收费用失败');
@@ -436,6 +460,48 @@ export const ReceivableManagement: React.FC<{ businessMode?: 'ALL' | 'AIR' | 'SE
       console.error('收款表单校验失败', error);
     } finally {
       setReceiveSubmitting(false);
+    }
+  };
+
+  // ---- 审核收款 ----
+  const [reviewModalVisible, setReviewModalVisible] = useState(false);
+  const [reviewRecord, setReviewRecord] = useState<OrderReceivableRow | null>(null);
+  const [reviewReceipts, setReviewReceipts] = useState<any[]>([]);
+  const [rejectReason, setRejectReason] = useState('');
+
+  const handleOpenReview = (record: OrderReceivableRow, pendingReceipts: any[]) => {
+    setReviewRecord(record);
+    setReviewReceipts(pendingReceipts);
+    setRejectReason('');
+    setReviewModalVisible(true);
+  };
+
+  const handleReviewAction = (receiptId: string, action: 'APPROVED' | 'REJECTED') => {
+    if (action === 'REJECTED' && !rejectReason.trim()) {
+      message.warning('请填写驳回原因');
+      return;
+    }
+    try {
+      const store = JSON.parse(localStorage.getItem('finance_payment_receipt_store') || '{}');
+      const orderNo = reviewRecord?.orderNo;
+      if (!orderNo || !store[orderNo]) return;
+      store[orderNo] = store[orderNo].map((r: any) => {
+        if (r.id !== receiptId) return r;
+        return {
+          ...r,
+          status: action,
+          reviewedBy: '财务人员',
+          reviewedAt: new Date().toISOString(),
+          rejectReason: action === 'REJECTED' ? rejectReason : undefined,
+        };
+      });
+      localStorage.setItem('finance_payment_receipt_store', JSON.stringify(store));
+      message.success(action === 'APPROVED' ? '已通过审核' : '已驳回');
+      setReviewReceipts((prev) => prev.filter((r) => r.id !== receiptId));
+      if (reviewReceipts.length <= 1) setReviewModalVisible(false);
+      setRejectReason('');
+    } catch (e) {
+      message.error('操作失败');
     }
   };
 
@@ -608,18 +674,31 @@ export const ReceivableManagement: React.FC<{ businessMode?: 'ALL' | 'AIR' | 'SE
       key: 'action',
       width: 150,
       fixed: 'right' as const,
-      render: (_: unknown, record: OrderReceivableRow) => (
-        <Space size={2}>
-          {record.outstandingCNY > 0 && (
-            <Button type="link" size="small" icon={<DollarOutlined />} onClick={() => handleOpenReceive(record)}>
-              收款
+      render: (_: unknown, record: OrderReceivableRow) => {
+        const pendingReceipts = (() => {
+          try {
+            const store = JSON.parse(localStorage.getItem('finance_payment_receipt_store') || '{}');
+            return ((store[record.orderNo] || []) as any[]).filter((r: any) => r.status === 'PENDING');
+          } catch { return []; }
+        })();
+        return (
+          <Space size={2}>
+            {record.outstandingCNY > 0 && (
+              <Button type="link" size="small" icon={<DollarOutlined />} onClick={() => handleOpenReceive(record)}>
+                收款
+              </Button>
+            )}
+            {pendingReceipts.length > 0 && (
+              <Button type="link" size="small" style={{ color: '#fa8c16' }} onClick={() => handleOpenReview(record, pendingReceipts)}>
+                审核({pendingReceipts.length})
+              </Button>
+            )}
+            <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleOpenDetail(record)}>
+              详情
             </Button>
-          )}
-          <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleOpenDetail(record)}>
-            详情
-          </Button>
-        </Space>
-      ),
+          </Space>
+        );
+      },
     },
   ];
 
@@ -793,6 +872,294 @@ export const ReceivableManagement: React.FC<{ businessMode?: 'ALL' | 'AIR' | 'SE
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* 审核收款弹窗 */}
+      <Modal
+        title={`审核收款 - ${reviewRecord?.orderNo || ''}`}
+        open={reviewModalVisible}
+        onCancel={() => setReviewModalVisible(false)}
+        footer={null}
+        width={700}
+        destroyOnClose
+      >
+        {reviewReceipts.map((receipt: any) => (
+          <Card key={receipt.id} size="small" style={{ marginBottom: 12 }}>
+            <Row gutter={16}>
+              <Col span={16}>
+                <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                  <div><Text strong>收款金额：</Text><Text style={{ color: '#52c41a', fontSize: 16 }}>¥{(receipt.amount || 0).toFixed(2)}</Text></div>
+                  <div><Text type="secondary">收款方式：</Text><Text>{{ WECHAT: '微信', ALIPAY: '支付宝', BANK: '银行转账', CASH: '现金', OTHER: '其他' }[receipt.paymentChannel as string] || receipt.paymentChannel}</Text></div>
+                  <div><Text type="secondary">收款时间：</Text><Text>{receipt.receivedAt ? dayjs(receipt.receivedAt).format('YYYY-MM-DD HH:mm') : '-'}</Text></div>
+                  <div><Text type="secondary">登记人：</Text><Text>{receipt.operator}</Text></div>
+                  {receipt.voucherNames?.length > 0 && (
+                    <div><Text type="secondary">凭证：</Text>{receipt.voucherNames.map((name: string, i: number) => <Tag key={i}>{name}</Tag>)}</div>
+                  )}
+                  {receipt.remark && <div><Text type="secondary">备注：</Text><Text>{receipt.remark}</Text></div>}
+                </Space>
+              </Col>
+              <Col span={8} style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 8 }}>
+                <Button type="primary" block onClick={() => handleReviewAction(receipt.id, 'APPROVED')}>通过</Button>
+                <Input.TextArea
+                  rows={2}
+                  placeholder="驳回原因（驳回时必填）"
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  style={{ marginBottom: 4 }}
+                />
+                <Button danger block onClick={() => handleReviewAction(receipt.id, 'REJECTED')}>驳回</Button>
+              </Col>
+            </Row>
+          </Card>
+        ))}
+        {reviewReceipts.length === 0 && <Text type="secondary">暂无待审核的收款记录</Text>}
+      </Modal>
+    </div>
+  );
+};
+
+/* ============================================================
+ * ReceivableStats - 应收统计
+ * ============================================================ */
+export const ReceivableStats: React.FC<{ businessMode?: 'ALL' | 'AIR' | 'SEA' }> = ({ businessMode = 'ALL' }) => {
+  const [statsTransportMode, setStatsTransportMode] = useState<string>(
+    businessMode === 'AIR' ? '空运' : businessMode === 'SEA' ? '海运' : '空运'
+  );
+
+  const monthlyStatsData = useMemo(() => {
+    const months = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
+    const isAir = statsTransportMode === '空运';
+    return months.map((m, i) => {
+      const arrivalUsd = isAir ? 3200 + Math.round(Math.random() * 2000) : 8500 + Math.round(Math.random() * 5000);
+      const destCostUsd = isAir ? 800 + Math.round(Math.random() * 600) : 2200 + Math.round(Math.random() * 1500);
+      const receivableUsd = arrivalUsd - destCostUsd;
+      const rate = 7.1 + Math.round(Math.random() * 20) / 100;
+      const receivableCny = Math.round(receivableUsd * rate * 100) / 100;
+      const receivedLos = Math.round(receivableCny * (0.6 + Math.random() * 0.35) * 100) / 100;
+      const dailyExpense = Math.round((200 + Math.random() * 300) * 100) / 100;
+      const owedAmount = Math.round((receivableCny - receivedLos - dailyExpense) * 100) / 100;
+      return {
+        key: `month-${i}`,
+        month: m,
+        arrivalUsd,
+        destCostUsd,
+        receivableUsd,
+        rate,
+        receivableCny,
+        receivedLos,
+        dailyExpense,
+        owedAmount,
+        remark: i === 11 ? '年底结算中' : i === 5 ? '含退款调整' : '',
+        children: Array.from({ length: 2 + Math.floor(Math.random() * 3) }, (_, j) => ({
+          key: `month-${i}-receipt-${j}`,
+          date: `2025-${String(i + 1).padStart(2, '0')}-${String(5 + j * 7).padStart(2, '0')}`,
+          amount: Math.round((500 + Math.random() * 3000) * 100) / 100,
+          directionTag: j % 2 === 0 ? '收款' : '退款',
+          channel: ['银行转账', '微信', '支付宝', '现金'][j % 4],
+          description: ['客户A批次款', 'LOS系统自动扣款', '退货退款', '尾款结清', '预付款'][j % 5],
+        })),
+      };
+    });
+  }, [statsTransportMode]);
+
+  const monthlyStatsColumns: any[] = [
+    { title: '月份', dataIndex: 'month', key: 'month', width: 80 },
+    { title: '到付金额(USD)', dataIndex: 'arrivalUsd', key: 'arrivalUsd', width: 130, align: 'right' as const, render: (v: number) => v !== undefined ? fmt(v) : '-' },
+    { title: '目的港成本(USD)', dataIndex: 'destCostUsd', key: 'destCostUsd', width: 140, align: 'right' as const, render: (v: number) => v !== undefined ? fmt(v) : '-' },
+    { title: '应收到付(USD)', dataIndex: 'receivableUsd', key: 'receivableUsd', width: 130, align: 'right' as const, render: (v: number) => v !== undefined ? <Text strong>{fmt(v)}</Text> : '-' },
+    { title: '汇率', dataIndex: 'rate', key: 'rate', width: 80, align: 'center' as const, render: (v: number) => v !== undefined ? v.toFixed(2) : '-' },
+    { title: '应收到付(¥)', dataIndex: 'receivableCny', key: 'receivableCny', width: 130, align: 'right' as const, render: (v: number) => v !== undefined ? <Text strong style={{ color: '#3f8600' }}>{fmt(v)}</Text> : '-' },
+    { title: '实收LOS(¥)', dataIndex: 'receivedLos', key: 'receivedLos', width: 120, align: 'right' as const, render: (v: number) => v !== undefined ? fmt(v) : '-' },
+    { title: '减日常支出', dataIndex: 'dailyExpense', key: 'dailyExpense', width: 110, align: 'right' as const, render: (v: number) => v !== undefined ? fmt(v) : '-' },
+    { title: '欠款金额(¥)', dataIndex: 'owedAmount', key: 'owedAmount', width: 130, align: 'right' as const, render: (v: number) => v !== undefined ? <Text type={v > 0 ? 'danger' : 'success'} strong>{fmt(v)}</Text> : '-' },
+    { title: '备注', dataIndex: 'remark', key: 'remark', width: 140 },
+  ];
+
+  const historicalOwed = [
+    { label: '18-19年', amount: 125600 },
+    { label: '20年', amount: 89200 },
+    { label: '21年', amount: 63400 },
+    { label: '22年', amount: 45800 },
+    { label: '23年', amount: 32100 },
+    { label: '24年', amount: 18700 },
+  ];
+
+  const expandedRowRender = (record: any) => {
+    if (!record.children || record.children.length === 0) return null;
+    const subColumns = [
+      { title: '日期', dataIndex: 'date', key: 'date', width: 120 },
+      { title: '金额', dataIndex: 'amount', key: 'amount', width: 120, align: 'right' as const, render: (v: number) => fmt(v) },
+      { title: '方向', dataIndex: 'directionTag', key: 'directionTag', width: 80, render: (v: string) => <Tag color={v === '收款' ? 'green' : 'red'}>{v}</Tag> },
+      { title: '渠道', dataIndex: 'channel', key: 'channel', width: 100 },
+      { title: '说明', dataIndex: 'description', key: 'description', width: 200 },
+    ];
+    return <Table columns={subColumns} dataSource={record.children} pagination={false} size="small" rowKey="key" />;
+  };
+
+  return (
+    <div>
+      <div style={{ marginBottom: 16 }}>
+        <Segmented
+          options={['空运', '海运']}
+          value={statsTransportMode}
+          onChange={(val) => setStatsTransportMode(val as string)}
+        />
+      </div>
+      <Card title={`${statsTransportMode} - 月度应收统计（2025年）`} style={{ marginBottom: 16 }}>
+        <Table
+          rowKey="key"
+          columns={monthlyStatsColumns}
+          dataSource={monthlyStatsData}
+          pagination={false}
+          scroll={{ x: 1200 }}
+          size="middle"
+          expandable={{ expandedRowRender, rowExpandable: (record: any) => record.children && record.children.length > 0 }}
+          summary={() => {
+            const totals = monthlyStatsData.reduce(
+              (acc, cur) => ({
+                arrivalUsd: acc.arrivalUsd + cur.arrivalUsd,
+                destCostUsd: acc.destCostUsd + cur.destCostUsd,
+                receivableUsd: acc.receivableUsd + cur.receivableUsd,
+                receivableCny: acc.receivableCny + cur.receivableCny,
+                receivedLos: acc.receivedLos + cur.receivedLos,
+                dailyExpense: acc.dailyExpense + cur.dailyExpense,
+                owedAmount: acc.owedAmount + cur.owedAmount,
+              }),
+              { arrivalUsd: 0, destCostUsd: 0, receivableUsd: 0, receivableCny: 0, receivedLos: 0, dailyExpense: 0, owedAmount: 0 },
+            );
+            return (
+              <Table.Summary.Row style={{ fontWeight: 'bold', background: '#fafafa' }}>
+                <Table.Summary.Cell index={0}>合计</Table.Summary.Cell>
+                <Table.Summary.Cell index={1} align="right">{fmt(totals.arrivalUsd)}</Table.Summary.Cell>
+                <Table.Summary.Cell index={2} align="right">{fmt(totals.destCostUsd)}</Table.Summary.Cell>
+                <Table.Summary.Cell index={3} align="right">{fmt(totals.receivableUsd)}</Table.Summary.Cell>
+                <Table.Summary.Cell index={4} align="center">-</Table.Summary.Cell>
+                <Table.Summary.Cell index={5} align="right">{fmt(totals.receivableCny)}</Table.Summary.Cell>
+                <Table.Summary.Cell index={6} align="right">{fmt(totals.receivedLos)}</Table.Summary.Cell>
+                <Table.Summary.Cell index={7} align="right">{fmt(totals.dailyExpense)}</Table.Summary.Cell>
+                <Table.Summary.Cell index={8} align="right"><Text type="danger" strong>{fmt(totals.owedAmount)}</Text></Table.Summary.Cell>
+                <Table.Summary.Cell index={9} />
+              </Table.Summary.Row>
+            );
+          }}
+        />
+      </Card>
+      <Card title="历年欠款金额">
+        <Row gutter={16}>
+          {historicalOwed.map((item) => (
+            <Col key={item.label} span={4}>
+              <Card size="small" style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 13, color: '#888', marginBottom: 4 }}>{item.label}</div>
+                <div style={{ fontSize: 18, fontWeight: 600, color: '#cf1322' }}>¥{fmt(item.amount)}</div>
+              </Card>
+            </Col>
+          ))}
+        </Row>
+      </Card>
+    </div>
+  );
+};
+
+/* ============================================================
+ * UnpaidList - 未付款清单
+ * ============================================================ */
+export const UnpaidList: React.FC<{ businessMode?: 'ALL' | 'AIR' | 'SEA' }> = ({ businessMode = 'ALL' }) => {
+  const [unpaidTransportMode, setUnpaidTransportMode] = useState<string>(
+    businessMode === 'AIR' ? '空运' : businessMode === 'SEA' ? '海运' : '空运'
+  );
+  const [unpaidYear, setUnpaidYear] = useState<string>('2025');
+
+  const unpaidMockData = useMemo(() => {
+    const isAir = unpaidTransportMode === '空运';
+    const names = ['张三', '李四', '王五', '赵六', '陈七', '周八', '吴九', '郑十', '孙一', '钱二'];
+    const receivers = ['Tom Wilson', 'Sarah Chen', 'Mike Johnson', 'Emily Davis', 'Chris Brown', 'Alex Lee', 'Nina Wang', 'Bob Smith', 'Lisa Park', 'David Kim'];
+    return Array.from({ length: 10 }, (_, i) => {
+      const receivableUsd = isAir ? 1200 + Math.round(Math.random() * 3000) : 5000 + Math.round(Math.random() * 8000);
+      const receivedCny = Math.round(receivableUsd * 7.15 * (Math.random() * 0.4) * 100) / 100;
+      return {
+        key: `unpaid-${i}`,
+        orderNo: `${isAir ? 'AIR' : 'SEA'}-${unpaidYear.slice(2)}-${String(1001 + i)}`,
+        date: `${unpaidYear}-${String(1 + Math.floor(i * 1.2)).padStart(2, '0')}-${String(3 + i * 2).padStart(2, '0')}`,
+        sender: names[i],
+        receiver: receivers[i],
+        volumeWeight: isAir ? `${(0.5 + Math.random() * 2).toFixed(1)}CBM / ${(20 + Math.random() * 80).toFixed(0)}KG` : `${(2 + Math.random() * 10).toFixed(1)}CBM / ${(200 + Math.random() * 800).toFixed(0)}KG`,
+        receivableUsd,
+        receivedCny,
+        remark: i === 0 ? '催款中' : i === 3 ? '已发对账单' : i === 7 ? '客户确认中' : '',
+      };
+    });
+  }, [unpaidTransportMode, unpaidYear]);
+
+  const unpaidStats = useMemo(() => {
+    const totalOrders = unpaidMockData.length;
+    const totalUsd = unpaidMockData.reduce((s, r) => s + r.receivableUsd, 0);
+    const totalReceivedCny = unpaidMockData.reduce((s, r) => s + r.receivedCny, 0);
+    return { totalOrders, totalUsd, totalReceivedCny };
+  }, [unpaidMockData]);
+
+  const unpaidColumns: any[] = [
+    { title: '订单号', dataIndex: 'orderNo', key: 'orderNo', width: 150, render: (v: string) => <a>{v}</a> },
+    { title: '日期', dataIndex: 'date', key: 'date', width: 110 },
+    { title: '发货人', dataIndex: 'sender', key: 'sender', width: 100 },
+    { title: '收货人', dataIndex: 'receiver', key: 'receiver', width: 130 },
+    { title: '体积/重量', dataIndex: 'volumeWeight', key: 'volumeWeight', width: 180 },
+    { title: '应收(USD)', dataIndex: 'receivableUsd', key: 'receivableUsd', width: 130, align: 'right' as const, render: (v: number) => <Text strong style={{ color: '#3f8600' }}>{fmt(v)}</Text> },
+    { title: '已收(¥)', dataIndex: 'receivedCny', key: 'receivedCny', width: 120, align: 'right' as const, render: (v: number) => fmt(v) },
+    { title: '备注', dataIndex: 'remark', key: 'remark', width: 140 },
+  ];
+
+  return (
+    <div>
+      <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 16 }}>
+        <Segmented
+          options={['空运', '海运']}
+          value={unpaidTransportMode}
+          onChange={(val) => setUnpaidTransportMode(val as string)}
+        />
+        <Select value={unpaidYear} onChange={setUnpaidYear} style={{ width: 100 }}>
+          <Option value="2025">2025年</Option>
+          <Option value="2024">2024年</Option>
+          <Option value="2023">2023年</Option>
+        </Select>
+      </div>
+      <Row gutter={16} style={{ marginBottom: 16 }}>
+        <Col span={8}>
+          <Card>
+            <Statistic title="未收订单数" value={unpaidStats.totalOrders} prefix={<ClockCircleOutlined />} />
+          </Card>
+        </Col>
+        <Col span={8}>
+          <Card>
+            <Statistic title="未收总额USD" value={unpaidStats.totalUsd} precision={2} prefix={<DollarOutlined />} valueStyle={{ color: '#cf1322' }} />
+          </Card>
+        </Col>
+        <Col span={8}>
+          <Card>
+            <Statistic title="已收总额RMB" value={unpaidStats.totalReceivedCny} precision={2} valueStyle={{ color: '#3f8600' }} />
+          </Card>
+        </Col>
+      </Row>
+      <Card>
+        <Table
+          rowKey="key"
+          columns={unpaidColumns}
+          dataSource={unpaidMockData}
+          pagination={{ pageSize: 20, showSizeChanger: true, showTotal: (total) => `共 ${total} 条` }}
+          scroll={{ x: 1100 }}
+        />
+      </Card>
+    </div>
+  );
+};
+
+/* ============================================================
+ * ReceivableAgingView - 账龄分析 (placeholder)
+ * ============================================================ */
+export const ReceivableAgingView: React.FC<{ businessMode?: 'ALL' | 'AIR' | 'SEA' }> = ({ businessMode = 'ALL' }) => {
+  return (
+    <div>
+      <Card>
+        <Text type="secondary">账龄分析功能开发中...</Text>
+      </Card>
     </div>
   );
 };

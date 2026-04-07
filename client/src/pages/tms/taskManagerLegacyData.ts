@@ -49,8 +49,21 @@ export interface LegacyJob {
   cargoFilter: 'GENERAL' | 'NON_GENERAL' | 'ALL';
   weightKg: number;
   pieces: number;
+  volumeCbm?: number;
   executeDate: string;
   remark?: string;
+  blNo?: string;
+  carrier?: string;
+  vesselVoyage?: string;
+  containerNo?: string;
+  containerType?: string;
+  serviceMode?: string;
+  cutoffDate?: string;
+  etd?: string;
+  eta?: string;
+  mawbNo?: string;
+  hawbNo?: string;
+  flightNo?: string;
   containers: LegacyContainer[];
   stationSummary?: {
     orderCount: number;
@@ -102,12 +115,22 @@ export const LEGACY_TASKS: LegacyTask[] = [
         "cargoFilter": "GENERAL",
         "weightKg": 1500,
         "pieces": 25,
+        "volumeCbm": 8.5,
         "executeDate": "2025-10-25",
+        "blNo": "COSCO-LOS-260301",
+        "carrier": "COSCO",
+        "vesselVoyage": "COSCO FORTUNE V.025E",
+        "containerNo": "CSLU2185436",
+        "containerType": "40HQ",
+        "serviceMode": "LCL",
+        "cutoffDate": "2025-10-24",
+        "etd": "2025-10-26",
+        "eta": "2025-11-18",
         "remark": "请检查货物是否完整到达",
         "containers": [
           {
             "id": "AK-1",
-            "containerNo": "AK1",
+            "containerNo": "CSLU2185436",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -199,7 +222,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "AK-2",
-            "containerNo": "AK2",
+            "containerNo": "CSLU2185437",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -272,7 +295,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "AK-3",
-            "containerNo": "AK3",
+            "containerNo": "CSLU2185438",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -326,7 +349,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "AK-4",
-            "containerNo": "AK4",
+            "containerNo": "CSLU2185439",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -380,7 +403,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "AK-5",
-            "containerNo": "AK5",
+            "containerNo": "CSLU2185440",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -434,7 +457,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "AK-6",
-            "containerNo": "AK6",
+            "containerNo": "CSLU2185441",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -515,7 +538,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
         "containers": [
           {
             "id": "BK-1",
-            "containerNo": "BK1",
+            "containerNo": "MSKU7834521",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -569,7 +592,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "BK-2",
-            "containerNo": "BK2",
+            "containerNo": "MSKU7834522",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -623,7 +646,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "BK-3",
-            "containerNo": "BK3",
+            "containerNo": "MSKU7834523",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -677,7 +700,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "BK-4",
-            "containerNo": "BK4",
+            "containerNo": "MSKU7834524",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -731,7 +754,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "BK-5",
-            "containerNo": "BK5",
+            "containerNo": "MSKU7834525",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -812,7 +835,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
         "containers": [
           {
             "id": "CK-1",
-            "containerNo": "CK1",
+            "containerNo": "CMAU4567890",
             "routeName": "SZX.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -861,7 +884,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "CK-2",
-            "containerNo": "CK2",
+            "containerNo": "CMAU4567891",
             "routeName": "SZX.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -910,7 +933,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "CK-3",
-            "containerNo": "CK3",
+            "containerNo": "CMAU4567892",
             "routeName": "SZX.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -959,7 +982,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "CK-4",
-            "containerNo": "CK4",
+            "containerNo": "CMAU4567893",
             "routeName": "SZX.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -1008,7 +1031,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "CK-5",
-            "containerNo": "CK5",
+            "containerNo": "CMAU4567894",
             "routeName": "SZX.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -1153,7 +1176,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
         "containers": [
           {
             "id": "DK-1",
-            "containerNo": "DK1",
+            "containerNo": "OOLU3456789",
             "routeName": "CAN.CHN→ACC.GHA",
             "serviceType": "特快",
             "orders": [
@@ -1245,7 +1268,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "DK-2",
-            "containerNo": "DK2",
+            "containerNo": "OOLU3456790",
             "routeName": "CAN.CHN→ACC.GHA",
             "serviceType": "特快",
             "orders": [
@@ -1337,7 +1360,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "DK-3",
-            "containerNo": "DK3",
+            "containerNo": "OOLU3456791",
             "routeName": "CAN.CHN→ACC.GHA",
             "serviceType": "特快",
             "orders": [
@@ -1429,7 +1452,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "DK-4",
-            "containerNo": "DK4",
+            "containerNo": "OOLU3456792",
             "routeName": "CAN.CHN→ACC.GHA",
             "serviceType": "特快",
             "orders": [
@@ -1521,7 +1544,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "DK-5",
-            "containerNo": "DK5",
+            "containerNo": "OOLU3456793",
             "routeName": "CAN.CHN→ACC.GHA",
             "serviceType": "特快",
             "orders": [
@@ -1691,7 +1714,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
         "containers": [
           {
             "id": "EK-1",
-            "containerNo": "EK1",
+            "containerNo": "EGLV5678901",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -1754,7 +1777,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "EK-2",
-            "containerNo": "EK2",
+            "containerNo": "EGLV5678902",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -1817,7 +1840,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "EK-3",
-            "containerNo": "EK3",
+            "containerNo": "EGLV5678903",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -1880,7 +1903,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "EK-4",
-            "containerNo": "EK4",
+            "containerNo": "EGLV5678904",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -1943,7 +1966,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "EK-5",
-            "containerNo": "EK5",
+            "containerNo": "EGLV5678905",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -2056,7 +2079,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
         "containers": [
           {
             "id": "FK-1",
-            "containerNo": "FK1",
+            "containerNo": "HLXU6789012",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -2129,7 +2152,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "FK-2",
-            "containerNo": "FK2",
+            "containerNo": "HLXU6789013",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -2202,7 +2225,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "FK-3",
-            "containerNo": "FK3",
+            "containerNo": "HLXU6789014",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -2275,7 +2298,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "FK-4",
-            "containerNo": "FK4",
+            "containerNo": "HLXU6789015",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -2348,7 +2371,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "FK-5",
-            "containerNo": "FK5",
+            "containerNo": "HLXU6789016",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -2421,7 +2444,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "FK-6",
-            "containerNo": "FK6",
+            "containerNo": "HLXU6789017",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -2521,7 +2544,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
         "containers": [
           {
             "id": "GK-1",
-            "containerNo": "GK1",
+            "containerNo": "MSCU8901234",
             "routeName": "CAN.CHN→ACC.GHA",
             "serviceType": "特快",
             "orders": [
@@ -2575,7 +2598,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "GK-2",
-            "containerNo": "GK2",
+            "containerNo": "MSCU8901235",
             "routeName": "CAN.CHN→ACC.GHA",
             "serviceType": "特快",
             "orders": [
@@ -2629,7 +2652,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "GK-3",
-            "containerNo": "GK3",
+            "containerNo": "MSCU8901236",
             "routeName": "CAN.CHN→ACC.GHA",
             "serviceType": "特快",
             "orders": [
@@ -2683,7 +2706,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "GK-4",
-            "containerNo": "GK4",
+            "containerNo": "MSCU8901237",
             "routeName": "CAN.CHN→ACC.GHA",
             "serviceType": "特快",
             "orders": [
@@ -2737,7 +2760,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "GK-5",
-            "containerNo": "GK5",
+            "containerNo": "MSCU8901238",
             "routeName": "CAN.CHN→ACC.GHA",
             "serviceType": "特快",
             "orders": [
@@ -2878,7 +2901,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
         "containers": [
           {
             "id": "HK-1",
-            "containerNo": "HK1",
+            "containerNo": "TCLU9012345",
             "routeName": "HKG.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -2941,7 +2964,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "HK-2",
-            "containerNo": "HK2",
+            "containerNo": "TCLU9012346",
             "routeName": "HKG.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -3004,7 +3027,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "HK-3",
-            "containerNo": "HK3",
+            "containerNo": "TCLU9012347",
             "routeName": "HKG.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -3067,7 +3090,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "HK-4",
-            "containerNo": "HK4",
+            "containerNo": "TCLU9012348",
             "routeName": "HKG.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -3130,7 +3153,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "HK-5",
-            "containerNo": "HK5",
+            "containerNo": "TCLU9012349",
             "routeName": "HKG.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -3262,7 +3285,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
         "containers": [
           {
             "id": "IK-1",
-            "containerNo": "IK1",
+            "containerNo": "APLU0123456",
             "routeName": "CAN.CHN→ACC.GHA",
             "serviceType": "普快",
             "orders": [
@@ -3354,7 +3377,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "IK-2",
-            "containerNo": "IK2",
+            "containerNo": "APLU0123457",
             "routeName": "CAN.CHN→ACC.GHA",
             "serviceType": "普快",
             "orders": [
@@ -3446,7 +3469,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "IK-3",
-            "containerNo": "IK3",
+            "containerNo": "APLU0123458",
             "routeName": "CAN.CHN→ACC.GHA",
             "serviceType": "普快",
             "orders": [
@@ -3538,7 +3561,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "IK-4",
-            "containerNo": "IK4",
+            "containerNo": "APLU0123459",
             "routeName": "CAN.CHN→ACC.GHA",
             "serviceType": "普快",
             "orders": [
@@ -3630,7 +3653,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "IK-5",
-            "containerNo": "IK5",
+            "containerNo": "APLU0123460",
             "routeName": "CAN.CHN→ACC.GHA",
             "serviceType": "普快",
             "orders": [
@@ -3800,7 +3823,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
         "containers": [
           {
             "id": "JK-1",
-            "containerNo": "JK1",
+            "containerNo": "TRLU1234567",
             "routeName": "SZX.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -3873,7 +3896,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "JK-2",
-            "containerNo": "JK2",
+            "containerNo": "TRLU1234568",
             "routeName": "SZX.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -3927,7 +3950,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "JK-3",
-            "containerNo": "JK3",
+            "containerNo": "TRLU1234569",
             "routeName": "SZX.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -3981,7 +4004,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "JK-4",
-            "containerNo": "JK4",
+            "containerNo": "TRLU1234570",
             "routeName": "SZX.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -4035,7 +4058,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "JK-5",
-            "containerNo": "JK5",
+            "containerNo": "TRLU1234571",
             "routeName": "SZX.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -4176,7 +4199,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
         "containers": [
           {
             "id": "KK-1",
-            "containerNo": "KK1",
+            "containerNo": "BMOU2345678",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -4239,7 +4262,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "KK-2",
-            "containerNo": "KK2",
+            "containerNo": "BMOU2345679",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -4302,7 +4325,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "KK-3",
-            "containerNo": "KK3",
+            "containerNo": "BMOU2345680",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -4365,7 +4388,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "KK-4",
-            "containerNo": "KK4",
+            "containerNo": "BMOU2345681",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -4428,7 +4451,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "KK-5",
-            "containerNo": "KK5",
+            "containerNo": "BMOU2345682",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -4491,7 +4514,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "KK-6",
-            "containerNo": "KK6",
+            "containerNo": "BMOU2345683",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -4581,7 +4604,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
         "containers": [
           {
             "id": "LK-1",
-            "containerNo": "LK1",
+            "containerNo": "FCIU3456789",
             "routeName": "SZX.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -4644,7 +4667,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "LK-2",
-            "containerNo": "LK2",
+            "containerNo": "FCIU3456790",
             "routeName": "SZX.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -4707,7 +4730,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "LK-3",
-            "containerNo": "LK3",
+            "containerNo": "FCIU3456791",
             "routeName": "SZX.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -4770,7 +4793,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "LK-4",
-            "containerNo": "LK4",
+            "containerNo": "FCIU3456792",
             "routeName": "SZX.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -4833,7 +4856,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "LK-5",
-            "containerNo": "LK5",
+            "containerNo": "FCIU3456793",
             "routeName": "SZX.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -4946,7 +4969,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
         "containers": [
           {
             "id": "MK-1",
-            "containerNo": "MK1",
+            "containerNo": "GESU4567890",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -5071,7 +5094,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "MK-2",
-            "containerNo": "MK2",
+            "containerNo": "GESU4567891",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -5196,7 +5219,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "MK-3",
-            "containerNo": "MK3",
+            "containerNo": "GESU4567892",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -5321,7 +5344,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "MK-4",
-            "containerNo": "MK4",
+            "containerNo": "GESU4567893",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -5446,7 +5469,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "MK-5",
-            "containerNo": "MK5",
+            "containerNo": "GESU4567894",
             "routeName": "CAN.CHN→LOS.NGN",
             "serviceType": "普快",
             "orders": [
@@ -5676,7 +5699,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
         "containers": [
           {
             "id": "NK-1",
-            "containerNo": "NK1",
+            "containerNo": "SEGU5678901",
             "routeName": "HKG.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -5730,7 +5753,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "NK-2",
-            "containerNo": "NK2",
+            "containerNo": "SEGU5678902",
             "routeName": "HKG.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -5779,7 +5802,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "NK-3",
-            "containerNo": "NK3",
+            "containerNo": "SEGU5678903",
             "routeName": "HKG.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -5828,7 +5851,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "NK-4",
-            "containerNo": "NK4",
+            "containerNo": "SEGU5678904",
             "routeName": "HKG.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -5877,7 +5900,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "NK-5",
-            "containerNo": "NK5",
+            "containerNo": "SEGU5678905",
             "routeName": "HKG.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [
@@ -5926,7 +5949,7 @@ export const LEGACY_TASKS: LegacyTask[] = [
           },
           {
             "id": "NK-6",
-            "containerNo": "NK6",
+            "containerNo": "SEGU5678906",
             "routeName": "HKG.CHN→LOS.NGN",
             "serviceType": "特快",
             "orders": [

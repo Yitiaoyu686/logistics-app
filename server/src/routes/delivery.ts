@@ -34,7 +34,7 @@ router.get('/', (req, res) => {
 router.post('/', (req, res) => {
   const db = getDb();
   const id = generateId('DPN');
-  const dpnNo = `DPN-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(Math.floor(Math.random() * 999) + 1).padStart(3, '0')}`;
+  const dpnNo = id;
   const now = new Date().toISOString();
 
   const {

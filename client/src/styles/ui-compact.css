@@ -1,6 +1,54 @@
+.app-content-shell {
+  height: 100%;
+}
+
+.app-content-shell .app-content-scroll {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto !important;
+}
+
+.app-content-shell .app-content-scroll > * {
+  min-height: 0;
+}
+
+.app-content-shell .ant-tabs {
+  min-height: 0;
+}
+
+.app-content-shell .ant-tabs-content-holder,
+.app-content-shell .ant-tabs-content,
+.app-content-shell .ant-tabs-tabpane {
+  min-height: 0;
+  height: 100%;
+}
+
+.app-content-shell .ant-tabs-nav {
+  margin-bottom: 10px;
+}
+
 .app-content-shell .ant-card-bordered {
   border-color: transparent;
   box-shadow: none;
+}
+
+.app-content-shell .ant-card,
+.app-content-shell .ant-spin-nested-loading,
+.app-content-shell .ant-spin-container,
+.app-content-shell .ant-table-wrapper {
+  min-height: 0;
+}
+
+.app-content-shell .ant-card,
+.app-content-shell .ant-spin-nested-loading,
+.app-content-shell .ant-spin-container,
+.app-content-shell .ant-table-wrapper,
+.app-content-shell .ant-table,
+.app-content-shell .ant-table-container {
+  display: flex;
+  flex-direction: column;
 }
 
 .app-content-shell .ant-card-head {
@@ -16,6 +64,7 @@
 
 .app-content-shell .ant-card-body {
   padding: 10px 12px;
+  min-height: 0;
 }
 
 .app-content-shell .ant-descriptions-bordered .ant-descriptions-view {
@@ -43,6 +92,74 @@
 
 .app-content-shell .ant-table-wrapper .ant-table-container {
   border: none;
+  border-radius: 8px;
+}
+
+.app-content-shell .ant-table-wrapper .ant-table-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.app-content-shell .ant-table-wrapper .ant-table-content,
+.app-content-shell .ant-table-wrapper .ant-table-body,
+.app-content-shell .ant-table-wrapper .ant-table-content {
+  min-height: 0;
+  flex: 1;
+  scrollbar-gutter: stable;
+}
+
+.app-content-shell .ant-table-wrapper .ant-table-body {
+  overscroll-behavior: contain;
+}
+
+.app-content-shell .ant-pagination {
+  margin-top: 12px;
+  margin-bottom: 0;
+}
+
+.app-content-shell .ant-drawer .ant-drawer-content,
+.app-content-shell .ant-drawer .ant-drawer-wrapper-body {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-content-shell .ant-drawer .ant-drawer-header {
+  flex: 0 0 auto;
+}
+
+.app-content-shell .ant-drawer .ant-drawer-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding-bottom: 84px;
+}
+
+.app-content-shell .ant-drawer .ant-drawer-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  background: #fff;
+  border-top: 1px solid #f0f0f0;
+}
+
+.app-content-shell .ant-modal .ant-modal-content {
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+}
+
+.app-content-shell .ant-modal .ant-modal-body {
+  min-height: 0;
+  overflow: auto;
+}
+
+.app-content-shell .ant-modal .ant-modal-footer {
+  margin-top: 0;
+  padding-top: 12px;
+  border-top: 1px solid #f0f0f0;
+  background: #fff;
 }
 
 .app-content-shell .ant-statistic-title {
@@ -74,6 +191,64 @@
   line-height: 20px;
   border-radius: 6px;
   font-size: 12px;
+}
+
+.list-page-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 16px;
+}
+
+.list-page-toolbar__filters,
+.list-page-toolbar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.list-page-toolbar__filters {
+  flex: 1 1 720px;
+  min-width: 0;
+}
+
+.list-page-toolbar__actions {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.list-page-toolbar__field {
+  min-width: 120px;
+}
+
+.list-page-toolbar__field .ant-input,
+.list-page-toolbar__field .ant-input-affix-wrapper,
+.list-page-toolbar__field .ant-select,
+.list-page-toolbar__field .ant-picker {
+  width: 100%;
+}
+
+@media (max-width: 1200px) {
+  .list-page-toolbar__actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 768px) {
+  .list-page-toolbar__filters,
+  .list-page-toolbar__actions {
+    width: 100%;
+  }
+
+  .list-page-toolbar__field {
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+    width: 100%;
+  }
 }
 
 @media (max-width: 1440px) {

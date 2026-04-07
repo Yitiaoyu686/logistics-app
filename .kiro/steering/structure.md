@@ -9,7 +9,7 @@
 ### Web Client Pages (`/client/src/pages/{module}/`)
 **Location**: `/client/src/pages/`
 **Purpose**: 按业务模块划分页面组件
-**Modules**: `crm/`, `oms/`, `tms/`, `wms/origin/`, `wms/destination/`, `finance/`, `system/`, `dashboard/`, `sales/`, `analytics/`, `auth/`
+**Modules**: `crm/`, `oms/`, `tms/`, `wms/origin/`, `wms/destination/`, `finance/`, `system/`, `dashboard/`, `sales/`, `analytics/`, `auth/`, `integration/`
 **Pattern**: 每个模块文件夹下为该模块的页面组件，PascalCase 命名
 
 ### Type Definitions (`/client/src/types/`)
@@ -21,12 +21,17 @@
 ### Hooks (`/client/src/hooks/`)
 **Location**: `/client/src/hooks/`
 **Purpose**: 可复用的业务逻辑 hook
-**Pattern**: `use*.ts`，如 `useBusinessMode.ts`（空运/海运切换状态管理）
+**Pattern**: `use*.ts`，如 `useBusinessMode.ts`（空运/海运切换）、`useOrderBaseOptions.ts`（订单元数据缓存）、`useTableScrollY.ts`（表格高度自适应）
 
 ### Shared Components (`/client/src/components/`)
 **Location**: `/client/src/components/`
 **Purpose**: 跨页面共享的 UI 组件
-**Pattern**: PascalCase，如 `BusinessModeSwitcher.tsx`（Segmented 切换器）
+**Pattern**: PascalCase，如 `BusinessModeSwitcher.tsx`（Segmented 切换器）、`ListPageToolbar.tsx`（列表页工具栏组件族）
+
+### Styles (`/client/src/styles/`)
+**Location**: `/client/src/styles/`
+**Purpose**: 全局工具类 CSS（布局框架、紧凑模式）
+**Pattern**: `ui-compact.css` 在 `main.tsx` 中全局引入，提供 `.list-page-toolbar`、`.compact-stats` 等工具类
 
 ### API Layer (`/client/src/api/`)
 **Location**: `/client/src/api/`
@@ -41,7 +46,7 @@
 ### Utilities (`/client/src/utils/`)
 **Location**: `/client/src/utils/`
 **Purpose**: 业务工具函数
-**Files**: `orderUtils.ts`, `jobUtils.ts`, `dataQuery.ts`
+**Pattern**: 按领域命名，如 `orderUtils.ts`, `jobUtils.ts`, `dataQuery.ts`, `commissionCalc.ts`, `freightCalc.ts`
 
 ### Server Database (`/server/src/database/`)
 **Location**: `/server/src/database/`
@@ -88,11 +93,11 @@ import { MOCK_DATA } from '../../data/mock';
 1. 创建组件: `/client/src/pages/{module}/ComponentName.tsx`
 2. 在 `App.tsx` 的 `MENU_CONFIG` 中添加菜单项（含 `roles` 权限数组）
 3. 在 `ContentRenderer` switch 中添加对应 case
-4. 所有样式使用内联 + `theme.useToken()`
+4. 样式使用内联 + `theme.useToken()` + `ui-compact.css` 工具类
 
 ## Component Patterns
 
-- **列表页**: BusinessModeSwitcher → Stats Cards → Filter Card → Data Table → Detail Drawer/Modal
+- **列表页**: BusinessModeSwitcher → Stats Cards → ListPageToolbar（筛选+操作） → Data Table → Detail Drawer/Modal
 - **详情页**: 左侧 Anchor 锚点导航 + 右侧滚动 Card 区域（OrderDetail 模式）
 - **表单**: Modal/Drawer + `destroyOnClose`，父组件控制 visible state
 - **业务切换**: 页面顶部 `<BusinessModeSwitcher>` + `useBusinessMode()` hook

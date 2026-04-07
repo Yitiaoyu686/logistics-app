@@ -1,34 +1,30 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Layout, Menu, Button, Avatar, Space, Tag, Result, Card, Tabs, Select, message, Statistic, Row, Col, List, Timeline, Badge, theme, Dropdown, Breadcrumb } from 'antd';
+import { Layout, Menu, Button, Avatar, Space, Tag, Result, Tabs, Select, message, theme, Dropdown, Breadcrumb } from 'antd';
 import {
   DesktopOutlined, TeamOutlined, FileTextOutlined, HomeOutlined,
   RocketOutlined, GlobalOutlined, BankOutlined,
-  BarChartOutlined, SettingOutlined, UserOutlined, BellOutlined,
+  BarChartOutlined, SettingOutlined, UserOutlined, BellOutlined, DollarOutlined,
   MenuUnfoldOutlined, MenuFoldOutlined,
-  ClockCircleOutlined,
   LogoutOutlined
 } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import LoginPage from './pages/auth/LoginPage';
 import { MyCustomers, PublicPool } from './pages/crm/CRMModules';
-import { SalesDashboard } from './pages/sales/SalesDashboard';
-import { FinanceDashboard } from './pages/finance/FinanceDashboard';
 import { JobCostAudit } from './pages/finance/JobCostAudit';
-import { PayableManagement } from './pages/finance/PayableManagement';
-import { ReceivableManagement } from './pages/finance/ReceivableManagement';
+import { PayableManagement, FreightReconciliation, CustomsReconciliation, TruckReconciliation } from './pages/finance/PayableManagement';
+import { ReceivableManagement, ReceivableStats, ReceivableAgingView } from './pages/finance/ReceivableManagement';
 import { PettyCashApply } from './pages/finance/PettyCashApply';
 import { PettyCashVerify } from './pages/finance/PettyCashVerify';
 import { CommissionRuleManagement } from './pages/finance/CommissionRuleManagement';
-import { CommissionCalculation } from './pages/finance/CommissionCalculation';
-import { SalaryPayment } from './pages/finance/SalaryPayment';
+import { CommissionCalculation, AirCommissionSummary, SeaCommissionSummary } from './pages/finance/CommissionCalculation';
+import { SalaryPayment, AnnualSalaryRank } from './pages/finance/SalaryPayment';
 import { FeeInput } from './pages/finance/FeeInput';
 import { FeeApproval } from './pages/finance/FeeApproval';
 import { JobProfitDashboard } from './pages/finance/JobProfitDashboard';
 import { CostReport } from './pages/finance/CostReport';
-import { OrderReport } from './pages/finance/OrderReport';
-import { ReceivableAging } from './pages/finance/ReceivableAging';
-import { PaymentSchedule } from './pages/finance/PaymentSchedule';
 import { CashFlowDaily } from './pages/finance/CashFlowDaily';
+import { AssetDepreciation } from './pages/finance/AssetDepreciation';
+import { SalaryProfile } from './pages/finance/SalaryProfile';
 import { TodoList } from './pages/dashboard/TodoList';
 import { AlertCenter } from './pages/dashboard/AlertCenter';
 import { PriceCalculator } from './pages/sales/PriceCalculator';
@@ -51,7 +47,6 @@ import { DestInboundList } from './pages/wms/destination/DestInboundList';
 import { DeliveryList } from './pages/wms/destination/DeliveryList';
 import { PickupList } from './pages/wms/destination/PickupList';
 import { DestStockList } from './pages/wms/destination/DestStockList';
-import { DestTransferList } from './pages/wms/destination/DestTransferList';
 import { DPNManageList } from './pages/wms/destination/DPNManageList';
 import { RegionManagement } from './pages/system/RegionManagement';
 import { SupplierManagement } from './pages/system/SupplierManagement';
@@ -75,6 +70,7 @@ import { CustomerValueAnalysis } from './pages/analytics/CustomerValueAnalysis';
 import { RouteProfitAnalysis } from './pages/analytics/RouteProfitAnalysis';
 import { TransitPerformance } from './pages/analytics/TransitPerformance';
 import { CostStructureAnalysis } from './pages/analytics/CostStructureAnalysis';
+import { WorkbenchOverview } from './pages/dashboard/WorkbenchOverview';
 import { WebFullFlowRunner } from './pages/integration/WebFullFlowRunner';
 
 const { Header, Content, Sider } = Layout;
@@ -132,6 +128,16 @@ interface MenuItemConfig {
   tabs?: { key: string; label: string, roles?: UserRole[]; domains?: DomainKey[] }[];
 }
 
+interface AccessScope {
+  roles?: UserRole[];
+  domains?: DomainKey[];
+}
+
+interface TabLocation {
+  menuKey: string;
+  scopes: AccessScope[];
+}
+
 // --- 3. 菜单配置 ---
 const MENU_CONFIG: MenuItemConfig[] = [
   {
@@ -140,10 +146,7 @@ const MENU_CONFIG: MenuItemConfig[] = [
     icon: <DesktopOutlined />,
     domains: ['ALL', 'SEA', 'AIR'],
     tabs: [
-      { key: 'dashboard_overview', label: '工作概览' },
-      { key: 'dashboard_todo', label: '待办事项' },
-      { key: 'dashboard_alert', label: '预警中心' },
-      { key: 'dashboard_web_full_flow', label: '全流程联调' }
+      { key: 'dashboard_overview', label: '工作台' },
     ]
   },
   {
@@ -170,11 +173,13 @@ const MENU_CONFIG: MenuItemConfig[] = [
     domains: ['SEA', 'AIR'],
     roles: ['WAREHOUSE_CN', 'OPS_CN', 'ADMIN'],
     tabs: [
-      { key: 'wms_in_record', label: '入库记录' },
+      { key: 'wms_in_express', label: '快递入库' },
+      { key: 'wms_in_transfer', label: '调拨入库' },
+      { key: 'wms_in_return', label: '退回入库' },
       { key: 'wms_stock_list', label: '库存列表' },
       { key: 'wms_stock_noorder', label: '无订单快递' },
-      { key: 'wms_box_sea', label: '集中装箱', domains: ['SEA'] },
-      { key: 'wms_box_air', label: '集中装箱', domains: ['AIR'] },
+      { key: 'wms_box_sea', label: '任务执行', domains: ['SEA'] },
+      { key: 'wms_box_air', label: '任务执行', domains: ['AIR'] },
       { key: 'wms_transfer_list', label: '调拨记录' },
       { key: 'wms_stock_return', label: '退运处理' }
     ]
@@ -196,6 +201,7 @@ const MENU_CONFIG: MenuItemConfig[] = [
     tabs: [
       { key: 'tms_dest_job_list', label: '任务管理', roles: ['OPS_US', 'ADMIN'] },
       { key: 'tms_cost_pod_list', label: 'JOB成本' },
+      { key: 'tms_dest_order_fee_list', label: '订单费用' },
       { key: 'tms_dpn_cost_list', label: 'DPN成本' }
     ]
   },
@@ -204,12 +210,12 @@ const MENU_CONFIG: MenuItemConfig[] = [
     domains: ['SEA', 'AIR'],
     roles: ['WAREHOUSE_US', 'OPS_US', 'ADMIN'],
     tabs: [
-      { key: 'wms_dest_in_list', label: '货物入库' },
+      { key: 'wms_dest_in_job', label: '任务入库' },
+      { key: 'wms_dest_in_dpn', label: 'DPN入库' },
       { key: 'wms_dest_stock_list', label: '库存查询' },
       { key: 'wms_dest_dpn_manage', label: 'DPN管理' },
       { key: 'wms_delivery_list', label: '配送列表' },
-      { key: 'wms_pickup_list', label: '自提列表' },
-      { key: 'wms_dest_transfer_list', label: '调拨记录' }
+      { key: 'wms_pickup_list', label: '自提列表' }
     ]
   },
   {
@@ -218,49 +224,59 @@ const MENU_CONFIG: MenuItemConfig[] = [
     roles: ['FINANCE', 'ADMIN', 'BOSS'],
     children: [
       {
-        key: 'finance_cost',
-        label: '费用与成本',
+        key: 'fin_fee', label: '费用管理',
         tabs: [
-          { key: 'fin_fee_input', label: '费用录入', roles: ['ADMIN', 'FINANCE', 'BOSS'] },
-          { key: 'fin_fee_approval', label: '费用审批' },
-          { key: 'fin_job_profit', label: '任务盈亏看板' },
-          { key: 'fin_job_audit', label: '任务成本总览' }
+          { key: 'fin_fee_input', label: '费用录入' },
+          { key: 'fin_fee_approval', label: '费用审批' }
         ]
       },
       {
-        key: 'finance_arap',
-        label: '往来账款',
+        key: 'fin_profit', label: '毛利与利润',
         tabs: [
-          { key: 'fin_payable', label: '应付账款' },
-          { key: 'fin_receivable', label: '应收账款' },
-          { key: 'fin_receivable_aging', label: '应收账龄' },
-          { key: 'fin_payable_schedule', label: '付款计划' }
+          { key: 'fin_cost_report', label: '毛利表' },
+          { key: 'fin_job_profit', label: '任务盈亏' },
+          { key: 'fin_job_audit', label: '成本审核' }
         ]
       },
       {
-        key: 'finance_petty_cash',
-        label: '备用金',
+        key: 'fin_receivable', label: '应收管理',
+        tabs: [
+          { key: 'fin_receivable_detail', label: '应收明细' },
+          { key: 'fin_receivable_stats', label: '应收统计' },
+          { key: 'fin_receivable_aging', label: '账龄分析' }
+        ]
+      },
+      {
+        key: 'fin_payable', label: '应付管理',
+        tabs: [
+          { key: 'fin_payable_detail', label: '应付明细' },
+          { key: 'fin_freight_recon', label: '运费对账' },
+          { key: 'fin_customs_recon', label: '报关费对账' },
+          { key: 'fin_truck_recon', label: '拖车费对账' }
+        ]
+      },
+      {
+        key: 'fin_commission_menu', label: '提成与薪资',
+        tabs: [
+          { key: 'fin_air_commission', label: '空运提成' },
+          { key: 'fin_sea_commission', label: '海运提成' },
+          { key: 'fin_commission', label: '提成计算' },
+          { key: 'fin_salary', label: '月度薪资' },
+          { key: 'fin_salary_annual', label: '年度排行' }
+        ]
+      },
+      {
+        key: 'fin_cash', label: '资金管理',
+        tabs: [
+          { key: 'fin_cashflow_daily', label: '收支流水' },
+          { key: 'fin_asset_depreciation', label: '固定资产折旧' }
+        ]
+      },
+      {
+        key: 'fin_petty', label: '备用金',
         tabs: [
           { key: 'fin_petty_apply', label: '备用金申请' },
           { key: 'fin_petty_verify', label: '备用金核销', roles: ['FINANCE', 'ADMIN'] }
-        ]
-      },
-      {
-        key: 'finance_compensation',
-        label: '提成与薪资',
-        tabs: [
-          { key: 'fin_commission', label: '销售提成' },
-          { key: 'fin_salary', label: '薪资发放' },
-          { key: 'fin_commission_rules', label: '提成规则' }
-        ]
-      },
-      {
-        key: 'finance_reports',
-        label: '财务报表',
-        tabs: [
-          { key: 'fin_cost_report', label: '成本明细报表' },
-          { key: 'fin_order_report', label: '订单明细报表' },
-          { key: 'fin_cashflow_daily', label: '收支管理' }
         ]
       }
     ]
@@ -339,6 +355,17 @@ const MENU_CONFIG: MenuItemConfig[] = [
     ]
   },
   {
+    key: 'set_salary',
+    label: '薪资设置',
+    icon: <DollarOutlined />,
+    domains: ['SYS'],
+    roles: ['ADMIN'],
+    tabs: [
+      { key: 'set_salary_profile', label: '薪资档案' },
+      { key: 'set_commission_rules', label: '提成规则' }
+    ]
+  },
+  {
     key: 'set_message',
     label: '消息通知',
     icon: <BellOutlined />,
@@ -352,62 +379,50 @@ const MENU_CONFIG: MenuItemConfig[] = [
   }
 ];
 
-// --- 4. 聚合的工作台组件 ---
-const RoleBasedDashboard = ({ role }: { role: UserRole }) => {
-  if (role === 'SALES') return <SalesDashboard />;
-  if (role === 'FINANCE') return <FinanceDashboard />;
+const ALL_DOMAIN_KEYS: DomainKey[] = ['ALL', 'SEA', 'AIR', 'SYS'];
 
-  const getStats = () => {
-    return [
-      { title: '待处理任务', value: 0, color: '#1890ff' },
-      { title: '异常提醒', value: 0, color: '#cf1322' },
-      { title: '系统公告', value: 0, color: '#722ed1' },
-      { title: '待审核单据', value: 0, color: '#faad14' }
-    ];
-  };
+const matchesRole = (roles: UserRole[] | undefined, role: UserRole) => !roles || roles.includes(role);
 
-  return (
-    <div style={{ background: '#f0f2f5', padding: '0', minHeight: '100%' }}>
-      <Row gutter={[16, 16]}>
-        <Col span={24}>
-          <Card bordered={false} title="数据概览">
-            <Row gutter={16}>
-              {getStats().map((s, i) => (
-                <Col span={6} key={i}>
-                  <Statistic title={s.title} value={s.value} valueStyle={{ color: s.color }} />
-                </Col>
-              ))}
-            </Row>
-          </Card>
-        </Col>
-        <Col span={16}>
-          <Card bordered={false} title="待办事项" extra={<Button type="link">查看更多</Button>}>
-            <List
-              itemLayout="horizontal"
-              dataSource={[] as { title: string; time: string }[]}
-              renderItem={(item) => (
-                <List.Item actions={[<Button type="link">去处理</Button>]}>
-                  <List.Item.Meta
-                    avatar={<Badge dot color="red"><ClockCircleOutlined /></Badge>}
-                    title={item.title}
-                    description={item.time}
-                  />
-                </List.Item>
-              )}
-            />
-          </Card>
-        </Col>
-        <Col span={8}>
-          <Card bordered={false} title="操作轨迹" style={{ height: '100%' }}>
-            <Timeline
-              items={[]}
-            />
-          </Card>
-        </Col>
-      </Row>
-    </div>
-  );
+const matchesDomain = (domains: DomainKey[] | undefined, domain: DomainKey) => !domains || domains.includes(domain);
+
+const findTabLocation = (tabKey: string): TabLocation | null => {
+  for (const module of MENU_CONFIG) {
+    const directTab = module.tabs?.find((tab) => tab.key === tabKey);
+    if (directTab) {
+      return {
+        menuKey: module.key,
+        scopes: [
+          { roles: module.roles, domains: module.domains },
+          { roles: directTab.roles, domains: directTab.domains },
+        ],
+      };
+    }
+
+    for (const child of module.children || []) {
+      const childTab = child.tabs?.find((tab) => tab.key === tabKey);
+      if (childTab) {
+        return {
+          menuKey: child.key,
+          scopes: [
+            { roles: module.roles, domains: module.domains },
+            { roles: child.roles, domains: child.domains },
+            { roles: childTab.roles, domains: childTab.domains },
+          ],
+        };
+      }
+    }
+  }
+
+  return null;
 };
+
+const canRoleAccessTab = (location: TabLocation, role: UserRole) =>
+  location.scopes.every((scope) => matchesRole(scope.roles, role));
+
+const getAllowedDomainsForTab = (location: TabLocation) =>
+  ALL_DOMAIN_KEYS.filter((domain) =>
+    location.scopes.every((scope) => matchesDomain(scope.domains, domain))
+  );
 
 const ComingSoon = ({ title }: { title: string }) => (
   <Result status="404" title={title} subTitle="该功能模块建设中..." />
@@ -491,6 +506,10 @@ const App: React.FC = () => {
   const availableDomains = useMemo(
     () => DOMAIN_CONFIG.filter(domain => !domain.roles || domain.roles.includes(currentRole)),
     [currentRole]
+  );
+  const availableDomainKeys = useMemo(
+    () => availableDomains.map((domain) => domain.key),
+    [availableDomains]
   );
 
   const businessMode: 'ALL' | 'AIR' | 'SEA' =
@@ -629,6 +648,44 @@ const App: React.FC = () => {
     return items;
   }, [activeDomain, activeMenuKey, availableDomains, filteredMenuConfig]);
 
+  const canOpenWorkbenchTab = (tabKey: string) => {
+    const location = findTabLocation(tabKey);
+    if (!location || !canRoleAccessTab(location, currentRole)) return false;
+
+    const allowedDomains = getAllowedDomainsForTab(location);
+    return availableDomainKeys.some((domain) => allowedDomains.includes(domain));
+  };
+
+  const handleWorkbenchOpenTab = (tabKey: string) => {
+    const location = findTabLocation(tabKey);
+    if (!location) {
+      message.info('未找到对应页面配置');
+      return;
+    }
+
+    if (!canRoleAccessTab(location, currentRole)) {
+      message.info('当前登录角色仅支持预览布局，暂无该页面权限');
+      return;
+    }
+
+    const allowedDomains = getAllowedDomainsForTab(location);
+    const targetDomain =
+      (allowedDomains.includes(activeDomain) && availableDomainKeys.includes(activeDomain) && activeDomain) ||
+      availableDomainKeys.find((domain) => allowedDomains.includes(domain));
+
+    if (!targetDomain) {
+      message.info('当前登录角色仅支持预览布局，暂无该页面权限');
+      return;
+    }
+
+    if (targetDomain !== activeDomain) {
+      setActiveDomain(targetDomain);
+    }
+
+    setActiveMenuKey(location.menuKey);
+    setActiveTabKey(tabKey);
+  };
+
   // 未登录或加载中，显示登录页（放在所有 hooks 之后）
   if (authLoading) return null;
   if (!isAuthenticated) return <LoginPage onLoginSuccess={handleLoginSuccess} />;
@@ -664,7 +721,7 @@ const App: React.FC = () => {
   const contentTabKey = showTabs
     ? activeTabKey
     : (currentTabs[0]?.key || activeMenuKey);
-  const isDashboardRoot = activeMenuKey === 'dashboard' && !activeTabKey;
+  const isDashboardRoot = activeMenuKey === 'dashboard' && activeTabKey === 'dashboard_overview';
 
   return (
     <Layout style={{ height: '100vh', overflow: 'hidden' }}>
@@ -751,15 +808,29 @@ const App: React.FC = () => {
                       key: tab.key,
                       label: tab.label,
                     }))}
-                    style={{ flex: '0 0 auto' }}
+                    style={{ flex: '0 0 auto', marginBottom: 8 }}
                   />
-                  <div className="app-content-scroll" style={{ flex: 1, minHeight: 0, overflow: 'auto', paddingRight: 4 }}>
-                    <ContentRenderer tabKey={activeTabKey || contentTabKey} currentRole={currentRole} warehouseId={currentWarehouseId} businessMode={businessMode} />
+                  <div className="app-content-scroll" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+                    <ContentRenderer
+                      tabKey={activeTabKey || contentTabKey}
+                      currentRole={currentRole}
+                      warehouseId={currentWarehouseId}
+                      businessMode={businessMode}
+                      onOpenTab={handleWorkbenchOpenTab}
+                      canOpenTab={canOpenWorkbenchTab}
+                    />
                   </div>
                 </>
               ) : (
-                <div className="app-content-scroll" style={{ flex: 1, minHeight: 0, overflow: 'auto', paddingRight: 4 }}>
-                  <ContentRenderer tabKey={contentTabKey} currentRole={currentRole} warehouseId={currentWarehouseId} businessMode={businessMode} />
+                <div className="app-content-scroll" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+                  <ContentRenderer
+                    tabKey={contentTabKey}
+                    currentRole={currentRole}
+                    warehouseId={currentWarehouseId}
+                    businessMode={businessMode}
+                    onOpenTab={handleWorkbenchOpenTab}
+                    canOpenTab={canOpenWorkbenchTab}
+                  />
                 </div>
               )}
             </div>
@@ -770,9 +841,33 @@ const App: React.FC = () => {
   );
 };
 
-const ContentRenderer = ({ tabKey, currentRole, warehouseId, businessMode }: { tabKey: string, currentRole: UserRole, warehouseId?: string, businessMode?: 'ALL' | 'AIR' | 'SEA' }) => {
+const ContentRenderer = ({
+  tabKey,
+  currentRole,
+  warehouseId,
+  businessMode,
+  onOpenTab,
+  canOpenTab,
+}: {
+  tabKey: string,
+  currentRole: UserRole,
+  warehouseId?: string,
+  businessMode?: 'ALL' | 'AIR' | 'SEA',
+  onOpenTab: (tabKey: string) => void,
+  canOpenTab: (tabKey: string) => boolean,
+}) => {
   // 工作台tabs
-  if (tabKey === 'dashboard_overview') return <RoleBasedDashboard role={currentRole} />;
+  if (tabKey === 'dashboard_overview') {
+    return (
+      <WorkbenchOverview
+        currentRole={currentRole}
+        businessMode={businessMode || 'ALL'}
+        warehouseId={warehouseId}
+        onOpenTab={onOpenTab}
+        canOpenTab={canOpenTab}
+      />
+    );
+  }
   if (tabKey === 'dashboard_todo') return <TodoList />;
   if (tabKey === 'dashboard_alert') return <AlertCenter />;
   if (tabKey === 'dashboard_web_full_flow') return <WebFullFlowRunner />;
@@ -788,44 +883,56 @@ const ContentRenderer = ({ tabKey, currentRole, warehouseId, businessMode }: { t
     case 'tms_dest_job_list': return <DestJobManager businessMode={businessMode} />;
     // WMS - 起运国仓储
     case 'wms_in_scan': return <InboundScan />;
-    case 'wms_in_record': return <InboundList warehouseId={warehouseId} businessMode={businessMode} />;
+    case 'wms_in_express': return <InboundList key="inbound-express" warehouseId={warehouseId} businessMode={businessMode} initialScene="EXPRESS" />;
+    case 'wms_in_transfer': return <InboundList key="inbound-transfer" warehouseId={warehouseId} businessMode={businessMode} initialScene="TRANSFER" />;
+    case 'wms_in_return': return <InboundList key="inbound-return" warehouseId={warehouseId} businessMode={businessMode} initialScene="RETURN" />;
     case 'wms_stock_list': return <StockList warehouseId={warehouseId} businessMode={businessMode} />;
     case 'wms_stock_return': return <ReturnProcess warehouseId={warehouseId} businessMode={businessMode} />;
     case 'wms_stock_noorder': return <NoOrderExpress warehouseId={warehouseId} businessMode={businessMode} />;
     case 'wms_box_sea': return <ContainerMgt warehouseId={warehouseId} businessMode={businessMode} />;
-    case 'wms_box_air': return <AirCargoMgt warehouseId={warehouseId} businessMode={businessMode} />;
+    case 'wms_box_air': return <ContainerMgt warehouseId={warehouseId} businessMode={businessMode} />;
     case 'wms_box_list': return <ContainerMgt warehouseId={warehouseId} businessMode={businessMode} />;
     case 'wms_transfer_list': return <TransferList warehouseId={warehouseId} businessMode={businessMode} />;
     // WMS - 到达国仓储
+    case 'wms_dest_in_job': return <DestInboundList key="dest-in-job" warehouseId={warehouseId} businessMode={businessMode} initialTab="JOB" />;
+    case 'wms_dest_in_dpn': return <DestInboundList key="dest-in-dpn" warehouseId={warehouseId} businessMode={businessMode} initialTab="DPN" />;
     case 'wms_dest_in_list': return <DestInboundList warehouseId={warehouseId} businessMode={businessMode} />;
     case 'wms_dest_in_confirm': return <DestInboundList warehouseId={warehouseId} businessMode={businessMode} />;
     case 'wms_delivery_create': return <DeliveryList warehouseId={warehouseId} businessMode={businessMode} />;
-    case 'wms_delivery_list': return <DPNManageList businessMode={businessMode} />;
+    case 'wms_delivery_list': return <DeliveryList warehouseId={warehouseId} businessMode={businessMode} />;
     case 'wms_delivery_track': return <DeliveryList warehouseId={warehouseId} businessMode={businessMode} />;
     case 'wms_pickup_list': return <PickupList warehouseId={warehouseId} businessMode={businessMode} />;
     case 'wms_dest_stock_list': return <DestStockList warehouseId={warehouseId} businessMode={businessMode} />;
-    case 'wms_dest_dpn_manage': return <DPNManageList businessMode={businessMode} />;
-    case 'wms_dest_transfer_list': return <DestTransferList warehouseId={warehouseId} businessMode={businessMode} />;
-    // 财务中心
+    case 'wms_dest_dpn_manage': return <DPNManageList warehouseId={warehouseId} businessMode={businessMode} />;
+    // 财务中心 - 费用管理
     case 'fin_fee_input': return <FeeInput />;
     case 'fin_fee_approval': return <FeeApproval />;
+    // 财务中心 - 毛利与利润
+    case 'fin_cost_report': return <CostReport businessMode={businessMode} />;
     case 'fin_job_profit': return <JobProfitDashboard businessMode={businessMode} />;
     case 'fin_job_audit': return <JobCostAudit businessMode={businessMode} />;
-    case 'fin_payable': return <PayableManagement businessMode={businessMode} />;
-    case 'fin_receivable': return <ReceivableManagement businessMode={businessMode} />;
-    case 'fin_receivable_pol': return <ReceivableManagement businessMode={businessMode} />;
-    case 'fin_receivable_pod': return <ReceivableManagement businessMode={businessMode} />;
+    // 财务中心 - 应收管理
+    case 'fin_receivable_detail': return <ReceivableManagement businessMode={businessMode} />;
+    case 'fin_receivable_stats': return <ReceivableStats businessMode={businessMode} />;
+    case 'fin_receivable_aging': return <ReceivableAgingView businessMode={businessMode} />;
+    // 财务中心 - 应付管理
+    case 'fin_payable_detail': return <PayableManagement businessMode={businessMode} />;
+    case 'fin_freight_recon': return <FreightReconciliation />;
+    case 'fin_customs_recon': return <CustomsReconciliation />;
+    case 'fin_truck_recon': return <TruckReconciliation />;
+    // 财务中心 - 提成与薪资
+    case 'fin_air_commission': return <AirCommissionSummary />;
+    case 'fin_sea_commission': return <SeaCommissionSummary />;
+    case 'fin_commission': return <CommissionCalculation />;
+    case 'fin_commission_rules': return <CommissionRuleManagement />;
+    case 'fin_salary': return <SalaryPayment />;
+    case 'fin_salary_annual': return <AnnualSalaryRank />;
+    // 财务中心 - 资金管理
+    case 'fin_cashflow_daily': return <CashFlowDaily />;
+    case 'fin_asset_depreciation': return <AssetDepreciation />;
+    // 财务中心 - 备用金
     case 'fin_petty_apply': return <PettyCashApply />;
     case 'fin_petty_verify': return <PettyCashVerify />;
-    case 'fin_commission': return <CommissionCalculation />;
-    case 'fin_salary': return <SalaryPayment />;
-    case 'fin_commission_rules': return <CommissionRuleManagement />;
-    case 'fin_receivable_aging': return <ReceivableAging />;
-    case 'fin_payable_schedule': return <PaymentSchedule />;
-    case 'fin_cashflow_daily': return <CashFlowDaily />;
-    // 财务中心 - 报表
-    case 'fin_cost_report': return <CostReport businessMode={businessMode} />;
-    case 'fin_order_report': return <OrderReport businessMode={businessMode} />;
     // 经营分析
     case 'analytics_executive': return <ExecutiveDashboard businessMode={businessMode} />;
     case 'analytics_customer_value': return <CustomerValueAnalysis />;
@@ -850,13 +957,17 @@ const ContentRenderer = ({ tabKey, currentRole, warehouseId, businessMode }: { t
     case 'set_auth_permission': return <PermissionManagement />;
     case 'set_base_rate': return <FreightRateRule />;
     case 'set_workflow_list': return <WorkflowConfigPage />;
+    // 系统管理 - 薪资设置
+    case 'set_salary_profile': return <SalaryProfile />;
+    case 'set_commission_rules': return <CommissionRuleManagement />;
     // 起运国办
-    case 'tms_origin_task': return <OriginTaskManager />;
+    case 'tms_origin_task': return <OriginTaskManager businessMode={businessMode} />;
     case 'tms_cost_pol_list': return <JobCostInputPOL businessMode={businessMode} />;
     case 'tms_receivable_pol_list': return <ReceivableManagement businessMode={businessMode} />;
     case 'tms_order_fee_list': return <OrderFeeInput businessMode={businessMode} />;
     // 到达国办 - 新增页面
     case 'tms_cost_pod_list': return <JobCostInputPOD businessMode={businessMode} />;
+    case 'tms_dest_order_fee_list': return <OrderFeeInput businessMode={businessMode} />;
     case 'tms_dpn_cost_list': return <DPNCost businessMode={businessMode} />;
     case 'tms_receivable_pod_list': return <ReceivableManagement businessMode={businessMode} />;
     default: return <ComingSoon title={tabKey} />;

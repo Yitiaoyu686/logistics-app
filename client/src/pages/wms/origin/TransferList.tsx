@@ -1,30 +1,74 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Card, Table, Button, Select, Tag, Space, Row, Col,
-  Modal, Form, Input, Radio, InputNumber, message, Descriptions,
-  Drawer, Timeline
+  Button,
+  Card,
+  Col,
+  DatePicker,
+  Descriptions,
+  Drawer,
+  Form,
+  Input,
+  Modal,
+  Radio,
+  Row,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Timeline,
+  message,
+  theme,
 } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import {
-  SwapOutlined, HomeOutlined, ShopOutlined, ClockCircleOutlined,
-  CarOutlined, CheckCircleOutlined, PlusOutlined, EyeOutlined,
-  SendOutlined, InboxOutlined
+  CarOutlined,
+  CheckCircleOutlined,
+  ClockCircleOutlined,
+  EyeOutlined,
+  InboxOutlined,
+  PlusOutlined,
+  PrinterOutlined,
+  ScanOutlined,
+  ReloadOutlined,
+  SearchOutlined,
+  SendOutlined,
+  SwapOutlined,
 } from '@ant-design/icons';
-import dayjs from 'dayjs';
+import dayjs, { Dayjs } from 'dayjs';
 import { warehouseApi } from '../../../api';
+import {
+  ListPageToolbar,
+  ListPageToolbarActions,
+  ListPageToolbarCard,
+  ListPageToolbarField,
+  ListPageToolbarFilters,
+} from '../../../components/ListPageToolbar';
+import { buildOriginStockFallbackData, loadOriginFallbackOrders } from './derivedWarehouseData';
 
-const { Option } = Select;
 const { TextArea } = Input;
 
-// 调拨方向
+type BusinessMode = 'ALL' | 'SEA' | 'AIR';
 type TransferDirection = 'SATELLITE_TO_MAIN' | 'MAIN_TO_SATELLITE';
-
-// 调拨状态
 type TransferStatus = 'PENDING' | 'IN_TRANSIT' | 'ARRIVED' | 'RECEIVED' | 'CANCELLED';
-
-// 发货方式（针对卫星仓有装箱号的情况）
 type ShippingMethod = 'DIRECT' | 'VIA_MAIN';
+type SelectType = 'order' | 'container';
 
-// 流转记录
+interface TransferMeta {
+  routeName?: string;
+  executeDate?: string;
+  logisticsCompany?: string;
+  queryPhone?: string;
+  driverName?: string;
+  driverPhone?: string;
+  driverAccountId?: string;
+  plateNo?: string;
+  shippingMethod?: ShippingMethod;
+  departureConfirmedAt?: string;
+  arrivalConfirmedAt?: string;
+  receiveConfirmedAt?: string;
+  note?: string;
+}
+
 interface FlowRecord {
   time: string;
   action: string;
@@ -32,8 +76,9 @@ interface FlowRecord {
   detail?: string;
 }
 
-// 下属订单信息
 interface TransferOrderItem {
+  id: string;
+  jobNo?: string;
   subOrderNo: string;
   masterOrderNo: string;
   trackingNo: string;
@@ -41,11 +86,12 @@ interface TransferOrderItem {
   pieces: number;
   weight: number;
   volume: number;
+  route?: string;
 }
 
-// 可选订单（用于创建调拨单时选择）
 interface AvailableOrder {
   id: string;
+  jobNo: string;
   subOrderNo: string;
   masterOrderNo: string;
   trackingNo: string;
@@ -55,9 +101,9 @@ interface AvailableOrder {
   volume: number;
   warehouse: string;
   status: string;
+  route: string;
 }
 
-// 可选集装箱（用于创建调拨单时选择）
 interface AvailableContainer {
   id: string;
   containerNo: string;
@@ -70,7 +116,6 @@ interface AvailableContainer {
   status: string;
 }
 
-// 调拨记录
 interface TransferRecord {
   id: string;
   transferNo: string;
@@ -78,7 +123,8 @@ interface TransferRecord {
   direction: TransferDirection;
   sourceWarehouse: string;
   targetWarehouse: string;
-  orderItems: TransferOrderItem[]; // 改为多个订单
+  routeLabel: string;
+  orderItems: TransferOrderItem[];
   shippingUnitNo?: string;
   totalPieces: number;
   totalWeight: number;
@@ -87,55 +133,432 @@ interface TransferRecord {
   shippingMethod?: ShippingMethod;
   reason?: string;
   remark?: string;
+  meta: TransferMeta;
   operator?: string;
   createdAt: string;
   updatedAt?: string;
   departureTime?: string;
   arrivalTime?: string;
   confirmedTime?: string;
-  flowRecords?: FlowRecord[]; // 流转记录
+  isDemo?: boolean;
 }
 
-// 映射服务端状态到组件状态
-const mapTransferStatus = (status: string): TransferStatus => {
-  const map: Record<string, TransferStatus> = {
-    DRAFT: 'PENDING',
-    PACKED: 'PENDING',
-    SHIPPED: 'IN_TRANSIT',
-    IN_TRANSIT: 'IN_TRANSIT',
-    ARRIVED: 'ARRIVED',
-    RECEIVED: 'RECEIVED',
-    CANCELLED: 'CANCELLED',
-  };
-  return map[status] || 'PENDING';
-};
+const META_PREFIX = '__TRANSFER_DEMO__';
 
-// 推断调拨方向
-const inferDirection = (from: string, to: string): TransferDirection => {
-  const mainWarehouses = ['广州总仓', '广州仓'];
-  if (mainWarehouses.some(w => to.includes(w.replace('仓', '')))) return 'SATELLITE_TO_MAIN';
-  return 'MAIN_TO_SATELLITE';
-};
-
-// 状态配置
 const STATUS_CONFIG: Record<TransferStatus, { text: string; color: string; icon: React.ReactNode }> = {
-  PENDING: { text: '待发货', color: 'warning', icon: <ClockCircleOutlined /> },
+  PENDING: { text: '待发运', color: 'gold', icon: <ClockCircleOutlined /> },
   IN_TRANSIT: { text: '运输中', color: 'processing', icon: <CarOutlined /> },
-  ARRIVED: { text: '已到达', color: 'success', icon: <InboxOutlined /> },
+  ARRIVED: { text: '已到达', color: 'cyan', icon: <InboxOutlined /> },
   RECEIVED: { text: '已入库', color: 'success', icon: <CheckCircleOutlined /> },
-  CANCELLED: { text: '已取消', color: 'default', icon: <ClockCircleOutlined /> }
+  CANCELLED: { text: '已取消', color: 'default', icon: <ClockCircleOutlined /> },
 };
 
-// 方向配置
-const DIRECTION_CONFIG: Record<TransferDirection, { text: string; color: string; icon: React.ReactNode }> = {
-  SATELLITE_TO_MAIN: { text: '卫星仓→总仓', color: 'blue', icon: <ShopOutlined /> },
-  MAIN_TO_SATELLITE: { text: '总仓→卫星仓', color: 'green', icon: <HomeOutlined /> }
+const DIRECTION_OPTIONS = [
+  { value: 'ALL', label: '全部方向' },
+  { value: 'SATELLITE_TO_MAIN', label: '卫星仓→总仓' },
+  { value: 'MAIN_TO_SATELLITE', label: '总仓→卫星仓' },
+] as const;
+
+const STATUS_OPTIONS = [
+  { value: 'ALL', label: '全部状态' },
+  { value: 'PENDING', label: '待发运' },
+  { value: 'IN_TRANSIT', label: '运输中' },
+  { value: 'ARRIVED', label: '已到达' },
+  { value: 'RECEIVED', label: '已入库' },
+  { value: 'CANCELLED', label: '已取消' },
+] as const;
+
+const REASON_OPTIONS = [
+  '集中发货',
+  '卫星仓回仓',
+  '总仓分拨',
+  '库存调整',
+  '紧急补货',
+  '整箱直发',
+  '其他',
+];
+
+const WAREHOUSE_OPTIONS = ['广州总仓', '海珠区站点', '白云一号区', '佛山拼货区', '深圳集货区', '番禺转运区'];
+
+const inferDirection = (fromWarehouse: string, toWarehouse: string): TransferDirection => {
+  const mainWarehouses = ['广州总仓', '广州仓'];
+  return mainWarehouses.some((name) => toWarehouse.includes(name.replace('仓', ''))) ? 'SATELLITE_TO_MAIN' : 'MAIN_TO_SATELLITE';
 };
 
-// 发货方式配置
-const SHIPPING_METHOD_CONFIG: Record<ShippingMethod, { text: string; color: string }> = {
-  VIA_MAIN: { text: '先送总仓', color: 'default' },
-  DIRECT: { text: '直接发货', color: 'orange' }
+const mapTransferStatus = (status: string): TransferStatus => {
+  const normalized = String(status || '').toUpperCase();
+  if (normalized === 'SHIPPED' || normalized === 'IN_TRANSIT') return 'IN_TRANSIT';
+  if (normalized === 'ARRIVED') return 'ARRIVED';
+  if (normalized === 'RECEIVED') return 'RECEIVED';
+  if (normalized === 'CANCELLED') return 'CANCELLED';
+  return 'PENDING';
+};
+
+const parseTransferMeta = (remark?: string | null): TransferMeta => {
+  const text = String(remark || '').trim();
+  if (!text) return {};
+
+  if (text.startsWith(META_PREFIX)) {
+    try {
+      return JSON.parse(text.slice(META_PREFIX.length)) as TransferMeta;
+    } catch {
+      return { note: text };
+    }
+  }
+
+  const meta: TransferMeta = {};
+  text.split('|').map((item) => item.trim()).filter(Boolean).forEach((part) => {
+    const [rawKey, ...rest] = part.split(/[:：]/);
+    const key = String(rawKey || '').trim();
+    const value = rest.join(':').trim();
+    if (!key || !value) return;
+    if (key === '路线') meta.routeName = value;
+    if (key === '执行日期') meta.executeDate = value;
+    if (key === '物流公司') meta.logisticsCompany = value;
+    if (key === '查询电话') meta.queryPhone = value;
+    if (key === '司机名称') meta.driverName = value;
+    if (key === '司机电话') meta.driverPhone = value;
+    if (key === '司机账号ID') meta.driverAccountId = value;
+    if (key === '车牌') meta.plateNo = value;
+    if (key === '备注') meta.note = value;
+  });
+
+  if (!meta.note && text && !text.includes(':') && !text.includes('：')) {
+    meta.note = text;
+  }
+
+  return meta;
+};
+
+const serializeTransferMeta = (meta: TransferMeta) => {
+  const cleanEntries = Object.entries(meta).filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '');
+  return cleanEntries.length > 0 ? `${META_PREFIX}${JSON.stringify(Object.fromEntries(cleanEntries))}` : '';
+};
+
+const formatDateTime = (value?: string | null, fallback = '-') => (value ? dayjs(value).format('YYYY/MM/DD HH:mm:ss') : fallback);
+const formatShortDateTime = (value?: string | null, fallback = '-') => (value ? dayjs(value).format('YYYY/MM/DD HH:mm') : fallback);
+
+const buildLogisticsStatusText = (record: TransferRecord) => {
+  switch (record.status) {
+    case 'IN_TRANSIT':
+      return `运输中 ${record.targetWarehouse}`;
+    case 'ARRIVED':
+      return `已到达 ${record.targetWarehouse}`;
+    case 'RECEIVED':
+      return `已入库 ${record.targetWarehouse}`;
+    case 'CANCELLED':
+      return `已取消 ${record.targetWarehouse}`;
+    default:
+      return `待绑定 ${record.sourceWarehouse}`;
+  }
+};
+
+const buildExecutionStatusText = (record: TransferRecord) => {
+  if (record.status === 'PENDING' && record.orderItems.length === 0) {
+    return '待绑定';
+  }
+
+  switch (record.status) {
+    case 'IN_TRANSIT':
+      return `运输中 ${record.targetWarehouse}`;
+    case 'ARRIVED':
+      return `待入库 ${record.targetWarehouse}`;
+    case 'RECEIVED':
+      return `已入库 ${record.targetWarehouse}`;
+    case 'CANCELLED':
+      return `已取消 ${record.targetWarehouse}`;
+    default:
+      return `待发运 ${record.sourceWarehouse}`;
+  }
+};
+
+const buildFlowRecords = (record: TransferRecord): FlowRecord[] => {
+  const flows: FlowRecord[] = [
+    {
+      time: record.createdAt,
+      action: '创建调拨单',
+      operator: record.operator || '系统',
+      detail: `${record.sourceWarehouse} → ${record.targetWarehouse}`,
+    },
+  ];
+
+  const departureTime = record.departureTime || record.meta.departureConfirmedAt;
+  if (departureTime) {
+    flows.push({
+      time: departureTime,
+      action: '发起调拨',
+      operator: record.meta.driverName || record.operator || '仓库操作员',
+      detail: [record.meta.logisticsCompany, record.meta.plateNo].filter(Boolean).join(' / ') || undefined,
+    });
+  }
+
+  const arrivalTime = record.arrivalTime || record.meta.arrivalConfirmedAt;
+  if (arrivalTime) {
+    flows.push({
+      time: arrivalTime,
+      action: '确认到达',
+      operator: record.operator || '仓库操作员',
+      detail: record.targetWarehouse,
+    });
+  }
+
+  const receiveTime = record.confirmedTime || record.meta.receiveConfirmedAt;
+  if (receiveTime) {
+    flows.push({
+      time: receiveTime,
+      action: '确认入库',
+      operator: record.operator || '仓库操作员',
+      detail: record.targetWarehouse,
+    });
+  }
+
+  return flows.sort((a, b) => dayjs(a.time).valueOf() - dayjs(b.time).valueOf());
+};
+
+const mapTransferRow = (raw: any): TransferRecord => {
+  const meta = parseTransferMeta(raw.remark);
+  const orderItems: TransferOrderItem[] = Array.isArray(raw.items)
+    ? raw.items.map((item: any, index: number) => ({
+        id: String(item.id || `${raw.id}-item-${index}`),
+        jobNo: String(item.jobNo || item.job_no || ''),
+        subOrderNo: String(item.subOrderNo || item.sub_order_no || '-'),
+        masterOrderNo: String(item.masterOrderNo || item.master_order_no || item.subOrderNo || '-'),
+        trackingNo: String(item.trackingNo || item.tracking_no || '-'),
+        clientName: String(item.goodsName || item.goods_name || item.clientName || '-'),
+        pieces: Number(item.pieces || 0),
+        weight: Number(item.weight || 0),
+        volume: Number(item.volume || 0),
+        route: meta.routeName,
+      }))
+    : [];
+
+  const routeLabel = meta.routeName || `${String(raw.fromWarehouse || '-')}→${String(raw.toWarehouse || '-')}`;
+
+  return {
+    id: String(raw.id),
+    transferNo: String(raw.transferNo || raw.transfer_no || raw.id),
+    businessLine: String(raw.businessLine || raw.business_line || 'SEA').toUpperCase() === 'AIR' ? 'AIR' : 'SEA',
+    direction: inferDirection(String(raw.fromWarehouse || ''), String(raw.toWarehouse || '')),
+    sourceWarehouse: String(raw.fromWarehouse || '-'),
+    targetWarehouse: String(raw.toWarehouse || '-'),
+    routeLabel,
+    orderItems,
+    shippingUnitNo: raw.containerNo || raw.container_no || undefined,
+    totalPieces: Number(raw.totalPieces || raw.total_pieces || 0),
+    totalWeight: Number(raw.totalWeight || raw.total_weight || 0),
+    totalVolume: Number(raw.totalVolume || raw.total_volume || 0),
+    status: mapTransferStatus(raw.status),
+    shippingMethod: (meta.shippingMethod || raw.shippingMethod || raw.shipping_method || undefined) as ShippingMethod | undefined,
+    reason: raw.reason || undefined,
+    remark: raw.remark || undefined,
+    meta,
+    operator: String(raw.createdBy || raw.created_by || '-'),
+    createdAt: String(raw.createdAt || raw.created_at || new Date().toISOString()),
+    updatedAt: String(raw.updatedAt || raw.updated_at || raw.createdAt || raw.created_at || new Date().toISOString()),
+    departureTime: raw.outboundAt || raw.outbound_at || undefined,
+    arrivalTime: raw.inboundAt || raw.inbound_at || undefined,
+    confirmedTime: raw.confirmedTime || raw.confirmed_time || undefined,
+  };
+};
+
+const buildDemoRecords = (businessMode: BusinessMode): TransferRecord[] => {
+  const businessLine = businessMode === 'AIR' ? 'AIR' : 'SEA';
+  const routeName = businessLine === 'AIR' ? '深圳集货区→广州总仓→拉各斯到达站' : '深圳集货区→广州总仓→拉各斯主仓';
+  const createdBase = businessLine === 'AIR' ? '2026-03-21T09:00:00' : '2026-03-21T10:00:00';
+
+  return [
+    {
+      id: `DEMO-${businessLine}-001`,
+      transferNo: `${businessLine === 'AIR' ? 'A' : 'S'}-T-20260321-0001`,
+      businessLine,
+      direction: 'SATELLITE_TO_MAIN',
+      sourceWarehouse: '深圳集货区',
+      targetWarehouse: '广州总仓',
+      routeLabel: routeName,
+      orderItems: [
+        {
+          id: `DEMO-${businessLine}-001-1`,
+          jobNo: `${businessLine === 'AIR' ? 'A' : 'S'}-JOB26030018`,
+          subOrderNo: `${businessLine === 'AIR' ? 'A' : 'S'}-202603210001-01`,
+          masterOrderNo: `${businessLine === 'AIR' ? 'A' : 'S'}-202603210001`,
+          trackingNo: `${businessLine === 'AIR' ? 'SF' : 'YT'}2603210001`,
+          clientName: '联调演示客户A',
+          pieces: 2,
+          weight: 35.4,
+          volume: 0.22,
+          route: routeName,
+        },
+        {
+          id: `DEMO-${businessLine}-001-2`,
+          jobNo: `${businessLine === 'AIR' ? 'A' : 'S'}-JOB26030018`,
+          subOrderNo: `${businessLine === 'AIR' ? 'A' : 'S'}-202603210001-02`,
+          masterOrderNo: `${businessLine === 'AIR' ? 'A' : 'S'}-202603210001`,
+          trackingNo: `${businessLine === 'AIR' ? 'JD' : 'ZT'}2603210002`,
+          clientName: '联调演示客户A',
+          pieces: 1,
+          weight: 12.6,
+          volume: 0.08,
+          route: routeName,
+        },
+      ],
+      shippingUnitNo: businessLine === 'AIR' ? 'PALT-A-003' : 'SEA-CN-082',
+      totalPieces: 3,
+      totalWeight: 48,
+      totalVolume: 0.3,
+      status: 'PENDING',
+      shippingMethod: 'VIA_MAIN',
+      reason: '卫星仓回仓',
+      remark: serializeTransferMeta({
+        routeName,
+        executeDate: '2026-03-21',
+        logisticsCompany: '粤港专线',
+        queryPhone: '020-88886666',
+        driverName: '陈师傅',
+        driverPhone: '13800001111',
+        driverAccountId: 'U-WMS-ORIGIN-01',
+        plateNo: '粤A-TRF01',
+        shippingMethod: 'VIA_MAIN',
+        note: '演示调拨单，待仓库执行。',
+      }),
+      meta: {
+        routeName,
+        executeDate: '2026-03-21',
+        logisticsCompany: '粤港专线',
+        queryPhone: '020-88886666',
+        driverName: '陈师傅',
+        driverPhone: '13800001111',
+        driverAccountId: 'U-WMS-ORIGIN-01',
+        plateNo: '粤A-TRF01',
+        shippingMethod: 'VIA_MAIN',
+        note: '演示调拨单，待仓库执行。',
+      },
+      operator: '仓管A',
+      createdAt: createdBase,
+      updatedAt: createdBase,
+      isDemo: true,
+    },
+    {
+      id: `DEMO-${businessLine}-002`,
+      transferNo: `${businessLine === 'AIR' ? 'A' : 'S'}-T-20260321-0002`,
+      businessLine,
+      direction: 'MAIN_TO_SATELLITE',
+      sourceWarehouse: '广州总仓',
+      targetWarehouse: '佛山拼货区',
+      routeLabel: '广州总仓→佛山拼货区',
+      orderItems: [
+        {
+          id: `DEMO-${businessLine}-002-1`,
+          jobNo: `${businessLine === 'AIR' ? 'A' : 'S'}-JOB26030019`,
+          subOrderNo: `${businessLine === 'AIR' ? 'A' : 'S'}-202603210002-01`,
+          masterOrderNo: `${businessLine === 'AIR' ? 'A' : 'S'}-202603210002`,
+          trackingNo: `${businessLine === 'AIR' ? 'ST' : 'SF'}2603210003`,
+          clientName: '联调演示客户B',
+          pieces: 4,
+          weight: 76.5,
+          volume: 0.48,
+          route: '广州总仓→佛山拼货区',
+        },
+      ],
+      shippingUnitNo: businessLine === 'AIR' ? 'PALT-A-011' : 'SEA-CN-116',
+      totalPieces: 4,
+      totalWeight: 76.5,
+      totalVolume: 0.48,
+      status: 'IN_TRANSIT',
+      shippingMethod: 'DIRECT',
+      reason: '总仓分拨',
+      remark: serializeTransferMeta({
+        routeName: '广州总仓→佛山拼货区',
+        executeDate: '2026-03-21',
+        logisticsCompany: '城配车队',
+        queryPhone: '400-900-1100',
+        driverName: '李师傅',
+        driverPhone: '13800002222',
+        driverAccountId: 'U-WMS-ORIGIN-02',
+        plateNo: '粤B-TRF02',
+        shippingMethod: 'DIRECT',
+        departureConfirmedAt: '2026-03-21T11:35:00',
+        note: '已离库，等待分仓收货。',
+      }),
+      meta: {
+        routeName: '广州总仓→佛山拼货区',
+        executeDate: '2026-03-21',
+        logisticsCompany: '城配车队',
+        queryPhone: '400-900-1100',
+        driverName: '李师傅',
+        driverPhone: '13800002222',
+        driverAccountId: 'U-WMS-ORIGIN-02',
+        plateNo: '粤B-TRF02',
+        shippingMethod: 'DIRECT',
+        departureConfirmedAt: '2026-03-21T11:35:00',
+        note: '已离库，等待分仓收货。',
+      },
+      operator: '仓管B',
+      createdAt: '2026-03-21T11:10:00',
+      updatedAt: '2026-03-21T11:35:00',
+      departureTime: '2026-03-21T11:35:00',
+      isDemo: true,
+    },
+    {
+      id: `DEMO-${businessLine}-003`,
+      transferNo: `${businessLine === 'AIR' ? 'A' : 'S'}-T-20260321-0003`,
+      businessLine,
+      direction: 'MAIN_TO_SATELLITE',
+      sourceWarehouse: '广州总仓',
+      targetWarehouse: '海珠区站点',
+      routeLabel: '广州总仓→海珠区站点',
+      orderItems: [
+        {
+          id: `DEMO-${businessLine}-003-1`,
+          jobNo: `${businessLine === 'AIR' ? 'A' : 'S'}-JOB26030020`,
+          subOrderNo: `${businessLine === 'AIR' ? 'A' : 'S'}-202603210003-01`,
+          masterOrderNo: `${businessLine === 'AIR' ? 'A' : 'S'}-202603210003`,
+          trackingNo: `${businessLine === 'AIR' ? 'ZT' : 'JT'}2603210004`,
+          clientName: '联调演示客户C',
+          pieces: 3,
+          weight: 42.2,
+          volume: 0.24,
+          route: '广州总仓→海珠区站点',
+        },
+      ],
+      shippingUnitNo: businessLine === 'AIR' ? 'PALT-A-020' : 'SEA-CN-139',
+      totalPieces: 3,
+      totalWeight: 42.2,
+      totalVolume: 0.24,
+      status: 'ARRIVED',
+      shippingMethod: 'DIRECT',
+      reason: '紧急补货',
+      remark: serializeTransferMeta({
+        routeName: '广州总仓→海珠区站点',
+        executeDate: '2026-03-21',
+        logisticsCompany: '城配车队',
+        driverName: '王师傅',
+        driverPhone: '13800003333',
+        plateNo: '粤C-TRF03',
+        shippingMethod: 'DIRECT',
+        departureConfirmedAt: '2026-03-21T12:10:00',
+        arrivalConfirmedAt: '2026-03-21T14:25:00',
+        note: '已到达待入库。',
+      }),
+      meta: {
+        routeName: '广州总仓→海珠区站点',
+        executeDate: '2026-03-21',
+        logisticsCompany: '城配车队',
+        driverName: '王师傅',
+        driverPhone: '13800003333',
+        plateNo: '粤C-TRF03',
+        shippingMethod: 'DIRECT',
+        departureConfirmedAt: '2026-03-21T12:10:00',
+        arrivalConfirmedAt: '2026-03-21T14:25:00',
+        note: '已到达待入库。',
+      },
+      operator: '仓管C',
+      createdAt: '2026-03-21T11:40:00',
+      updatedAt: '2026-03-21T14:25:00',
+      departureTime: '2026-03-21T12:10:00',
+      arrivalTime: '2026-03-21T14:25:00',
+      isDemo: true,
+    },
+  ];
 };
 
 export const TransferList = ({
@@ -143,1044 +566,1193 @@ export const TransferList = ({
   businessMode = 'ALL',
 }: {
   warehouseId?: string;
-  businessMode?: 'ALL' | 'SEA' | 'AIR';
+  businessMode?: BusinessMode;
 }) => {
+  const { token } = theme.useToken();
+  const [messageApi, contextHolder] = message.useMessage();
   const [loading, setLoading] = useState(false);
-  const [records, setRecords] = useState<TransferRecord[]>([]);
-  const [filteredRecords, setFilteredRecords] = useState<TransferRecord[]>([]);
+  const [bindLoading, setBindLoading] = useState(false);
+  const [apiRecords, setApiRecords] = useState<TransferRecord[]>([]);
+  const [demoRecords, setDemoRecords] = useState<TransferRecord[]>(() => buildDemoRecords(businessMode));
+  const [recordOverrides, setRecordOverrides] = useState<Record<string, TransferRecord>>({});
 
-  // 筛选条件
+  const [keyword, setKeyword] = useState('');
   const [filterDirection, setFilterDirection] = useState<TransferDirection | 'ALL'>('ALL');
   const [filterStatus, setFilterStatus] = useState<TransferStatus | 'ALL'>('ALL');
 
-  // 创建Modal
-  const [createModalVisible, setCreateModalVisible] = useState(false);
-  const [form] = Form.useForm();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [createForm] = Form.useForm();
 
-  // 订单选择Modal
-  const [orderSelectVisible, setOrderSelectVisible] = useState(false);
-  const [selectedOrders, setSelectedOrders] = useState<AvailableOrder[]>([]);
-  const [selectedOrderKeys, setSelectedOrderKeys] = useState<React.Key[]>([]);
   const [availableOrders, setAvailableOrders] = useState<AvailableOrder[]>([]);
+  const [bindOpen, setBindOpen] = useState(false);
+  const [bindSubmitting, setBindSubmitting] = useState(false);
+  const [bindMode, setBindMode] = useState<'MANUAL' | 'SCAN'>('MANUAL');
+  const [bindKeyword, setBindKeyword] = useState('');
+  const [bindTarget, setBindTarget] = useState<TransferRecord | null>(null);
+  const [bindSelectedKeys, setBindSelectedKeys] = useState<React.Key[]>([]);
+  const [bindSelectedMap, setBindSelectedMap] = useState<Record<string, AvailableOrder>>({});
 
-  // 集装箱选择Modal
-  const [containerSelectVisible, setContainerSelectVisible] = useState(false);
-  const [selectedContainer, setSelectedContainer] = useState<AvailableContainer | null>(null);
-  const [availableContainers, setAvailableContainers] = useState<AvailableContainer[]>([]);
+  const [executeOpen, setExecuteOpen] = useState(false);
+  const [executeSubmitting, setExecuteSubmitting] = useState(false);
+  const [executeForm] = Form.useForm();
+  const [executeTarget, setExecuteTarget] = useState<TransferRecord | null>(null);
 
-  // 选择类型：container（集装箱）或 order（订单）
-  const [selectType, setSelectType] = useState<'container' | 'order'>('order');
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailRecord, setDetailRecord] = useState<TransferRecord | null>(null);
 
-  // 批量粘贴文本
-  const [pasteText, setPasteText] = useState('');
+  const businessLine = businessMode === 'SEA' || businessMode === 'AIR' ? businessMode : undefined;
 
-  // 详情Drawer
-  const [detailDrawerVisible, setDetailDrawerVisible] = useState(false);
-  const [selectedRecord, setSelectedRecord] = useState<TransferRecord | null>(null);
+  useEffect(() => {
+    setDemoRecords(buildDemoRecords(businessMode));
+  }, [businessMode]);
 
-  // 加载调拨数据
-  const fetchTransfers = async () => {
+  useEffect(() => {
+    if (!createOpen) return;
+    createForm.setFieldsValue({
+      sourceWarehouse: '深圳集货区',
+      targetWarehouse: '广州总仓',
+      routeName: businessMode === 'AIR' ? '深圳集货区→广州总仓→拉各斯到达站' : '深圳集货区→广州总仓→拉各斯主仓',
+      executeDate: dayjs(),
+      shippingMethod: 'VIA_MAIN',
+      logisticsCompany: '',
+      queryPhone: '',
+      driverName: '',
+      driverPhone: '',
+      plateNo: '',
+      reason: '集中发货',
+      remark: '',
+      shippingUnitNo: '',
+    });
+  }, [businessMode, createForm, createOpen]);
+
+  const fetchTransfers = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await warehouseApi.listTransfers({
+      const response: any = await warehouseApi.listTransfers({
         transferType: 'ORIGIN',
         warehouseId,
-        businessLine: businessMode === 'ALL' ? undefined : businessMode,
+        businessLine,
       });
-      const raw = (res as any)?.data || [];
-      const mapped: TransferRecord[] = (raw as any[]).map((t: any) => {
-        const items: TransferOrderItem[] = (t.items || []).map((item: any) => ({
-          subOrderNo: item.subOrderNo || '-',
-          masterOrderNo: '-',
-          trackingNo: item.trackingNo || '-',
-          clientName: item.goodsName || '-',
-          pieces: item.pieces || 0,
-          weight: item.weight || 0,
-          volume: item.volume || 0,
-        }));
-        return {
-          id: t.id,
-          transferNo: t.transferNo || '-',
-          businessLine: t.businessLine,
-          direction: inferDirection(t.fromWarehouse || '', t.toWarehouse || ''),
-          sourceWarehouse: t.fromWarehouse || '-',
-          targetWarehouse: t.toWarehouse || '-',
-          orderItems: items,
-          shippingUnitNo: t.containerNo,
-          totalPieces: t.totalPieces || 0,
-          totalWeight: t.totalWeight || 0,
-          totalVolume: t.totalVolume || 0,
-          status: mapTransferStatus(t.status),
-          reason: t.reason,
-          remark: t.remark,
-          operator: t.createdBy || '-',
-          createdAt: t.createdAt ? t.createdAt.replace('T', ' ').slice(0, 16) : '-',
-          updatedAt: t.updatedAt ? t.updatedAt.replace('T', ' ').slice(0, 16) : undefined,
-          departureTime: t.outboundAt ? t.outboundAt.replace('T', ' ').slice(0, 16) : undefined,
-          arrivalTime: t.inboundAt ? t.inboundAt.replace('T', ' ').slice(0, 16) : undefined,
-        };
-      });
-      setRecords(mapped);
-      setFilteredRecords(mapped);
+      const rows = Array.isArray(response?.data) ? response.data : [];
+      setApiRecords(rows.map(mapTransferRow));
     } catch (err: any) {
-      message.error(err.message || '加载调拨数据失败');
+      messageApi.error(err?.message || '加载调拨记录失败');
     } finally {
       setLoading(false);
     }
-  };
+  }, [businessLine, messageApi, warehouseId]);
 
-  useEffect(() => { fetchTransfers(); }, [warehouseId, businessMode]);
+  useEffect(() => {
+    void fetchTransfers();
+  }, [fetchTransfers]);
 
-  // 加载可选订单（库存列表）
-  const fetchAvailableOrders = async () => {
+  const fetchAvailableOrders = useCallback(async () => {
+    setBindLoading(true);
     try {
-      const res = await warehouseApi.listStock({
+      const response: any = await warehouseApi.listStock({
+        warehouse: 'CN',
         warehouseId,
-        businessLine: businessMode === 'ALL' ? undefined : businessMode,
+        businessLine,
       });
-      const raw = (res as any)?.data || [];
-      const mapped: AvailableOrder[] = (raw as any[])
-        .filter((s: any) => ['IN_STOCK', 'ALLOCATED', 'PACKED'].includes(String(s.status || '').toUpperCase()))
-        .map((s: any) => ({
-        id: s.id,
-        subOrderNo: s.subOrderNo || '-',
-        masterOrderNo: s.masterOrderNo || '-',
-        trackingNo: s.trackingNo || '-',
-        clientName: s.clientName || '-',
-        pieces: s.pieces || 0,
-        weight: s.weight || 0,
-        volume: s.volume || 0,
-        warehouse: s.warehouse || '-',
-        status: s.status === 'IN_STOCK' ? '已入库' : s.status || '-',
-      }));
+      let rows = Array.isArray(response?.data) ? response.data : [];
+      if (!rows.length) {
+        const fallbackOrders = await loadOriginFallbackOrders(businessMode);
+        rows = buildOriginStockFallbackData(fallbackOrders);
+      }
+      const mapped = rows
+        .filter((row: any) => ['IN_STOCK', 'ALLOCATED', 'PACKED'].includes(String(row.status || '').toUpperCase()))
+        .map((row: any) => ({
+          id: String(row.id),
+          jobNo: String(row.jobNo || row.job_no || '-'),
+          subOrderNo: String(row.displaySubOrderNo || row.subWaybillNo || row.subOrderNo || row.sub_order_no || '-'),
+          masterOrderNo: String(row.displayOrderNo || row.masterWaybillNo || row.masterOrderNo || row.master_order_no || row.orderNo || row.order_no || '-'),
+          trackingNo: String(row.trackingNo || row.tracking_no || '-'),
+          clientName: String(row.clientName || row.client_name || row.customerName || row.customer_name || '-'),
+          pieces: Number(row.pieces || 0),
+          weight: Number(row.weight || 0),
+          volume: Number(row.volume || 0),
+          warehouse: String(row.warehouse || row.warehouseName || '-'),
+          status: row.status === 'IN_STOCK' ? '已入库' : String(row.status || '-'),
+          route: String(row.route || row.routeCode || row.routeName || '-'),
+        })) as AvailableOrder[];
       setAvailableOrders(mapped);
-    } catch (err: any) {
-      console.error('加载可选订单失败:', err);
+    } catch (err) {
+      try {
+        const fallbackOrders = await loadOriginFallbackOrders(businessMode);
+        const rows = buildOriginStockFallbackData(fallbackOrders);
+        const mapped = rows
+          .filter((row: any) => ['IN_STOCK', 'ALLOCATED', 'PACKED'].includes(String(row.status || '').toUpperCase()))
+          .map((row: any) => ({
+            id: String(row.id),
+            jobNo: String(row.jobNo || row.job_no || '-'),
+            subOrderNo: String(row.displaySubOrderNo || row.subWaybillNo || row.subOrderNo || row.sub_order_no || '-'),
+            masterOrderNo: String(row.displayOrderNo || row.masterWaybillNo || row.masterOrderNo || row.master_order_no || row.orderNo || row.order_no || '-'),
+            trackingNo: String(row.trackingNo || row.tracking_no || '-'),
+            clientName: String(row.clientName || row.client_name || row.customerName || row.customer_name || '-'),
+            pieces: Number(row.pieces || 0),
+            weight: Number(row.weight || 0),
+            volume: Number(row.volume || 0),
+            warehouse: String(row.warehouse || row.warehouseName || '-'),
+            status: row.status === 'IN_STOCK' ? '已入库' : String(row.status || '-'),
+            route: String(row.route || row.routeCode || row.routeName || '-'),
+          })) as AvailableOrder[];
+        setAvailableOrders(mapped);
+      } catch (fallbackError) {
+        console.error('加载可选运单失败', err, fallbackError);
+        setAvailableOrders([]);
+      }
+    } finally {
+      setBindLoading(false);
     }
+  }, [businessLine, businessMode, warehouseId]);
+
+  const baseRecords = useMemo(() => {
+    const realIds = new Set(apiRecords.map((record) => record.id));
+    return [...apiRecords, ...demoRecords.filter((record) => !realIds.has(record.id))];
+  }, [apiRecords, demoRecords]);
+
+  const records = useMemo(
+    () => baseRecords.map((record) => recordOverrides[record.id] || record),
+    [baseRecords, recordOverrides],
+  );
+
+  const updateLocalRecord = useCallback((recordId: string, updater: (record: TransferRecord) => TransferRecord) => {
+    setRecordOverrides((prev) => {
+      const current = prev[recordId] || baseRecords.find((record) => record.id === recordId);
+      if (!current) return prev;
+      return {
+        ...prev,
+        [recordId]: updater(current),
+      };
+    });
+  }, [baseRecords]);
+
+  const filteredRecords = useMemo(() => {
+    const keywordValue = keyword.trim().toLowerCase();
+    return records.filter((record) => {
+      if (filterDirection !== 'ALL' && record.direction !== filterDirection) return false;
+      if (filterStatus !== 'ALL' && record.status !== filterStatus) return false;
+      if (!keywordValue) return true;
+
+      const searchText = [
+        record.transferNo,
+        record.sourceWarehouse,
+        record.targetWarehouse,
+        record.routeLabel,
+        record.reason,
+        record.meta.driverName,
+        record.meta.driverPhone,
+        record.shippingUnitNo,
+        ...record.orderItems.map((item) => item.jobNo),
+        ...record.orderItems.map((item) => item.masterOrderNo),
+        ...record.orderItems.map((item) => item.subOrderNo),
+        ...record.orderItems.map((item) => item.trackingNo),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return searchText.includes(keywordValue);
+    });
+  }, [filterDirection, filterStatus, keyword, records]);
+
+  const stats = useMemo(() => ({
+    pending: records.filter((record) => record.status === 'PENDING').length,
+    transit: records.filter((record) => record.status === 'IN_TRANSIT').length,
+    arrived: records.filter((record) => record.status === 'ARRIVED').length,
+    received: records.filter((record) => record.status === 'RECEIVED').length,
+    cancelled: records.filter((record) => record.status === 'CANCELLED').length,
+  }), [records]);
+
+  useEffect(() => {
+    if (!detailRecord) return;
+    const latest = records.find((record) => record.id === detailRecord.id);
+    if (latest) setDetailRecord(latest);
+  }, [detailRecord, records]);
+
+  const resetCreateState = () => {
+    createForm.resetFields();
   };
 
-  // 加载可选集装箱
-  const fetchAvailableContainers = async () => {
-    try {
-      const res = await warehouseApi.listUnits({
-        warehouseId,
-        transportMode: businessMode === 'ALL' ? undefined : businessMode,
+  const openCreateModal = () => {
+    resetCreateState();
+    setCreateOpen(true);
+  };
+
+  const handleQuery = () => {
+    setKeyword((value) => value.trim());
+  };
+
+  const handleResetFilters = () => {
+    setKeyword('');
+    setFilterDirection('ALL');
+    setFilterStatus('ALL');
+    void fetchTransfers();
+  };
+
+  const closeBindDrawer = useCallback(() => {
+    setBindOpen(false);
+    setBindSubmitting(false);
+    setBindKeyword('');
+    setBindMode('MANUAL');
+    setBindTarget(null);
+    setBindSelectedKeys([]);
+    setBindSelectedMap({});
+  }, []);
+
+  const openBindDrawer = useCallback(async (record: TransferRecord, mode: 'MANUAL' | 'SCAN' = 'MANUAL') => {
+    setBindTarget(record);
+    setBindMode(mode);
+    setBindKeyword('');
+    setBindSelectedKeys([]);
+    setBindSelectedMap({});
+    setBindOpen(true);
+    await fetchAvailableOrders();
+  }, [fetchAvailableOrders]);
+
+  const bindRows = useMemo(() => {
+    if (!bindTarget) return [];
+
+    const boundSubOrders = new Set(bindTarget.orderItems.map((item) => item.subOrderNo).filter(Boolean));
+    const boundTrackingNos = new Set(bindTarget.orderItems.map((item) => item.trackingNo).filter(Boolean));
+    const searchValue = bindKeyword.trim().toLowerCase();
+
+    return availableOrders.filter((order) => {
+      if (boundSubOrders.has(order.subOrderNo) || boundTrackingNos.has(order.trackingNo)) return false;
+      if (!searchValue) return true;
+
+      const haystack = [
+        order.jobNo,
+        order.subOrderNo,
+        order.masterOrderNo,
+        order.trackingNo,
+        order.clientName,
+        order.warehouse,
+        order.route,
+      ].join(' ').toLowerCase();
+
+      return haystack.includes(searchValue);
+    });
+  }, [availableOrders, bindKeyword, bindTarget]);
+
+  const selectedBindOrders = useMemo(
+    () => bindSelectedKeys.map((key) => bindSelectedMap[String(key)]).filter((row): row is AvailableOrder => Boolean(row)),
+    [bindSelectedKeys, bindSelectedMap],
+  );
+
+  const bindSummary = useMemo(() => (
+    selectedBindOrders.reduce(
+      (acc, row) => ({
+        count: acc.count + 1,
+        pieces: acc.pieces + Number(row.pieces || 0),
+        weight: acc.weight + Number(row.weight || 0),
+      }),
+      { count: 0, pieces: 0, weight: 0 },
+    )
+  ), [selectedBindOrders]);
+
+  const appendBindRows = useCallback((rows: AvailableOrder[]) => {
+    setBindSelectedMap((prev) => {
+      const next = { ...prev };
+      rows.forEach((row) => {
+        next[row.id] = row;
       });
-      const raw = (res as any)?.data || [];
-      const mapped: AvailableContainer[] = (raw as any[])
-        .filter((u: any) => ['LOADING', 'SEALED', 'PALLETIZED'].includes(String(u.status || '').toUpperCase()))
-        .map((u: any) => ({
-        id: u.id,
-        containerNo: u.unitNo || '-',
-        type: u.transportMode === 'SEA' ? '海运集装箱' : '空运托盘',
-        warehouse: u.warehouse || '-',
-        orderCount: u.loadedOrders || 0,
-        pieces: u.loadedPieces || 0,
-        weight: u.currentWeight || 0,
-        volume: u.currentVolume || 0,
-        status: u.status === 'SEALED' ? '已封箱' : u.status === 'LOADING' ? '装箱中' : u.status || '-',
-      }));
-      setAvailableContainers(mapped);
+      return next;
+    });
+    setBindSelectedKeys((prev) => Array.from(new Set([...prev, ...rows.map((row) => row.id)])));
+  }, []);
+
+  const handleBindSelectionChange = (nextKeys: React.Key[], nextRows: AvailableOrder[]) => {
+    setBindSelectedKeys(nextKeys);
+    setBindSelectedMap((prev) => {
+      const next = { ...prev };
+      bindRows.forEach((row) => {
+        delete next[row.id];
+      });
+      nextRows.forEach((row) => {
+        next[row.id] = row;
+      });
+      return next;
+    });
+  };
+
+  const handleBindSearchEnter = () => {
+    if (bindMode !== 'SCAN') return;
+
+    const value = bindKeyword.trim();
+    if (!value) return;
+
+    const matched = bindRows.find((row) => (
+      row.subOrderNo === value ||
+      row.masterOrderNo === value ||
+      row.trackingNo === value ||
+      row.jobNo === value
+    ));
+
+    if (!matched) {
+      messageApi.warning('未匹配到可绑定运单');
+      return;
+    }
+
+    appendBindRows([matched]);
+    setBindKeyword('');
+    messageApi.success(`已扫描并加入 ${matched.subOrderNo}`);
+  };
+
+  const handleBindOrders = async () => {
+    if (!bindTarget) return;
+    if (selectedBindOrders.length === 0) {
+      messageApi.warning('请至少选择一个运单');
+      return;
+    }
+
+    try {
+      setBindSubmitting(true);
+      const now = new Date().toISOString();
+
+      const nextItems = [
+        ...bindTarget.orderItems,
+        ...selectedBindOrders.map((order) => ({
+          id: `BIND-${bindTarget.id}-${order.id}`,
+          jobNo: order.jobNo,
+          subOrderNo: order.subOrderNo,
+          masterOrderNo: order.masterOrderNo,
+          trackingNo: order.trackingNo,
+          clientName: order.clientName,
+          pieces: order.pieces,
+          weight: order.weight,
+          volume: order.volume,
+          route: bindTarget.routeLabel,
+        })),
+      ];
+
+      const totalPieces = nextItems.reduce((sum, item) => sum + Number(item.pieces || 0), 0);
+      const totalWeight = nextItems.reduce((sum, item) => sum + Number(item.weight || 0), 0);
+      const totalVolume = nextItems.reduce((sum, item) => sum + Number(item.volume || 0), 0);
+
+      const nextRecord: TransferRecord = {
+        ...bindTarget,
+        orderItems: nextItems,
+        totalPieces,
+        totalWeight,
+        totalVolume,
+        updatedAt: now,
+      };
+
+      updateLocalRecord(bindTarget.id, () => nextRecord);
+      setDetailRecord((current) => (current?.id === bindTarget.id ? nextRecord : current));
+      messageApi.success(`已为 ${bindTarget.transferNo} 绑定 ${selectedBindOrders.length} 条运单`);
+      closeBindDrawer();
     } catch (err: any) {
-      console.error('加载可选集装箱失败:', err);
+      messageApi.error(err?.message || '绑定运单失败');
+    } finally {
+      setBindSubmitting(false);
     }
   };
 
-  // 统计数据
-  const pendingCount = records.filter(r => r.status === 'PENDING').length;
-  const inTransitCount = records.filter(r => r.status === 'IN_TRANSIT').length;
-  const arrivedCount = records.filter(r => r.status === 'ARRIVED').length;
-  const receivedCount = records.filter(r => r.status === 'RECEIVED').length;
-
-  // 筛选逻辑
-  const handleFilter = () => {
-    let filtered = [...records];
-
-    if (filterDirection !== 'ALL') {
-      filtered = filtered.filter(r => r.direction === filterDirection);
-    }
-
-    if (filterStatus !== 'ALL') {
-      filtered = filtered.filter(r => r.status === filterStatus);
-    }
-
-    setFilteredRecords(filtered);
-  };
-
-  // 创建调拨单
   const handleCreate = async () => {
     try {
-      const values = await form.validateFields();
+      const values = await createForm.validateFields();
+      setCreateSubmitting(true);
 
-      if (selectedOrders.length === 0 && !selectedContainer) {
-        message.warning('请选择要调拨的订单或集装箱');
-        return;
-      }
+      const meta: TransferMeta = {
+        routeName: values.routeName,
+        executeDate: values.executeDate ? dayjs(values.executeDate).format('YYYY-MM-DD') : undefined,
+        logisticsCompany: values.logisticsCompany,
+        queryPhone: values.queryPhone,
+        driverName: values.driverName,
+        driverPhone: values.driverPhone,
+        plateNo: values.plateNo,
+        shippingMethod: values.shippingMethod,
+        note: values.remark,
+      };
 
-      setLoading(true);
-
-      const items = selectedOrders.map(order => ({
-        subOrderNo: order.subOrderNo,
-        trackingNo: order.trackingNo,
-        goodsName: order.clientName,
-        pieces: order.pieces,
-        weight: order.weight,
-        volume: order.volume,
-      }));
-
-      await warehouseApi.createTransfer({
+      const response: any = await warehouseApi.createTransfer({
         fromWarehouse: values.sourceWarehouse,
         toWarehouse: values.targetWarehouse,
-        businessLine: businessMode === 'ALL' ? undefined : businessMode,
+        businessLine,
         transferType: 'ORIGIN',
-        itemType: selectType === 'container' ? 'CONTAINER' : 'ORDER',
-        containerNo: values.shippingUnitNo || (selectedContainer?.containerNo),
+        itemType: 'ORDER',
+        containerNo: values.shippingUnitNo || null,
         reason: values.reason,
-        remark: values.remark,
-        items,
+        remark: serializeTransferMeta(meta),
+        items: [],
       });
 
-      setCreateModalVisible(false);
-      form.resetFields();
-      setSelectedOrders([]);
-      setSelectedOrderKeys([]);
-      setSelectedContainer(null);
-      message.success('调拨单创建成功');
-      await fetchTransfers();
-      setLoading(false);
-    } catch (error: any) {
-      message.error(error.message || '创建失败');
-      setLoading(false);
+      const createdRecord = mapTransferRow(response?.data || response);
+      setApiRecords((prev) => [createdRecord, ...prev.filter((record) => record.id !== createdRecord.id)]);
+
+      messageApi.success(`创建成功：${createdRecord.transferNo}`);
+      setCreateOpen(false);
+      resetCreateState();
+      await openBindDrawer(createdRecord, 'MANUAL');
+    } catch (err: any) {
+      if (err?.errorFields) return;
+      messageApi.error(err?.message || '创建调拨单失败');
+    } finally {
+      setCreateSubmitting(false);
     }
   };
 
-  // 打开订单选择Modal
-  const handleOpenOrderSelect = () => {
-    fetchAvailableOrders();
-    setOrderSelectVisible(true);
-  };
-
-  // 确认选择订单
-  const handleConfirmOrderSelect = () => {
-    if (selectedOrderKeys.length === 0) {
-      message.warning('请至少选择一个订单');
-      return;
-    }
-    const selected = availableOrders.filter(order =>
-      selectedOrderKeys.includes(order.id)
-    );
-    setSelectedOrders(selected);
-    setOrderSelectVisible(false);
-    message.success(`已选择 ${selected.length} 个订单`);
-  };
-
-  // 移除已选订单
-  const handleRemoveOrder = (orderId: string) => {
-    setSelectedOrders(prev => prev.filter(order => order.id !== orderId));
-    setSelectedOrderKeys(prev => prev.filter(key => key !== orderId));
-  };
-
-  // 打开集装箱选择Modal
-  const handleOpenContainerSelect = () => {
-    fetchAvailableContainers();
-    setContainerSelectVisible(true);
-  };
-
-  // 确认选择集装箱
-  const handleConfirmContainerSelect = (container: AvailableContainer) => {
-    setSelectedContainer(container);
-    setContainerSelectVisible(false);
-    setSelectedOrders([]);
-    setSelectedOrderKeys([]);
-    message.success(`已选择集装箱 ${container.containerNo}`);
-  };
-
-  // 批量粘贴订单
-  const handlePasteOrders = () => {
-    if (!pasteText.trim()) {
-      message.warning('请输入要粘贴的运单号');
-      return;
-    }
-
-    // 解析粘贴的文本，支持多种格式
-    const lines = pasteText.trim().split('\n');
-    const trackingNos: string[] = [];
-
-    lines.forEach(line => {
-      const trimmed = line.trim();
-      if (trimmed) {
-        // 支持逗号、空格、制表符分隔
-        const parts = trimmed.split(/[,\s\t]+/);
-        trackingNos.push(...parts.filter(p => p));
-      }
+  const openExecuteModal = (record: TransferRecord) => {
+    setExecuteTarget(record);
+    executeForm.setFieldsValue({
+      executeDate: record.meta.executeDate ? dayjs(record.meta.executeDate) : dayjs(),
+      logisticsCompany: record.meta.logisticsCompany || '',
+      queryPhone: record.meta.queryPhone || '',
+      driverName: record.meta.driverName || '',
+      driverPhone: record.meta.driverPhone || '',
+      driverAccountId: record.meta.driverAccountId || 'U-WMS-ORIGIN-01',
+      plateNo: record.meta.plateNo || '',
     });
+    setExecuteOpen(true);
+  };
 
-    // 从可选订单中查找匹配的订单
-    const matched = availableOrders.filter(order =>
-      trackingNos.includes(order.trackingNo) || trackingNos.includes(order.subOrderNo)
-    );
+  const handleExecute = async () => {
+    if (!executeTarget) return;
+    try {
+      const values = await executeForm.validateFields();
+      setExecuteSubmitting(true);
+      const now = new Date().toISOString();
+      const nextMeta: TransferMeta = {
+        ...executeTarget.meta,
+        executeDate: values.executeDate ? dayjs(values.executeDate).format('YYYY-MM-DD') : executeTarget.meta.executeDate,
+        logisticsCompany: values.logisticsCompany,
+        queryPhone: values.queryPhone,
+        driverName: values.driverName,
+        driverPhone: values.driverPhone,
+        driverAccountId: values.driverAccountId,
+        plateNo: values.plateNo,
+        departureConfirmedAt: now,
+      };
 
-    if (matched.length === 0) {
-      message.warning('未找到匹配的订单');
-      return;
+      if (!executeTarget.isDemo) {
+        await warehouseApi.updateTransfer(executeTarget.id, {
+          status: 'IN_TRANSIT',
+          outboundAt: now,
+          remark: serializeTransferMeta(nextMeta),
+        });
+        await fetchTransfers();
+      }
+
+      updateLocalRecord(executeTarget.id, (record) => ({
+          ...record,
+          status: 'IN_TRANSIT',
+          meta: nextMeta,
+          remark: serializeTransferMeta(nextMeta),
+          departureTime: now,
+          updatedAt: now,
+        }));
+
+      setExecuteOpen(false);
+      setExecuteTarget(null);
+      executeForm.resetFields();
+      messageApi.success('调拨已发起');
+    } catch (err: any) {
+      if (err?.errorFields) return;
+      messageApi.error(err?.message || '发起调拨失败');
+    } finally {
+      setExecuteSubmitting(false);
     }
-
-    setSelectedOrders(matched);
-    setSelectedOrderKeys(matched.map(o => o.id));
-    setPasteText('');
-    message.success(`已匹配 ${matched.length} 个订单`);
   };
 
-  // 查看详情
-  const handleViewDetail = (record: TransferRecord) => {
-    setSelectedRecord(record);
-    setDetailDrawerVisible(true);
-  };
-
-  // 确认到达
   const handleConfirmArrival = (record: TransferRecord) => {
     Modal.confirm({
       title: '确认到达',
-      content: `确定 ${record.transferNo} 已到达目标仓库吗？`,
+      content: `确定 ${record.transferNo} 已到达 ${record.targetWarehouse} 吗？`,
+      okText: '确认',
+      cancelText: '取消',
       onOk: async () => {
+        const now = new Date().toISOString();
+        const nextMeta: TransferMeta = {
+          ...record.meta,
+          arrivalConfirmedAt: now,
+        };
+
         try {
-          await warehouseApi.updateTransfer(record.id, { status: 'ARRIVED', inboundAt: new Date().toISOString() });
-          await fetchTransfers();
-          message.success('已确认到达');
+          if (!record.isDemo) {
+            await warehouseApi.updateTransfer(record.id, {
+              status: 'ARRIVED',
+              inboundAt: now,
+              remark: serializeTransferMeta(nextMeta),
+            });
+            await fetchTransfers();
+          }
+
+          updateLocalRecord(record.id, (current) => ({
+              ...current,
+              status: 'ARRIVED',
+              meta: nextMeta,
+              remark: serializeTransferMeta(nextMeta),
+              arrivalTime: now,
+              updatedAt: now,
+            }));
+          messageApi.success('已确认到达');
         } catch (err: any) {
-          message.error(err.message || '操作失败');
+          messageApi.error(err?.message || '确认到达失败');
         }
-      }
+      },
     });
   };
 
-  // 确认入库
   const handleConfirmReceive = (record: TransferRecord) => {
     Modal.confirm({
       title: '确认入库',
-      content: `确定 ${record.transferNo} 已入库吗？`,
+      content: `确定 ${record.transferNo} 已完成入库吗？`,
+      okText: '确认',
+      cancelText: '取消',
       onOk: async () => {
+        const now = new Date().toISOString();
+        const nextMeta: TransferMeta = {
+          ...record.meta,
+          receiveConfirmedAt: now,
+        };
+
         try {
-          await warehouseApi.updateTransfer(record.id, { status: 'RECEIVED' });
-          await fetchTransfers();
-          message.success('入库确认成功');
+          if (!record.isDemo) {
+            await warehouseApi.updateTransfer(record.id, {
+              status: 'RECEIVED',
+              remark: serializeTransferMeta(nextMeta),
+            });
+            await fetchTransfers();
+          }
+
+          updateLocalRecord(record.id, (current) => ({
+              ...current,
+              status: 'RECEIVED',
+              meta: nextMeta,
+              remark: serializeTransferMeta(nextMeta),
+              confirmedTime: now,
+              updatedAt: now,
+            }));
+          messageApi.success('已确认入库');
         } catch (err: any) {
-          message.error(err.message || '操作失败');
+          messageApi.error(err?.message || '确认入库失败');
         }
-      }
+      },
     });
   };
 
-  // 发起调拨
-  const handleStartTransfer = (record: TransferRecord) => {
-    Modal.confirm({
-      title: '发起调拨',
-      content: `确定开始调拨 ${record.transferNo} 吗？`,
-      onOk: async () => {
-        try {
-          await warehouseApi.updateTransfer(record.id, { status: 'IN_TRANSIT', outboundAt: new Date().toISOString() });
-          await fetchTransfers();
-          message.success('调拨已发起');
-        } catch (err: any) {
-          message.error(err.message || '操作失败');
-        }
-      }
-    });
+  const handleViewDetail = (record: TransferRecord) => {
+    setDetailRecord(record);
+    setDetailOpen(true);
   };
 
-  // 表格列定义
-  const columns = [
+  const handlePrint = (record: TransferRecord) => {
+    messageApi.info(`${record.transferNo} 打印预览待接入（demo）`);
+  };
+
+  const columns = useMemo<ColumnsType<TransferRecord>>(() => [
     {
       title: '调拨单号',
       dataIndex: 'transferNo',
       key: 'transferNo',
-      width: 180,
-      render: (text: string) => <strong>{text}</strong>
-    },
-    {
-      title: '源仓库',
-      dataIndex: 'sourceWarehouse',
-      key: 'sourceWarehouse',
-      width: 120
-    },
-    {
-      title: '目标仓库',
-      dataIndex: 'targetWarehouse',
-      key: 'targetWarehouse',
-      width: 120
-    },
-    {
-      title: '业务线',
-      dataIndex: 'businessLine',
-      key: 'businessLine',
-      width: 90,
-      render: (line?: string) => (
-        <Tag color={line === 'AIR' ? 'gold' : 'blue'}>{line || '-'}</Tag>
-      )
-    },
-    {
-      title: '装箱号',
-      dataIndex: 'shippingUnitNo',
-      key: 'shippingUnitNo',
-      width: 150,
-      render: (text: string, record: TransferRecord) => (
+      width: 220,
+      render: (_, record) => (
         <div>
-          <div>{text || '-'}</div>
-          {text && record.shippingMethod && (
-            <Tag
-              color={SHIPPING_METHOD_CONFIG[record.shippingMethod].color}
-              style={{ marginTop: 4 }}
-            >
-              {SHIPPING_METHOD_CONFIG[record.shippingMethod].text}
-            </Tag>
-          )}
+          <div style={{ fontWeight: 600 }}>{record.transferNo}</div>
+          <div style={{ color: token.colorTextSecondary, fontSize: 12 }}>{formatDateTime(record.createdAt)}</div>
         </div>
-      )
+      ),
     },
     {
-      title: '货物信息',
-      key: 'cargo',
-      width: 150,
-      render: (record: TransferRecord) => (
+      title: '线路 / 来源→去向',
+      key: 'route',
+      width: 220,
+      render: (_, record) => (
         <div>
-          <div>{record.orderItems.length} 单 / {record.totalPieces} 件</div>
-          <div style={{ fontSize: 12, color: '#999' }}>
-            {record.totalWeight.toFixed(2)} kg / {record.totalVolume.toFixed(4)} m³
+          <div>{record.routeLabel}</div>
+          <div style={{ color: token.colorTextSecondary, fontSize: 12 }}>{record.sourceWarehouse} → {record.targetWarehouse}</div>
+        </div>
+      ),
+    },
+    {
+      title: 'JOB',
+      key: 'jobNos',
+      width: 180,
+      render: (_, record) => {
+        const jobNos = Array.from(new Set(record.orderItems.map((item) => item.jobNo).filter(Boolean))) as string[];
+        return jobNos.length > 0 ? (
+          <Space direction="vertical" size={0}>
+            {jobNos.slice(0, 2).map((jobNo) => (
+              <span key={jobNo}>{jobNo}</span>
+            ))}
+            {jobNos.length > 2 && <span style={{ color: token.colorTextSecondary }}>...更多</span>}
+          </Space>
+        ) : '-';
+      },
+    },
+    {
+      title: '订单号 / 运单号',
+      key: 'orders',
+      width: 220,
+      render: (_, record) => {
+        const displayItems = Array.from(
+          new Map(
+            record.orderItems.map((item) => [
+              `${item.masterOrderNo || '-'}::${item.trackingNo || item.subOrderNo || '-'}`,
+              item,
+            ]),
+          ).values(),
+        );
+
+        return (
+          <Space direction="vertical" size={4}>
+            {displayItems.slice(0, 2).map((item) => (
+              <div key={item.id}>
+                <div>{item.masterOrderNo || item.subOrderNo}</div>
+                <div style={{ color: token.colorTextSecondary, fontSize: 12 }}>{item.trackingNo || item.subOrderNo}</div>
+              </div>
+            ))}
+            {displayItems.length > 2 && <span style={{ color: token.colorTextSecondary }}>...更多</span>}
+          </Space>
+        );
+      },
+    },
+    {
+      title: '重量Kg',
+      dataIndex: 'totalWeight',
+      key: 'totalWeight',
+      width: 110,
+      render: (value) => Number(value || 0).toFixed(2),
+    },
+    {
+      title: '件数',
+      dataIndex: 'totalPieces',
+      key: 'totalPieces',
+      width: 90,
+    },
+    {
+      title: '物流状态',
+      key: 'logistics',
+      width: 180,
+      render: (_, record) => (
+        <div>
+          <div>{buildLogisticsStatusText(record)}</div>
+          <div style={{ color: token.colorTextSecondary, fontSize: 12 }}>
+            {formatDateTime(record.arrivalTime || record.departureTime || record.updatedAt)}
           </div>
         </div>
-      )
+      ),
     },
     {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
-      width: 120,
-      render: (status: TransferStatus) => {
-        const config = STATUS_CONFIG[status];
-        return (
-          <Tag color={config.color} icon={config.icon}>
-            {config.text}
-          </Tag>
-        );
-      }
+      title: '执行状态',
+      key: 'execution',
+      width: 180,
+      render: (_, record) => (
+        <div>
+          <div>{buildExecutionStatusText(record)}</div>
+          <div style={{ color: token.colorTextSecondary, fontSize: 12 }}>
+            {record.meta.driverName || `已绑定 ${record.orderItems.length} 单`}
+          </div>
+        </div>
+      ),
     },
     {
       title: '调拨原因',
       dataIndex: 'reason',
       key: 'reason',
-      width: 150,
+      width: 140,
       ellipsis: true,
-      render: (text: string) => text || '-'
+      render: (value) => value || '-',
     },
     {
-      title: '操作人',
-      dataIndex: 'operator',
-      key: 'operator',
-      width: 100
+      title: '操作',
+      key: 'actions',
+      width: 320,
+      fixed: 'right',
+      render: (_, record) => {
+        const canExecute = record.status === 'PENDING' && record.orderItems.length > 0;
+
+        return (
+          <Space size="small" wrap>
+            <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record)}>
+              详情
+            </Button>
+            <Button type="link" size="small" onClick={() => void openBindDrawer(record, 'MANUAL')}>
+              绑定运单
+            </Button>
+            {record.status === 'PENDING' && (
+              <Button
+                type="link"
+                size="small"
+                icon={<SendOutlined />}
+                onClick={() => (canExecute ? openExecuteModal(record) : handleViewDetail(record))}
+              >
+                执行
+              </Button>
+            )}
+            {record.status === 'IN_TRANSIT' && (
+              <Button type="link" size="small" onClick={() => handleConfirmArrival(record)}>
+                确认到达
+              </Button>
+            )}
+            {record.status === 'ARRIVED' && (
+              <Button type="link" size="small" onClick={() => handleConfirmReceive(record)}>
+                确认入库
+              </Button>
+            )}
+            <Button type="link" size="small" icon={<PrinterOutlined />} onClick={() => handlePrint(record)}>
+              打印
+            </Button>
+          </Space>
+        );
+      },
     },
     {
       title: '更新日期',
       dataIndex: 'updatedAt',
       key: 'updatedAt',
-      width: 160,
-      render: (_: string, record: TransferRecord) =>
-        dayjs(record.updatedAt || record.createdAt).format('YYYY-MM-DD HH:mm')
+      width: 170,
+      render: (value) => formatShortDateTime(value),
     },
-    {
-      title: '操作',
-      key: 'action',
-      width: 200,
-      fixed: 'right' as const,
-      render: (record: TransferRecord) => (
-        <Space size="small" wrap>
-          <Button
-            type="link"
-            size="small"
-            icon={<EyeOutlined />}
-            onClick={() => handleViewDetail(record)}
-          >
-            详情
-          </Button>
-          {record.status === 'PENDING' && (
-            <Button
-              type="link"
-              size="small"
-              icon={<SendOutlined />}
-              onClick={() => handleStartTransfer(record)}
-            >
-              发起
-            </Button>
-          )}
-          {record.status === 'IN_TRANSIT' && (
-            <Button
-              type="link"
-              size="small"
-              onClick={() => handleConfirmArrival(record)}
-            >
-              确认到达
-            </Button>
-          )}
-          {record.status === 'ARRIVED' && (
-            <Button
-              type="link"
-              size="small"
-              onClick={() => handleConfirmReceive(record)}
-            >
-              确认入库
-            </Button>
-          )}
-        </Space>
-      )
-    }
-  ];
+  ], [token.colorTextSecondary]);
+
+  const detailFlowRecords = useMemo(() => (detailRecord ? buildFlowRecords(detailRecord) : []), [detailRecord]);
 
   return (
-    <div>
-      <div className="compact-stats" style={{ marginBottom: 10 }}>
-        <Tag>待调拨 {pendingCount}</Tag>
-        <Tag color="processing">运输中 {inTransitCount}</Tag>
-        <Tag color="green">已到达 {arrivedCount}</Tag>
-        <Tag color="blue">已入库 {receivedCount}</Tag>
+    <>
+      {contextHolder}
+      <div className="compact-stats" style={{ marginBottom: 12 }}>
+        <Tag color="gold">待发运 {stats.pending}</Tag>
+        <Tag color="processing">运输中 {stats.transit}</Tag>
+        <Tag color="cyan">已到达 {stats.arrived}</Tag>
+        <Tag color="success">已入库 {stats.received}</Tag>
+        <Tag>已取消 {stats.cancelled}</Tag>
+        <Tag color="blue">总记录 {records.length}</Tag>
       </div>
 
-      {/* 筛选与操作区域 */}
-      <Card size="small" bordered={false} style={{ marginBottom: 10, background: '#fafafa' }}>
-        <Space wrap>
-          <Select
-            value={filterDirection}
-            onChange={value => {
-              setFilterDirection(value);
-              setTimeout(handleFilter, 0);
-            }}
-            style={{ width: 150 }}
-          >
-            <Option value="ALL">全部方向</Option>
-            <Option value="SATELLITE_TO_MAIN">卫星仓→总仓</Option>
-            <Option value="MAIN_TO_SATELLITE">总仓→卫星仓</Option>
-          </Select>
-          <Select
-            value={filterStatus}
-            onChange={value => {
-              setFilterStatus(value);
-              setTimeout(handleFilter, 0);
-            }}
-            style={{ width: 120 }}
-          >
-            <Option value="ALL">全部状态</Option>
-            <Option value="PENDING">待调拨</Option>
-            <Option value="IN_TRANSIT">运输中</Option>
-            <Option value="ARRIVED">已到达</Option>
-            <Option value="RECEIVED">已入库</Option>
-            <Option value="CANCELLED">已取消</Option>
-          </Select>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => setCreateModalVisible(true)}
-          >
-            创建调拨单
-          </Button>
-        </Space>
-      </Card>
+      <ListPageToolbarCard
+        style={{
+          marginBottom: 12,
+          borderRadius: 18,
+          background: 'linear-gradient(135deg, rgba(250,250,250,1) 0%, rgba(245,247,250,1) 100%)',
+        }}
+      >
+        <ListPageToolbar>
+          <ListPageToolbarFilters>
+            <ListPageToolbarField flex="1 1 320px" minWidth={260}>
+              <Input
+                value={keyword}
+                onChange={(event) => setKeyword(event.target.value)}
+                onPressEnter={handleQuery}
+                placeholder="输入调拨单号/JOB/订单号/运单号"
+                prefix={<SearchOutlined />}
+              />
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={150}>
+              <Select
+                value={filterDirection}
+                onChange={(value) => setFilterDirection(value)}
+                options={DIRECTION_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+              />
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={130}>
+              <Select
+                value={filterStatus}
+                onChange={(value) => setFilterStatus(value)}
+                options={STATUS_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+              />
+            </ListPageToolbarField>
+          </ListPageToolbarFilters>
+          <ListPageToolbarActions>
+            <Button type="primary" icon={<SearchOutlined />} onClick={handleQuery}>查询</Button>
+            <Button onClick={handleResetFilters}>重置</Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreateModal}>
+              创建调拨单
+            </Button>
+          </ListPageToolbarActions>
+        </ListPageToolbar>
+      </ListPageToolbarCard>
 
-      {/* 数据表格 */}
       <Table
         rowKey="id"
+        loading={loading}
         columns={columns}
         dataSource={filteredRecords}
-        loading={loading}
-        scroll={{ x: 1800, y: 'calc(100vh - 430px)' }}
+        size="small"
+        scroll={{ x: 1880, y: 'calc(100vh - 390px)' }}
         pagination={{
           pageSize: 20,
           showSizeChanger: true,
-          showTotal: total => `共 ${total} 条记录`
+          showTotal: (total) => `共 ${total} 条记录`,
         }}
-        size="small"
       />
 
-      {/* 创建调拨单Modal */}
       <Modal
-        title={
+        title={(
           <Space>
             <SwapOutlined />
             <span>创建调拨单</span>
           </Space>
-        }
-        open={createModalVisible}
+        )}
+        open={createOpen}
         onOk={handleCreate}
         onCancel={() => {
-          setCreateModalVisible(false);
-          form.resetFields();
+          setCreateOpen(false);
+          resetCreateState();
         }}
-        confirmLoading={loading}
-        width={700}
+        confirmLoading={createSubmitting}
+        okText="创建并去绑定"
+        cancelText="取消"
+        destroyOnHidden
+        width={900}
       >
-        <Form form={form} layout="vertical" style={{ marginTop: 24 }}>
+        <Form form={createForm} layout="vertical" style={{ marginTop: 20 }}>
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item
-                label="源仓库"
-                name="sourceWarehouse"
-                rules={[{ required: true, message: '请选择源仓库' }]}
-              >
-                <Select placeholder="请选择源仓库">
-                  <Option value="广州总仓">广州总仓</Option>
-                  <Option value="佛山卫星仓">佛山卫星仓</Option>
-                  <Option value="深圳卫星仓">深圳卫星仓</Option>
-                  <Option value="东莞卫星仓">东莞卫星仓</Option>
-                  <Option value="中山卫星仓">中山卫星仓</Option>
-                </Select>
+              <Form.Item label="源仓库" name="sourceWarehouse" rules={[{ required: true, message: '请选择源仓库' }]}>
+                <Select options={WAREHOUSE_OPTIONS.map((name) => ({ value: name, label: name }))} />
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item
-                label="目标仓库"
-                name="targetWarehouse"
-                rules={[{ required: true, message: '请选择目标仓库' }]}
-              >
-                <Select placeholder="请选择目标仓库">
-                  <Option value="广州总仓">广州总仓</Option>
-                  <Option value="佛山卫星仓">佛山卫星仓</Option>
-                  <Option value="深圳卫星仓">深圳卫星仓</Option>
-                  <Option value="东莞卫星仓">东莞卫星仓</Option>
-                  <Option value="中山卫星仓">中山卫星仓</Option>
-                </Select>
+              <Form.Item label="目标仓库" name="targetWarehouse" rules={[{ required: true, message: '请选择目标仓库' }]}>
+                <Select options={WAREHOUSE_OPTIONS.map((name) => ({ value: name, label: name }))} />
               </Form.Item>
             </Col>
           </Row>
 
-          <Form.Item label="选择方式">
-            <Radio.Group value={selectType} onChange={(e) => {
-              setSelectType(e.target.value);
-              setSelectedOrders([]);
-              setSelectedOrderKeys([]);
-              setSelectedContainer(null);
-            }}>
-              <Radio value="order">按订单选择</Radio>
-              <Radio value="container">按集装箱选择</Radio>
-            </Radio.Group>
-          </Form.Item>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item label="线路名称" name="routeName" rules={[{ required: true, message: '请输入线路名称' }]}>
+                <Input placeholder="例如：深圳集货区→广州总仓→拉各斯主仓" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="执行日期" name="executeDate">
+                <DatePicker style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+          </Row>
 
-          {selectType === 'order' ? (
-            <Form.Item label="选择订单">
-              <Space direction="vertical" style={{ width: '100%' }}>
-                <Space>
-                  <Button type="dashed" icon={<PlusOutlined />} onClick={handleOpenOrderSelect}>
-                    从列表选择
-                  </Button>
-                  <Button type="dashed" onClick={() => {
-                    Modal.confirm({
-                      title: '批量粘贴运单号',
-                      width: 600,
-                      content: (
-                        <div>
-                          <p style={{ marginBottom: 8 }}>请输入运单号或快递单号，支持多行，每行一个或用逗号、空格分隔：</p>
-                          <TextArea
-                            rows={6}
-                            placeholder="例如：&#10;SF1012605193888&#10;YT4144353928999&#10;或：SF1012605193888, YT4144353928999"
-                            value={pasteText}
-                            onChange={(e) => setPasteText(e.target.value)}
-                          />
-                        </div>
-                      ),
-                      onOk: handlePasteOrders
-                    });
-                  }}>
-                    批量粘贴
-                  </Button>
-                </Space>
-                {selectedOrders.length > 0 && (
-                  <div style={{ marginTop: 12 }}>
-                    <Table
-                      size="small"
-                      dataSource={selectedOrders}
-                      pagination={false}
-                      rowKey="id"
-                      columns={[
-                        { title: '子运单号', dataIndex: 'subOrderNo', width: 150 },
-                        { title: '快递单号', dataIndex: 'trackingNo', width: 150 },
-                        { title: '客户', dataIndex: 'clientName', width: 120 },
-                        {
-                          title: '件数',
-                          dataIndex: 'pieces',
-                          width: 60,
-                          render: (val: number) => `${val}件`
-                        },
-                        {
-                          title: '操作',
-                          width: 60,
-                          render: (_: any, record: AvailableOrder) => (
-                            <Button
-                              type="link"
-                              danger
-                              size="small"
-                              onClick={() => handleRemoveOrder(record.id)}
-                            >
-                              移除
-                            </Button>
-                          )
-                        }
-                      ]}
-                    />
-                    <div style={{ marginTop: 8, color: '#666', fontSize: 12 }}>
-                      已选 {selectedOrders.length} 个运单，
-                      共 {selectedOrders.reduce((sum, o) => sum + o.pieces, 0)} 件，
-                      {selectedOrders.reduce((sum, o) => sum + o.weight, 0).toFixed(2)} kg，
-                      {selectedOrders.reduce((sum, o) => sum + o.volume, 0).toFixed(4)} m³
-                    </div>
-                  </div>
-                )}
-              </Space>
-            </Form.Item>
-          ) : (
-            <Form.Item label="选择集装箱">
-              <Button type="dashed" icon={<PlusOutlined />} onClick={handleOpenContainerSelect} block>
-                选择集装箱
-              </Button>
-              {selectedContainer && (
-                <Card size="small" style={{ marginTop: 12 }}>
-                  <Descriptions column={2} size="small">
-                    <Descriptions.Item label="集装箱号">{selectedContainer.containerNo}</Descriptions.Item>
-                    <Descriptions.Item label="类型">{selectedContainer.type}</Descriptions.Item>
-                    <Descriptions.Item label="订单数">{selectedContainer.orderCount}个</Descriptions.Item>
-                    <Descriptions.Item label="件数">{selectedContainer.pieces}件</Descriptions.Item>
-                    <Descriptions.Item label="重量">{selectedContainer.weight.toFixed(2)} kg</Descriptions.Item>
-                    <Descriptions.Item label="体积">{selectedContainer.volume.toFixed(2)} m³</Descriptions.Item>
-                  </Descriptions>
-                </Card>
-              )}
-            </Form.Item>
-          )}
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item label="运输方式" name="shippingMethod">
+                <Radio.Group>
+                  <Radio value="VIA_MAIN">先送总仓</Radio>
+                  <Radio value="DIRECT">直接发运</Radio>
+                </Radio.Group>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="装箱号" name="shippingUnitNo">
+                <Input placeholder="如果已装箱，请输入装箱号（可选）" />
+              </Form.Item>
+            </Col>
+          </Row>
 
-          <Form.Item label="装箱号" name="shippingUnitNo">
-            <Input placeholder="如果已装箱，请输入装箱号（可选）" />
-          </Form.Item>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item label="物流公司" name="logisticsCompany">
+                <Input placeholder="录入承运商 / 车队名称" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="查询电话" name="queryPhone">
+                <Input placeholder="录入查询电话" />
+              </Form.Item>
+            </Col>
+          </Row>
 
-          <Form.Item
-            label="调拨原因"
-            name="reason"
-            rules={[{ required: true, message: '请输入调拨原因' }]}
-          >
-            <Select placeholder="请选择调拨原因">
-              <Option value="集中发货">集中发货</Option>
-              <Option value="就近发货">就近发货</Option>
-              <Option value="库存调整">库存调整</Option>
-              <Option value="紧急补货">紧急补货</Option>
-              <Option value="已装箱直接发货">已装箱直接发货</Option>
-              <Option value="其他">其他</Option>
-            </Select>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item label="司机名称" name="driverName">
+                <Input placeholder="录入司机姓名" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="司机电话" name="driverPhone">
+                <Input placeholder="录入司机电话" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="车牌" name="plateNo">
+                <Input placeholder="录入车牌号" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Form.Item label="调拨原因" name="reason" rules={[{ required: true, message: '请选择调拨原因' }]}>
+            <Select options={REASON_OPTIONS.map((item) => ({ value: item, label: item }))} />
           </Form.Item>
 
           <Form.Item label="备注" name="remark">
-            <TextArea rows={3} placeholder="补充说明" maxLength={300} showCount />
+            <TextArea rows={3} placeholder="补充这次调拨的说明" maxLength={300} showCount />
+          </Form.Item>
+
+          <Card size="small" style={{ borderRadius: 14, background: '#fafafa' }}>
+            <div style={{ color: token.colorTextSecondary }}>
+              创建成功后将自动进入“绑定运单”，流程与 DPN 管理保持一致。
+            </div>
+          </Card>
+        </Form>
+      </Modal>
+
+      <Drawer
+        title={bindTarget ? `绑定运单 - ${bindTarget.transferNo}` : '绑定运单'}
+        placement="right"
+        width={1120}
+        open={bindOpen}
+        onClose={closeBindDrawer}
+        destroyOnHidden
+        extra={(
+          <Space>
+            <Button onClick={closeBindDrawer}>取消</Button>
+            <Button type="primary" loading={bindSubmitting} onClick={() => void handleBindOrders()}>
+              提交绑定
+            </Button>
+          </Space>
+        )}
+      >
+        <Card size="small" style={{ marginBottom: 12, borderRadius: 16, background: '#fafafa' }}>
+          <Row gutter={[12, 12]} align="middle">
+            <Col>
+              <Space.Compact>
+                <Button type={bindMode === 'MANUAL' ? 'primary' : 'default'} onClick={() => setBindMode('MANUAL')}>
+                  手动添加运单
+                </Button>
+                <Button
+                  type={bindMode === 'SCAN' ? 'primary' : 'default'}
+                  icon={<ScanOutlined />}
+                  onClick={() => setBindMode('SCAN')}
+                >
+                  扫描添加运单
+                </Button>
+              </Space.Compact>
+            </Col>
+            <Col flex="auto">
+              <Input
+                value={bindKeyword}
+                onChange={(event) => setBindKeyword(event.target.value)}
+                onPressEnter={handleBindSearchEnter}
+                placeholder={bindMode === 'SCAN' ? '扫描运单号后回车' : '输入运单号/订单号/JOB查询'}
+                prefix={bindMode === 'SCAN' ? <ScanOutlined /> : <SearchOutlined />}
+                allowClear
+              />
+            </Col>
+            <Col>
+              <Button icon={<ReloadOutlined />} onClick={() => setBindKeyword('')}>
+                重置筛选
+              </Button>
+            </Col>
+          </Row>
+        </Card>
+
+        <Table
+          rowKey="id"
+          size="small"
+          loading={bindLoading}
+          dataSource={bindRows}
+          scroll={{ x: 980, y: 420 }}
+          rowSelection={{
+            selectedRowKeys: bindSelectedKeys,
+            preserveSelectedRowKeys: true,
+            onChange: (nextKeys, nextRows) => handleBindSelectionChange(nextKeys, nextRows as AvailableOrder[]),
+          }}
+          pagination={{
+            pageSize: 10,
+            showSizeChanger: true,
+            showTotal: (total) => `可选 ${total} 条`,
+          }}
+          columns={[
+            {
+              title: 'JOB/仓库',
+              key: 'jobWarehouse',
+              width: 180,
+              render: (_, row: AvailableOrder) => (
+                <div>
+                  <div style={{ fontWeight: 600 }}>{row.jobNo || '-'}</div>
+                  <div style={{ color: token.colorTextSecondary, fontSize: 12 }}>{row.warehouse}</div>
+                </div>
+              ),
+            },
+            { title: '运单号', dataIndex: 'subOrderNo', key: 'subOrderNo', width: 170 },
+            { title: '订单号', dataIndex: 'masterOrderNo', key: 'masterOrderNo', width: 170 },
+            { title: '快递单号', dataIndex: 'trackingNo', key: 'trackingNo', width: 160 },
+            { title: '客户', dataIndex: 'clientName', key: 'clientName', width: 150 },
+            { title: '线路', dataIndex: 'route', key: 'route', width: 180 },
+            { title: '状态', dataIndex: 'status', key: 'status', width: 100, render: (value: string) => <Tag>{value}</Tag> },
+            { title: '件数', dataIndex: 'pieces', key: 'pieces', width: 80, align: 'right' },
+            { title: '重量Kg', dataIndex: 'weight', key: 'weight', width: 100, align: 'right', render: (value: number) => value.toFixed(2) },
+          ]}
+        />
+
+        <Space size={8} style={{ marginTop: 12 }} wrap>
+          <Tag color={bindMode === 'SCAN' ? 'processing' : 'purple'}>
+            {bindMode === 'SCAN' ? '扫描添加' : '手动添加'}
+          </Tag>
+          <Tag color="blue">已选运单 {bindSummary.count}</Tag>
+          <Tag>件数 {bindSummary.pieces}</Tag>
+          <Tag color="processing">重量 {bindSummary.weight.toFixed(2)} kg</Tag>
+        </Space>
+      </Drawer>
+
+      <Modal
+        title={executeTarget ? `执行调拨 - ${executeTarget.transferNo}` : '执行调拨'}
+        open={executeOpen}
+        onOk={handleExecute}
+        onCancel={() => {
+          setExecuteOpen(false);
+          setExecuteTarget(null);
+          executeForm.resetFields();
+        }}
+        confirmLoading={executeSubmitting}
+        okText="确认发运"
+        cancelText="取消"
+        destroyOnHidden
+        width={760}
+      >
+        <Form form={executeForm} layout="vertical" style={{ marginTop: 20 }}>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item label="执行日期" name="executeDate">
+                <DatePicker style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="物流公司" name="logisticsCompany">
+                <Input placeholder="录入承运商 / 车队名称" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item label="司机名称" name="driverName" rules={[{ required: true, message: '请输入司机名称' }]}>
+                <Input placeholder="录入司机姓名" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="司机电话" name="driverPhone" rules={[{ required: true, message: '请输入司机电话' }]}>
+                <Input placeholder="录入司机电话" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item label="司机账号ID" name="driverAccountId">
+                <Input placeholder="默认 U-WMS-ORIGIN-01" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="车牌" name="plateNo">
+                <Input placeholder="录入车牌号" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item label="查询电话" name="queryPhone">
+            <Input placeholder="录入查询电话" />
           </Form.Item>
         </Form>
       </Modal>
 
-      {/* 订单选择Modal */}
-      <Modal
-        title="选择要调拨的订单"
-        open={orderSelectVisible}
-        onOk={handleConfirmOrderSelect}
-        onCancel={() => {
-          setOrderSelectVisible(false);
-          setSelectedOrderKeys([]);
-        }}
-        width={900}
-      >
-        <Table
-          rowSelection={{
-            type: 'checkbox',
-            selectedRowKeys: selectedOrderKeys,
-            onChange: (selectedKeys) => {
-              setSelectedOrderKeys(selectedKeys);
-            }
-          }}
-          dataSource={availableOrders}
-          pagination={false}
-          rowKey="id"
-          scroll={{ y: 400 }}
-          columns={[
-            {
-              title: '子运单号',
-              dataIndex: 'subOrderNo',
-              width: 150
-            },
-            {
-              title: '主运单号',
-              dataIndex: 'masterOrderNo',
-              width: 150
-            },
-            {
-              title: '快递单号',
-              dataIndex: 'trackingNo',
-              width: 150
-            },
-            {
-              title: '客户',
-              dataIndex: 'clientName',
-              width: 120
-            },
-            {
-              title: '仓库',
-              dataIndex: 'warehouse',
-              width: 100
-            },
-            {
-              title: '件数',
-              dataIndex: 'pieces',
-              width: 60,
-              render: (val: number) => `${val}件`
-            },
-            {
-              title: '重量',
-              dataIndex: 'weight',
-              width: 80,
-              render: (val: number) => `${val.toFixed(2)}kg`
-            },
-            {
-              title: '状态',
-              dataIndex: 'status',
-              width: 80,
-              render: (status: string) => (
-                <Tag color="success">{status}</Tag>
-              )
-            }
-          ]}
-        />
-      </Modal>
-
-      {/* 集装箱选择Modal */}
-      <Modal
-        title="选择集装箱"
-        open={containerSelectVisible}
-        onCancel={() => setContainerSelectVisible(false)}
-        footer={null}
-        width={800}
-      >
-        <Table
-          dataSource={availableContainers}
-          pagination={false}
-          rowKey="id"
-          onRow={(record) => ({
-            onClick: () => handleConfirmContainerSelect(record),
-            style: { cursor: 'pointer' }
-          })}
-          columns={[
-            {
-              title: '集装箱号',
-              dataIndex: 'containerNo',
-              width: 180
-            },
-            {
-              title: '类型',
-              dataIndex: 'type',
-              width: 120
-            },
-            {
-              title: '仓库',
-              dataIndex: 'warehouse',
-              width: 120
-            },
-            {
-              title: '订单数',
-              dataIndex: 'orderCount',
-              width: 80,
-              render: (val: number) => `${val}个`
-            },
-            {
-              title: '件数',
-              dataIndex: 'pieces',
-              width: 80,
-              render: (val: number) => `${val}件`
-            },
-            {
-              title: '重量',
-              dataIndex: 'weight',
-              width: 100,
-              render: (val: number) => `${val.toFixed(2)}kg`
-            },
-            {
-              title: '状态',
-              dataIndex: 'status',
-              width: 80,
-              render: (status: string) => (
-                <Tag color="success">{status}</Tag>
-              )
-            }
-          ]}
-        />
-      </Modal>
-
-      {/* 详情Drawer */}
       <Drawer
-        title="调拨详情"
+        title={detailRecord ? `调拨详情 - ${detailRecord.transferNo}` : '调拨详情'}
         placement="right"
-        width={800}
-        open={detailDrawerVisible}
+        width={920}
+        open={detailOpen}
         onClose={() => {
-          setDetailDrawerVisible(false);
-          setSelectedRecord(null);
+          setDetailOpen(false);
+          setDetailRecord(null);
         }}
+        destroyOnHidden
       >
-        {selectedRecord && (
-          <div>
-            <Descriptions title="基本信息" column={2} bordered style={{ marginBottom: 24 }}>
-              <Descriptions.Item label="调拨单号" span={2}>
-                <strong>{selectedRecord.transferNo}</strong>
-              </Descriptions.Item>
-              <Descriptions.Item label="源仓库">
-                {selectedRecord.sourceWarehouse}
-              </Descriptions.Item>
-              <Descriptions.Item label="目标仓库">
-                {selectedRecord.targetWarehouse}
-              </Descriptions.Item>
-              <Descriptions.Item label="装箱号" span={2}>
-                {selectedRecord.shippingUnitNo || '-'}
-                {selectedRecord.shippingUnitNo && selectedRecord.shippingMethod && (
-                  <Tag
-                    color={SHIPPING_METHOD_CONFIG[selectedRecord.shippingMethod].color}
-                    style={{ marginLeft: 8 }}
-                  >
-                    {SHIPPING_METHOD_CONFIG[selectedRecord.shippingMethod].text}
-                  </Tag>
-                )}
-              </Descriptions.Item>
-              <Descriptions.Item label="总件数">
-                {selectedRecord.totalPieces} 件
-              </Descriptions.Item>
-              <Descriptions.Item label="总重量">
-                {selectedRecord.totalWeight.toFixed(2)} kg
-              </Descriptions.Item>
-              <Descriptions.Item label="总体积">
-                {selectedRecord.totalVolume.toFixed(4)} m³
-              </Descriptions.Item>
-              <Descriptions.Item label="状态">
-                <Tag color={STATUS_CONFIG[selectedRecord.status].color} icon={STATUS_CONFIG[selectedRecord.status].icon}>
-                  {STATUS_CONFIG[selectedRecord.status].text}
-                </Tag>
-              </Descriptions.Item>
-              <Descriptions.Item label="调拨原因" span={2}>
-                {selectedRecord.reason || '-'}
-              </Descriptions.Item>
-              <Descriptions.Item label="操作人">
-                {selectedRecord.operator}
-              </Descriptions.Item>
-              <Descriptions.Item label="创建时间">
-                {dayjs(selectedRecord.createdAt).format('YYYY-MM-DD HH:mm')}
-              </Descriptions.Item>
-              {selectedRecord.updatedAt && (
-                <Descriptions.Item label="更新时间" span={2}>
-                  {dayjs(selectedRecord.updatedAt).format('YYYY-MM-DD HH:mm')}
-                </Descriptions.Item>
+        {detailRecord && (
+          <Space direction="vertical" size={18} style={{ width: '100%' }}>
+            <Space wrap>
+              <Button icon={<PlusOutlined />} onClick={() => void openBindDrawer(detailRecord, 'MANUAL')}>
+                手动添加
+              </Button>
+              <Button icon={<ScanOutlined />} onClick={() => void openBindDrawer(detailRecord, 'SCAN')}>
+                扫描添加
+              </Button>
+              {detailRecord.status === 'PENDING' && detailRecord.orderItems.length > 0 && (
+                <Button type="primary" icon={<SendOutlined />} onClick={() => openExecuteModal(detailRecord)}>
+                  执行
+                </Button>
               )}
-              {selectedRecord.departureTime && (
-                <Descriptions.Item label="发货时间" span={2}>
-                  {dayjs(selectedRecord.departureTime).format('YYYY-MM-DD HH:mm')}
-                </Descriptions.Item>
-              )}
-              {selectedRecord.arrivalTime && (
-                <Descriptions.Item label="到达时间" span={2}>
-                  {dayjs(selectedRecord.arrivalTime).format('YYYY-MM-DD HH:mm')}
-                </Descriptions.Item>
-              )}
-              {selectedRecord.confirmedTime && (
-                <Descriptions.Item label="确认时间" span={2}>
-                  {dayjs(selectedRecord.confirmedTime).format('YYYY-MM-DD HH:mm')}
-                </Descriptions.Item>
-              )}
-              {selectedRecord.remark && (
-                <Descriptions.Item label="备注" span={2}>
-                  {selectedRecord.remark}
-                </Descriptions.Item>
-              )}
-            </Descriptions>
+            </Space>
 
-            {/* 下属订单信息 */}
-            <Card title="下属订单信息" size="small" style={{ marginBottom: 24 }}>
+            <Card size="small" style={{ borderRadius: 16 }}>
+              <Descriptions column={2} bordered>
+                <Descriptions.Item label="调拨单号" span={2}>
+                  <strong>{detailRecord.transferNo}</strong>
+                  {detailRecord.isDemo && <Tag color="purple" style={{ marginLeft: 8 }}>DEMO</Tag>}
+                </Descriptions.Item>
+                <Descriptions.Item label="来源仓库">{detailRecord.sourceWarehouse}</Descriptions.Item>
+                <Descriptions.Item label="目标仓库">{detailRecord.targetWarehouse}</Descriptions.Item>
+                <Descriptions.Item label="线路名称" span={2}>{detailRecord.routeLabel}</Descriptions.Item>
+                <Descriptions.Item label="装箱号">{detailRecord.shippingUnitNo || '-'}</Descriptions.Item>
+                <Descriptions.Item label="调拨原因">{detailRecord.reason || '-'}</Descriptions.Item>
+                <Descriptions.Item label="总件数">{detailRecord.totalPieces} 件</Descriptions.Item>
+                <Descriptions.Item label="总重量">{detailRecord.totalWeight.toFixed(2)} kg</Descriptions.Item>
+                <Descriptions.Item label="总体积">{detailRecord.totalVolume.toFixed(4)} m³</Descriptions.Item>
+                <Descriptions.Item label="状态">
+                  <Tag color={STATUS_CONFIG[detailRecord.status].color} icon={STATUS_CONFIG[detailRecord.status].icon}>
+                    {STATUS_CONFIG[detailRecord.status].text}
+                  </Tag>
+                </Descriptions.Item>
+                <Descriptions.Item label="创建时间">{formatDateTime(detailRecord.createdAt)}</Descriptions.Item>
+                <Descriptions.Item label="更新时间">{formatDateTime(detailRecord.updatedAt)}</Descriptions.Item>
+              </Descriptions>
+            </Card>
+
+            <Card size="small" title="执行信息" style={{ borderRadius: 16 }}>
+              <Descriptions column={2}>
+                <Descriptions.Item label="执行日期">{detailRecord.meta.executeDate || '-'}</Descriptions.Item>
+                <Descriptions.Item label="物流公司">{detailRecord.meta.logisticsCompany || '-'}</Descriptions.Item>
+                <Descriptions.Item label="司机名称">{detailRecord.meta.driverName || '-'}</Descriptions.Item>
+                <Descriptions.Item label="司机电话">{detailRecord.meta.driverPhone || '-'}</Descriptions.Item>
+                <Descriptions.Item label="司机账号ID">{detailRecord.meta.driverAccountId || '-'}</Descriptions.Item>
+                <Descriptions.Item label="车牌">{detailRecord.meta.plateNo || '-'}</Descriptions.Item>
+                <Descriptions.Item label="查询电话">{detailRecord.meta.queryPhone || '-'}</Descriptions.Item>
+                <Descriptions.Item label="运输方式">
+                  {detailRecord.shippingMethod === 'DIRECT' ? '直接发运' : detailRecord.shippingMethod === 'VIA_MAIN' ? '先送总仓' : '-'}
+                </Descriptions.Item>
+                <Descriptions.Item label="备注" span={2}>{detailRecord.meta.note || '-'}</Descriptions.Item>
+              </Descriptions>
+            </Card>
+
+            <Card size="small" title="货物明细" style={{ borderRadius: 16 }}>
+              <div style={{ marginBottom: 10, color: token.colorTextSecondary }}>
+                已绑定运单 {detailRecord.orderItems.length} 条，件数 {detailRecord.totalPieces}，重量 {detailRecord.totalWeight.toFixed(2)} kg
+              </div>
               <Table
-                dataSource={selectedRecord.orderItems}
-                pagination={false}
+                rowKey="id"
                 size="small"
-                rowKey="subOrderNo"
+                pagination={false}
+                dataSource={detailRecord.orderItems}
                 columns={[
-                  {
-                    title: '子运单号',
-                    dataIndex: 'subOrderNo',
-                    key: 'subOrderNo',
-                    width: 180
-                  },
-                  {
-                    title: '主运单号',
-                    dataIndex: 'masterOrderNo',
-                    key: 'masterOrderNo',
-                    width: 180
-                  },
-                  {
-                    title: '快递单号',
-                    dataIndex: 'trackingNo',
-                    key: 'trackingNo',
-                    width: 150
-                  },
-                  {
-                    title: '客户',
-                    dataIndex: 'clientName',
-                    key: 'clientName',
-                    width: 150
-                  },
-                  {
-                    title: '件数',
-                    dataIndex: 'pieces',
-                    key: 'pieces',
-                    width: 80,
-                    render: (val: number) => `${val} 件`
-                  },
-                  {
-                    title: '重量',
-                    dataIndex: 'weight',
-                    key: 'weight',
-                    width: 100,
-                    render: (val: number) => `${val.toFixed(2)} kg`
-                  },
-                  {
-                    title: '体积',
-                    dataIndex: 'volume',
-                    key: 'volume',
-                    width: 100,
-                    render: (val: number) => `${val.toFixed(4)} m³`
-                  }
+                  { title: 'JOB', dataIndex: 'jobNo', key: 'jobNo', width: 150, render: (value: string) => value || '-' },
+                  { title: '运单号', dataIndex: 'subOrderNo', key: 'subOrderNo', width: 170 },
+                  { title: '订单号', dataIndex: 'masterOrderNo', key: 'masterOrderNo', width: 170 },
+                  { title: '快递单号', dataIndex: 'trackingNo', key: 'trackingNo', width: 150 },
+                  { title: '客户', dataIndex: 'clientName', key: 'clientName', width: 150 },
+                  { title: '件数', dataIndex: 'pieces', key: 'pieces', width: 70 },
+                  { title: '重量Kg', dataIndex: 'weight', key: 'weight', width: 90, render: (value: number) => value.toFixed(2) },
+                  { title: '体积', dataIndex: 'volume', key: 'volume', width: 90, render: (value: number) => value.toFixed(3) },
                 ]}
               />
             </Card>
 
-            {/* 流转记录 */}
-            {selectedRecord.flowRecords && selectedRecord.flowRecords.length > 0 && (
-              <Card title="流转记录" size="small">
-                <Timeline>
-                  {selectedRecord.flowRecords.map((flow, index) => (
-                    <Timeline.Item key={index} color="blue">
-                      <div style={{ marginBottom: 4 }}>
-                        <strong>{flow.action}</strong>
-                        <span style={{ marginLeft: 8, color: '#999', fontSize: 12 }}>
-                          {dayjs(flow.time).format('YYYY-MM-DD HH:mm:ss')}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: 12, color: '#666' }}>
-                        操作人：{flow.operator}
-                      </div>
-                      {flow.detail && (
-                        <div style={{ fontSize: 12, color: '#999' }}>
-                          {flow.detail}
-                        </div>
-                      )}
-                    </Timeline.Item>
-                  ))}
-                </Timeline>
-              </Card>
-            )}
-          </div>
+            <Card size="small" title="状态轨迹" style={{ borderRadius: 16 }}>
+              <Timeline
+                items={detailFlowRecords.map((flow) => ({
+                  color: 'blue',
+                  children: (
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{flow.action}</div>
+                      <div style={{ color: token.colorTextSecondary, fontSize: 12 }}>{formatDateTime(flow.time)}</div>
+                      <div style={{ marginTop: 4 }}>操作人：{flow.operator}</div>
+                      {flow.detail && <div style={{ color: token.colorTextSecondary, marginTop: 4 }}>{flow.detail}</div>}
+                    </div>
+                  ),
+                }))}
+              />
+            </Card>
+          </Space>
         )}
       </Drawer>
-    </div>
+    </>
   );
 };

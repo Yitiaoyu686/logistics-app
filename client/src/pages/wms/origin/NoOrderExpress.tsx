@@ -33,6 +33,8 @@ interface NoOrderExpress {
   id: string;
   expressCompany: string;
   expressTrackingNo: string;
+  senderName?: string;
+  senderPhone?: string;
   receiverName?: string;
   receiverPhone?: string;
   pieces: number;
@@ -53,11 +55,14 @@ interface ManualNoOrderInboundForm {
   businessLine?: 'SEA' | 'AIR';
   trackingNo: string;
   expressCompany: string;
-  pieces: number;
+  pieces?: number;
   grossWeightKg?: number;
   volumeCbm?: number;
-  consigneeName?: string;
-  consigneePhone?: string;
+  senderName?: string;
+  senderPhone?: string;
+  destCountry?: string;
+  category?: string;
+  goodsName?: string;
   customerHint?: string;
   locationCode?: string;
   remark?: string;
@@ -112,7 +117,7 @@ const WAREHOUSE_LOCATIONS = [
 ];
 
 const EXPRESS_COMPANY_OPTIONS = [
-  { label: '顺丰速运', value: '顺丰速运' }, { label: '韵达快递', value: '韵达快递' },
+  { label: '顺丰', value: '顺丰' }, { label: '顺丰速运', value: '顺丰速运' }, { label: '韵达快递', value: '韵达快递' },
   { label: '圆通速递', value: '圆通速递' }, { label: '中通速运', value: '中通速运' },
   { label: '申通快递', value: '申通快递' }, { label: '京东物流', value: '京东物流' },
   { label: '德邦物流', value: '德邦物流' }, { label: '百世快递', value: '百世快递' },
@@ -158,6 +163,8 @@ export const NoOrderExpress = ({ warehouseId, businessMode = 'ALL' }: { warehous
         id: r.id,
         expressCompany: r.express_company || '-',
         expressTrackingNo: r.tracking_no || '-',
+        senderName: r.sender_name || '',
+        senderPhone: r.sender_phone || '',
         receiverName: r.consignee_name || '',
         receiverPhone: r.consignee_phone || '',
         pieces: r.pieces || 0,
@@ -199,7 +206,10 @@ export const NoOrderExpress = ({ warehouseId, businessMode = 'ALL' }: { warehous
       filtered = filtered.filter(r =>
         r.expressTrackingNo.toLowerCase().includes(searchText.toLowerCase()) ||
         r.expressCompany.toLowerCase().includes(searchText.toLowerCase()) ||
-        r.receiverName?.toLowerCase().includes(searchText.toLowerCase())
+        r.receiverName?.toLowerCase().includes(searchText.toLowerCase()) ||
+        r.senderName?.toLowerCase().includes(searchText.toLowerCase()) ||
+        r.receiverPhone?.toLowerCase().includes(searchText.toLowerCase()) ||
+        r.senderPhone?.toLowerCase().includes(searchText.toLowerCase())
       );
     }
 
@@ -479,7 +489,7 @@ export const NoOrderExpress = ({ warehouseId, businessMode = 'ALL' }: { warehous
         return;
       }
       const values = await createInboundForm.validateFields();
-      const effectiveBusinessLine = businessMode === 'ALL' ? values.businessLine : businessMode;
+      const effectiveBusinessLine = businessMode === 'ALL' ? (values.businessLine || 'SEA') : businessMode;
       if (!effectiveBusinessLine) {
         message.error('请选择业务线');
         return;
@@ -495,11 +505,11 @@ export const NoOrderExpress = ({ warehouseId, businessMode = 'ALL' }: { warehous
           {
             trackingNo: values.trackingNo,
             expressCompany: values.expressCompany,
-            pieces: Number(values.pieces || 0),
+            pieces: Number(values.pieces || 1),
             grossWeightKg: Number(values.grossWeightKg || 0),
             volumeCbm: Number(values.volumeCbm || 0),
-            consigneeName: values.consigneeName || null,
-            consigneePhone: values.consigneePhone || null,
+            senderName: values.senderName || null,
+            senderPhone: values.senderPhone || null,
             customerHint: values.customerHint || null,
             locationCode: values.locationCode || null,
           },
@@ -554,29 +564,33 @@ export const NoOrderExpress = ({ warehouseId, businessMode = 'ALL' }: { warehous
       )
     },
     {
-      title: '收件人信息',
-      key: 'receiver',
+      title: '联系人信息',
+      key: 'contact',
       width: 150,
-      render: (_: unknown, record: NoOrderExpress) => (
-        <div>
-          {record.receiverName ? (
-            <>
-              <div>
-                <UserOutlined style={{ marginRight: 4 }} />
-                {record.receiverName}
-              </div>
-              {record.receiverPhone && (
-                <div style={{ fontSize: 12, color: '#999' }}>
-                  <PhoneOutlined style={{ marginRight: 4 }} />
-                  {record.receiverPhone}
+      render: (_: unknown, record: NoOrderExpress) => {
+        const contactName = record.receiverName || record.senderName;
+        const contactPhone = record.receiverPhone || record.senderPhone;
+        return (
+          <div>
+            {contactName ? (
+              <>
+                <div>
+                  <UserOutlined style={{ marginRight: 4 }} />
+                  {contactName}
                 </div>
-              )}
-            </>
-          ) : (
-            <Tag color="warning">无收件人信息</Tag>
-          )}
-        </div>
-      )
+                {contactPhone && (
+                  <div style={{ fontSize: 12, color: '#999' }}>
+                    <PhoneOutlined style={{ marginRight: 4 }} />
+                    {contactPhone}
+                  </div>
+                )}
+              </>
+            ) : (
+              <Tag color="warning">无联系人信息</Tag>
+            )}
+          </div>
+        );
+      }
     },
     {
       title: '货物信息',
@@ -722,39 +736,46 @@ export const NoOrderExpress = ({ warehouseId, businessMode = 'ALL' }: { warehous
 
       {/* 筛选区域 */}
       <Card size="small" bordered={false} style={{ marginBottom: 10, background: '#fafafa' }}>
-        <Space wrap>
-          <Button type="primary" icon={<PlusCircleOutlined />} onClick={() => setCreateInboundModalVisible(true)}>
-            新增无订单快递
-          </Button>
-          <Input
-            placeholder="搜索运单号/快递公司/收件人"
-            value={searchText}
-            onChange={e => setSearchText(e.target.value)}
-            onPressEnter={handleFilter}
-            style={{ width: 250 }}
-            allowClear
-          />
-          <Select
-            value={filterStatus}
-            onChange={setFilterStatus}
-            style={{ width: 120 }}
-          >
-            <Option value="ALL">全部状态</Option>
-            <Option value="PENDING">待处理</Option>
-            <Option value="MATCHED">已匹配</Option>
-            <Option value="CLOSED">已关闭</Option>
-          </Select>
-          <Button
-            type="primary"
-            icon={<SearchOutlined />}
-            onClick={handleFilter}
-          >
-            查询
-          </Button>
-          <Button onClick={handleReset}>
-            重置
-          </Button>
-        </Space>
+        <div className="list-page-toolbar">
+          <div className="list-page-toolbar__filters">
+            <div className="list-page-toolbar__field" style={{ flex: '1 1 260px', minWidth: 240 }}>
+              <Input
+                placeholder="搜索运单号/快递公司/收件人"
+                value={searchText}
+                onChange={e => setSearchText(e.target.value)}
+                onPressEnter={handleFilter}
+                allowClear
+              />
+            </div>
+            <div className="list-page-toolbar__field" style={{ minWidth: 120 }}>
+              <Select
+                value={filterStatus}
+                onChange={setFilterStatus}
+                style={{ width: '100%' }}
+              >
+                <Option value="ALL">全部状态</Option>
+                <Option value="PENDING">待处理</Option>
+                <Option value="MATCHED">已匹配</Option>
+                <Option value="CLOSED">已关闭</Option>
+              </Select>
+            </div>
+          </div>
+          <div className="list-page-toolbar__actions">
+            <Button
+              type="primary"
+              icon={<SearchOutlined />}
+              onClick={handleFilter}
+            >
+              查询
+            </Button>
+            <Button onClick={handleReset}>
+              重置
+            </Button>
+            <Button type="primary" icon={<PlusCircleOutlined />} onClick={() => setCreateInboundModalVisible(true)}>
+              新增无订单快递
+            </Button>
+          </div>
+        </div>
       </Card>
 
       {/* 数据表格 */}
@@ -789,14 +810,16 @@ export const NoOrderExpress = ({ warehouseId, businessMode = 'ALL' }: { warehous
           initialValues={{ businessLine: businessMode === 'ALL' ? undefined : businessMode, pieces: 1 }}
         >
           <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="businessLine" label="业务线" rules={[{ required: true, message: '请选择业务线' }]}>
-                <Select options={[{ label: '空运', value: 'AIR' }, { label: '海运', value: 'SEA' }]} />
-              </Form.Item>
-            </Col>
+            {businessMode === 'ALL' && (
+              <Col span={12}>
+                <Form.Item name="businessLine" label="业务线" rules={[{ required: true, message: '请选择业务线' }]}>
+                  <Select options={[{ label: '空运', value: 'AIR' }, { label: '海运', value: 'SEA' }]} />
+                </Form.Item>
+              </Col>
+            )}
             <Col span={12}>
               <Form.Item name="expressCompany" label="快递公司" rules={[{ required: true, message: '请选择快递公司' }]}>
-                <Select options={EXPRESS_COMPANY_OPTIONS} />
+                <Select showSearch options={EXPRESS_COMPANY_OPTIONS} placeholder="例如：顺丰" />
               </Form.Item>
             </Col>
           </Row>
@@ -807,26 +830,26 @@ export const NoOrderExpress = ({ warehouseId, businessMode = 'ALL' }: { warehous
               </Form.Item>
             </Col>
             <Col span={12}>
+              <Form.Item name="senderName" label="寄件人" rules={[{ required: true, message: '请输入寄件人' }]}>
+                <Input placeholder="例如：张三" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="senderPhone" label="寄件人电话">
+                <Input placeholder="选填" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
               <Form.Item name="destCountry" label="发往国家">
                 <Select options={COUNTRY_OPTIONS} />
               </Form.Item>
             </Col>
           </Row>
           <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="category" label="类别">
-                <Select options={GOODS_CATEGORIES.map(c => ({ label: c, value: c }))} />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="goodsName" label="说明/品名">
-                <Input />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
             <Col span={8}>
-              <Form.Item name="pieces" label="件数" rules={[{ required: true, message: '请输入件数' }]}>
+              <Form.Item name="pieces" label="件数">
                 <InputNumber min={1} style={{ width: '100%' }} />
               </Form.Item>
             </Col>
@@ -843,12 +866,12 @@ export const NoOrderExpress = ({ warehouseId, businessMode = 'ALL' }: { warehous
           </Row>
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item name="consigneeName" label="收件人姓名">
-                <Input />
+              <Form.Item name="category" label="类别">
+                <Select options={GOODS_CATEGORIES.map(c => ({ label: c, value: c }))} />
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="consigneePhone" label="收件人电话">
+              <Form.Item name="goodsName" label="说明/品名">
                 <Input />
               </Form.Item>
             </Col>
@@ -941,8 +964,8 @@ export const NoOrderExpress = ({ warehouseId, businessMode = 'ALL' }: { warehous
             <Descriptions title="基本信息" bordered column={2} style={{ marginBottom: 24 }}>
               <Descriptions.Item label="快递公司">{selectedRecord.expressCompany}</Descriptions.Item>
               <Descriptions.Item label="运单号">{selectedRecord.expressTrackingNo}</Descriptions.Item>
-              <Descriptions.Item label="收件人">{selectedRecord.receiverName || '-'}</Descriptions.Item>
-              <Descriptions.Item label="联系电话">{selectedRecord.receiverPhone || '-'}</Descriptions.Item>
+              <Descriptions.Item label="联系人">{selectedRecord.receiverName || selectedRecord.senderName || '-'}</Descriptions.Item>
+              <Descriptions.Item label="联系电话">{selectedRecord.receiverPhone || selectedRecord.senderPhone || '-'}</Descriptions.Item>
               <Descriptions.Item label="件数">{selectedRecord.pieces} 件</Descriptions.Item>
               <Descriptions.Item label="重量">{selectedRecord.weight ? `${selectedRecord.weight.toFixed(2)} kg` : '-'}</Descriptions.Item>
               <Descriptions.Item label="体积">{selectedRecord.volume ? `${selectedRecord.volume.toFixed(3)} m³` : '-'}</Descriptions.Item>
@@ -1017,7 +1040,7 @@ export const NoOrderExpress = ({ warehouseId, businessMode = 'ALL' }: { warehous
             <Descriptions size="small" column={2}>
               <Descriptions.Item label="快递单号">{selectedRecord.expressTrackingNo}</Descriptions.Item>
               <Descriptions.Item label="快递公司">{selectedRecord.expressCompany}</Descriptions.Item>
-              <Descriptions.Item label="收件人">{selectedRecord.receiverName || '-'}</Descriptions.Item>
+              <Descriptions.Item label="联系人">{selectedRecord.receiverName || selectedRecord.senderName || '-'}</Descriptions.Item>
               <Descriptions.Item label="件数/重量">{selectedRecord.pieces}件 / {selectedRecord.weight ? `${selectedRecord.weight}kg` : '-'}</Descriptions.Item>
             </Descriptions>
           </Card>

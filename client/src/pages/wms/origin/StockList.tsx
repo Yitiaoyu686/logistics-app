@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Button,
-  Card,
   Descriptions,
   Drawer,
   Form,
@@ -32,6 +31,14 @@ import type { StockItem, StockStatus } from '../../../types/core';
 import { warehouseApi } from '../../../api';
 import InboundDetailDrawer from './InboundDetailDrawer';
 import CancelOrderModal from '../../../components/warehouse/CancelOrderModal';
+import {
+  ListPageToolbar,
+  ListPageToolbarActions,
+  ListPageToolbarCard,
+  ListPageToolbarField,
+  ListPageToolbarFilters,
+} from '../../../components/ListPageToolbar';
+import { buildOriginStockFallbackData, loadOriginFallbackOrders } from './derivedWarehouseData';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -111,9 +118,19 @@ export const StockList = ({
         warehouseId,
         businessLine: businessMode === 'ALL' ? undefined : businessMode,
       });
-      setStockItems(Array.isArray(res?.data) ? res.data : []);
+      let rows = Array.isArray(res?.data) ? res.data : [];
+      if (!rows.length) {
+        const fallbackOrders = await loadOriginFallbackOrders(businessMode);
+        rows = buildOriginStockFallbackData(fallbackOrders);
+      }
+      setStockItems(rows as StockListRow[]);
     } catch (error: any) {
-      message.error(error.message || '加载库存数据失败');
+      try {
+        const fallbackOrders = await loadOriginFallbackOrders(businessMode);
+        setStockItems(buildOriginStockFallbackData(fallbackOrders) as StockListRow[]);
+      } catch (_) {
+        message.error(error.message || '加载库存数据失败');
+      }
     } finally {
       setLoading(false);
     }
@@ -188,6 +205,10 @@ export const StockList = ({
     setFilterSales('');
     setFilterServiceType('ALL');
     setFilterStation('ALL');
+  };
+
+  const handleQuery = () => {
+    setSearchText((value) => value.trim());
   };
 
   const handleViewDetail = async (item: StockListRow) => {
@@ -476,58 +497,86 @@ export const StockList = ({
         <Tag color="blue">总体积 {totalVolume.toFixed(3)}m³</Tag>
       </div>
 
-      <Card size="small" bordered={false} style={{ marginBottom: 10, background: '#fafafa' }}>
-        <Space wrap>
-          <Input
-            placeholder="搜索运单号/客户/线路"
-            value={searchText}
-            onChange={(event) => setSearchText(event.target.value)}
-            style={{ width: 280 }}
-            allowClear
-            prefix={<SearchOutlined />}
-          />
-          <Select value={filterStatus} onChange={setFilterStatus} style={{ width: 120 }}>
-            <Option value="ALL">全部状态</Option>
-            <Option value="IN_STOCK">已入库</Option>
-            <Option value="ALLOCATED">已分配</Option>
-            <Option value="PACKED">已装箱</Option>
-            <Option value="SHIPPED">已出库</Option>
-            <Option value="RETURNED">退运中</Option>
-          </Select>
-          <Select value={filterPaymentMethod} onChange={setFilterPaymentMethod} style={{ width: 120 }}>
-            <Option value="ALL">全部支付方式</Option>
-            <Option value="PREPAID">预付</Option>
-            <Option value="COD">到付</Option>
-            <Option value="CREDIT_CARD">信用卡</Option>
-          </Select>
-          <Select value={filterPaymentStatus} onChange={setFilterPaymentStatus} style={{ width: 120 }}>
-            <Option value="ALL">全部支付状态</Option>
-            <Option value="UNPAID">未付</Option>
-            <Option value="PARTIAL">部分付</Option>
-            <Option value="PAID">已付</Option>
-          </Select>
-          <Select value={filterStation} onChange={setFilterStation} style={{ width: 140 }}
-            options={[
-              { label: '全部站点', value: 'ALL' },
-              { label: '伊科贾站点', value: 'IKEJA' },
-              { label: '电脑村站点', value: 'COMPUTER_VILLAGE' },
-              { label: '维岛站点', value: 'VICTORIA_ISLAND' },
-              { label: '贸易展会站点', value: 'TRADE_FAIR' },
-            ]}
-          />
-          <Select value={filterSales} onChange={setFilterSales} style={{ width: 120 }}
-            options={[{ label: '业务员', value: '' }, { label: 'Smile', value: 'Smile' }, { label: 'Andi', value: 'Andi' }, { label: 'Karena', value: 'Karena' }]}
-          />
-          <Select value={filterServiceType} onChange={setFilterServiceType} style={{ width: 140 }}>
-            <Option value="ALL">全部服务类型</Option>
-            {serviceTypeOptions.map((serviceType) => (
-              <Option key={serviceType} value={serviceType}>{serviceType}</Option>
-            ))}
-          </Select>
-          <Button icon={<ReloadOutlined />} onClick={fetchStock}>刷新</Button>
-          <Button onClick={handleReset}>重置筛选</Button>
-        </Space>
-      </Card>
+      <ListPageToolbarCard style={{ marginBottom: 10 }}>
+        <ListPageToolbar>
+          <ListPageToolbarFilters>
+            <ListPageToolbarField flex="1 1 320px" minWidth={260}>
+              <Input
+                placeholder="搜索运单号/客户/线路"
+                value={searchText}
+                onChange={(event) => setSearchText(event.target.value)}
+                onPressEnter={handleQuery}
+                allowClear
+                prefix={<SearchOutlined />}
+              />
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={120}>
+              <Select value={filterStatus} onChange={setFilterStatus}>
+                <Option value="ALL">全部状态</Option>
+                <Option value="IN_STOCK">已入库</Option>
+                <Option value="ALLOCATED">已分配</Option>
+                <Option value="PACKED">已装箱</Option>
+                <Option value="SHIPPED">已出库</Option>
+                <Option value="RETURNED">退运中</Option>
+              </Select>
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={120}>
+              <Select value={filterPaymentMethod} onChange={setFilterPaymentMethod}>
+                <Option value="ALL">全部支付方式</Option>
+                <Option value="PREPAID">预付</Option>
+                <Option value="COD">到付</Option>
+                <Option value="CREDIT_CARD">信用卡</Option>
+              </Select>
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={120}>
+              <Select value={filterPaymentStatus} onChange={setFilterPaymentStatus}>
+                <Option value="ALL">全部支付状态</Option>
+                <Option value="UNPAID">未付</Option>
+                <Option value="PARTIAL">部分付</Option>
+                <Option value="PAID">已付</Option>
+              </Select>
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={140}>
+              <Select
+                value={filterStation}
+                onChange={setFilterStation}
+                options={[
+                  { label: '全部站点', value: 'ALL' },
+                  { label: '伊科贾站点', value: 'IKEJA' },
+                  { label: '电脑村站点', value: 'COMPUTER_VILLAGE' },
+                  { label: '维岛站点', value: 'VICTORIA_ISLAND' },
+                  { label: '贸易展会站点', value: 'TRADE_FAIR' },
+                ]}
+              />
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={120}>
+              <Select
+                value={filterSales}
+                onChange={setFilterSales}
+                options={[
+                  { label: '业务员', value: '' },
+                  { label: 'Smile', value: 'Smile' },
+                  { label: 'Andi', value: 'Andi' },
+                  { label: 'Karena', value: 'Karena' },
+                ]}
+              />
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={140}>
+              <Select value={filterServiceType} onChange={setFilterServiceType}>
+                <Option value="ALL">全部服务类型</Option>
+                {serviceTypeOptions.map((serviceType) => (
+                  <Option key={serviceType} value={serviceType}>{serviceType}</Option>
+                ))}
+              </Select>
+            </ListPageToolbarField>
+          </ListPageToolbarFilters>
+          <ListPageToolbarActions>
+            <Button type="primary" icon={<SearchOutlined />} onClick={handleQuery}>查询</Button>
+            <Button onClick={handleReset}>重置</Button>
+            <Button icon={<ReloadOutlined />} onClick={fetchStock}>刷新</Button>
+          </ListPageToolbarActions>
+        </ListPageToolbar>
+      </ListPageToolbarCard>
 
       <Table
         rowKey="id"

@@ -12,6 +12,13 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { jobApi } from '../../api';
+import {
+  ListPageToolbar,
+  ListPageToolbarActions,
+  ListPageToolbarCard,
+  ListPageToolbarField,
+  ListPageToolbarFilters,
+} from '../../components/ListPageToolbar';
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
@@ -459,7 +466,7 @@ export const OriginJobList: React.FC<{ businessMode?: 'ALL' | 'AIR' | 'SEA' }> =
       }
 
       const newFee: JobFee = {
-        id: `FEE-${Date.now()}`,
+        id: `F-${dayjs().format('YYYYMMDD')}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`,
         feeType: values.feeType,
         amount: values.amount,
         currency: values.currency,
@@ -748,52 +755,63 @@ export const OriginJobList: React.FC<{ businessMode?: 'ALL' | 'AIR' | 'SEA' }> =
       </Row>
 
       {/* 筛选条件区 */}
-      <Card style={{ marginBottom: 16 }}>
-        <Space wrap>
-          <Input
-            placeholder="搜索任务号/单元编号"
-            prefix={<SearchOutlined />}
-            value={searchText}
-            onChange={e => setSearchText(e.target.value)}
-            style={{ width: 250 }}
-            onPressEnter={handleSearch}
-          />
-          <Select
-            value={filterStatus}
-            onChange={setFilterStatus}
-            style={{ width: 120 }}
-          >
-            <Option value="ALL">全部状态</Option>
-            <Option value="PENDING">待发货</Option>
-            <Option value="IN_TRANSIT">运输中</Option>
-            <Option value="ARRIVED">已到达</Option>
-            <Option value="COMPLETED">已完成</Option>
-            <Option value="EXCEPTION">异常</Option>
-          </Select>
-          <Select
-            value={filterTransportType}
-            onChange={setFilterTransportType}
-            style={{ width: 120 }}
-          >
-            <Option value="ALL">全部方式</Option>
-            <Option value="SEA">海运</Option>
-            <Option value="AIR">空运</Option>
-          </Select>
-          <RangePicker
-            value={dateRange}
-            onChange={setDateRange}
-          />
-          <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
-            搜索
-          </Button>
-          <Button icon={<ReloadOutlined />} onClick={handleReset}>
-            重置
-          </Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreateJob}>
-            创建任务
-          </Button>
-        </Space>
-      </Card>
+      <ListPageToolbarCard>
+        <ListPageToolbar>
+          <ListPageToolbarFilters>
+            <ListPageToolbarField flex="1 1 260px" minWidth={240}>
+              <Input
+                placeholder="搜索任务号/单元编号"
+                prefix={<SearchOutlined />}
+                value={searchText}
+                onChange={e => setSearchText(e.target.value)}
+                onPressEnter={handleSearch}
+              />
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={120}>
+              <Select
+                value={filterStatus}
+                onChange={setFilterStatus}
+                style={{ width: '100%' }}
+              >
+                <Option value="ALL">全部状态</Option>
+                <Option value="PENDING">待发货</Option>
+                <Option value="IN_TRANSIT">运输中</Option>
+                <Option value="ARRIVED">已到达</Option>
+                <Option value="COMPLETED">已完成</Option>
+                <Option value="EXCEPTION">异常</Option>
+              </Select>
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={120}>
+              <Select
+                value={filterTransportType}
+                onChange={setFilterTransportType}
+                style={{ width: '100%' }}
+              >
+                <Option value="ALL">全部方式</Option>
+                <Option value="SEA">海运</Option>
+                <Option value="AIR">空运</Option>
+              </Select>
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={260}>
+              <RangePicker
+                value={dateRange}
+                onChange={setDateRange}
+              />
+            </ListPageToolbarField>
+          </ListPageToolbarFilters>
+          <ListPageToolbarActions>
+            <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
+              查询
+            </Button>
+            <Button icon={<ReloadOutlined />} onClick={handleReset}>
+              重置
+            </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreateJob}>
+              创建任务
+            </Button>
+          </ListPageToolbarActions>
+        </ListPageToolbar>
+      </ListPageToolbarCard>
 
       {/* 任务列表 */}
       <Card>

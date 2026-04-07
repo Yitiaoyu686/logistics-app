@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Form, Input, Select, Button, Row, Col, Space,
-  InputNumber, message, Typography, theme, Modal
+  InputNumber, message, Typography, theme, Modal, Table, Tag
 } from 'antd';
 import { RocketOutlined, PlusOutlined, DeleteOutlined, FileExcelOutlined } from '@ant-design/icons';
 import { systemApi, v2OmsApi } from '../../api';
@@ -14,6 +14,15 @@ const { Text } = Typography;
 const buildRouteCode = (destCountryCode?: string, destCityCode?: string) => {
   if (!destCountryCode || !destCityCode) return '';
   return `CAN.CHN→${destCityCode.toUpperCase()}.${destCountryCode.toUpperCase()}`;
+};
+
+const normalizeCargoType = (value: unknown): 'GENERAL' | 'SENSITIVE' => {
+  const raw = String(value || '').trim().toUpperCase();
+  if (!raw) return 'GENERAL';
+  if (raw === 'SENSITIVE' || raw.includes('SENSITIVE') || raw.includes('敏感') || raw.includes('非普')) {
+    return 'SENSITIVE';
+  }
+  return 'GENERAL';
 };
 
 interface OrderCreateProps {
@@ -51,6 +60,8 @@ export const OrderCreate: React.FC<OrderCreateProps> = ({ onCancel, onSubmit, bu
   } = useOrderBaseOptions();
 
   const [smartPasteVisible, setSmartPasteVisible] = useState(false);
+  const [senderPickerVisible, setSenderPickerVisible] = useState(false);
+  const [receiverPickerVisible, setReceiverPickerVisible] = useState(false);
   const [smartPasteText, setSmartPasteText] = useState('');
 
   const fetchRoutes = async (transport: 'SEA' | 'AIR') => {
@@ -147,20 +158,29 @@ export const OrderCreate: React.FC<OrderCreateProps> = ({ onCancel, onSubmit, bu
         return byName?.cityCode;
       })();
 
+      // 自动生成入仓号：客户编号 + 3位流水号
+      const customerCode = client.shortCode || client.customerCode || clientId.slice(-3).toUpperCase();
+      const seq = String(Math.floor(Math.random() * 900) + 100); // mock: 100-999
+      const entryNo = `${customerCode}${seq}`;
+
       form.setFieldsValue({
+        warehouseEntryNo: entryNo,
         senderName: defaultSender?.senderName || client.logisticsInfo?.senderName || '',
         senderPhone: defaultSender?.senderPhone || client.logisticsInfo?.senderPhone || '',
         senderAddress: defaultSender?.senderAddress || client.logisticsInfo?.senderAddress || '',
-        consigneeName: defaultRecipient?.consigneeName || client.logisticsInfo?.consigneeName || '',
-        consigneePhone: defaultRecipient?.consigneePhone || client.logisticsInfo?.consigneePhone || '',
-        consigneeEmail: defaultRecipient?.consigneeEmail || client.logisticsInfo?.consigneeEmail || '',
-        consigneeAddress: defaultRecipient?.consigneeAddress || client.logisticsInfo?.consigneeAddress || '',
+        receivers: [{
+          consigneeName: defaultRecipient?.consigneeName || client.logisticsInfo?.consigneeName || '',
+          consigneePhone: defaultRecipient?.consigneePhone || client.logisticsInfo?.consigneePhone || '',
+          consigneeEmail: defaultRecipient?.consigneeEmail || '',
+          consigneeAddress: defaultRecipient?.consigneeAddress || client.logisticsInfo?.consigneeAddress || '',
+          destCountry: countryValue || undefined,
+          destCity: cityValue || undefined,
+          consigneeZipCode: defaultRecipient?.consigneeZipCode || '',
+        }],
         senderCityId: defaultSender?.senderCityId || undefined,
         senderCountryId: defaultSender?.senderCountryId || undefined,
         consigneeCityId: defaultRecipient?.cityId || undefined,
         consigneeCountryId: defaultRecipient?.countryId || undefined,
-        destCountry: countryValue || undefined,
-        destCity: cityValue || undefined,
         serviceType: matchedLineProfile?.preferredServiceTypeCode || form.getFieldValue('serviceType'),
         paymentMethod: matchedLineProfile?.preferredPaymentMethod || form.getFieldValue('paymentMethod'),
         paymentChannel: matchedLineProfile?.preferredPaymentChannel || form.getFieldValue('paymentChannel'),
@@ -172,14 +192,7 @@ export const OrderCreate: React.FC<OrderCreateProps> = ({ onCancel, onSubmit, bu
     }
   };
 
-  const destCountry = Form.useWatch('destCountry', form);
-  const destCity = Form.useWatch('destCity', form);
   const transportType = Form.useWatch('transportType', form);
-  const routeId = Form.useWatch('routeId', form);
-  const cityOptions = useMemo(() => {
-    const country = countries.find((item) => item.countryCode === destCountry);
-    return country?.cities || [];
-  }, [countries, destCountry]);
 
   const serviceTypeOptions = useMemo(() => {
     const mode = (transportType === 'AIR' ? 'AIR' : 'SEA') as 'AIR' | 'SEA';
@@ -187,13 +200,27 @@ export const OrderCreate: React.FC<OrderCreateProps> = ({ onCancel, onSubmit, bu
   }, [baseOptions.ORDER_SERVICE_TYPE, transportType]);
 
   const expressCompanyOptions = baseOptions.EXPRESS_COMPANY || [];
+  const cargoTypeOptions = useMemo(() => {
+    const rows = baseOptions.CARGO_TYPE || [];
+    if (rows.length > 0) {
+      return rows.map((item) => ({
+        value: item.code,
+        label: item.label,
+      }));
+    }
+    return [
+      { value: 'GENERAL', label: '普货' },
+      { value: 'SENSITIVE', label: '非普货' },
+    ];
+  }, [baseOptions.CARGO_TYPE]);
+  const remarkTagOptions = (baseOptions.ORDER_REMARK_TAG && baseOptions.ORDER_REMARK_TAG.length > 0)
+    ? baseOptions.ORDER_REMARK_TAG
+    : [
+        { code: 'NO_BATTERY', label: '无电池', transportMode: 'ALL' as const },
+        { code: 'URGENT', label: '加急处理', transportMode: 'ALL' as const },
+        { code: 'FRAGILE', label: '易碎品', transportMode: 'ALL' as const },
+      ];
   const formItemLayout = { labelCol: { flex: '88px' }, wrapperCol: { flex: 'auto' } };
-
-  useEffect(() => {
-    if (routeId) return;
-    if (!destCountry || !destCity) return;
-    form.setFieldValue('routeCode', buildRouteCode(destCountry, destCity));
-  }, [routeId, destCountry, destCity, form]);
 
   useEffect(() => {
     if (!transportType) return;
@@ -258,16 +285,17 @@ export const OrderCreate: React.FC<OrderCreateProps> = ({ onCancel, onSubmit, bu
   const handleSmartPaste = (text: string) => {
     if (!text) return;
     const lines = text.split('\n').filter((l) => l.trim());
-    const parsed = lines.map((line) => {
-      const parts = line.split(/[\s\t,，]+/);
-      return {
-        courier: parts[0] || '',
-        trackingNo: parts[1] || '',
-        itemName: parts[2] || '未知品名',
-        pieces: parseInt(parts[3] || '1', 10) || 1,
-        weight: parseFloat(parts[4] || '0') || 0,
-      };
-    }).filter((p) => p.trackingNo);
+      const parsed = lines.map((line) => {
+        const parts = line.split(/[\s\t,，]+/);
+        return {
+          courier: parts[0] || '',
+          trackingNo: parts[1] || '',
+          itemName: parts[2] || '未知品名',
+          cargoType: 'GENERAL',
+          pieces: parseInt(parts[3] || '1', 10) || 1,
+          weight: parseFloat(parts[4] || '0') || 0,
+        };
+      }).filter((p) => p.trackingNo);
 
     if (parsed.length > 0) {
       const current = form.getFieldValue('expressPackages') || [];
@@ -287,11 +315,10 @@ export const OrderCreate: React.FC<OrderCreateProps> = ({ onCancel, onSubmit, bu
         'serviceType',
         'senderName',
         'senderPhone',
-        'consigneeName',
-        'consigneePhone',
-        'destCountry',
-        'destCity',
-        'consigneeAddress',
+        ['receivers', 0, 'consigneeName'],
+        ['receivers', 0, 'consigneePhone'],
+        ['receivers', 0, 'destCountry'],
+        ['receivers', 0, 'consigneeAddress'],
       ]);
     } catch {
       return;
@@ -306,11 +333,17 @@ export const OrderCreate: React.FC<OrderCreateProps> = ({ onCancel, onSubmit, bu
       const computedTotalValue = pkgs.reduce((acc: number, pkg: any) => acc + (pkg?.declaredValue || 0), 0);
       const basePrice = values.transportType === 'AIR' ? 55 : values.transportType === 'SEA' ? 12 : 0;
       const computedFreight = computedTotalWeight > 0 ? computedTotalWeight * basePrice + 100 : 0;
-      const finalRouteCode = values.routeCode || buildRouteCode(values.destCountry, values.destCity);
+      const primaryReceiver = values.receivers?.[0] || {};
+      const finalRouteCode = values.routeCode || buildRouteCode(primaryReceiver.destCountry, primaryReceiver.destCity);
       const finalWarehouseEntryNo = String(values.warehouseEntryNo || '').trim() || undefined;
-      const selectedCountry = countries.find((item) => item.countryCode === values.destCountry);
-      const selectedCity = selectedCountry?.cities.find((item) => item.cityCode === values.destCity);
-      const finalRemark = String(values.remark || '').trim();
+      const selectedCountry = countries.find((item) => item.countryCode === primaryReceiver.destCountry);
+      const selectedCity = selectedCountry?.cities.find((item) => item.cityCode === primaryReceiver.destCity);
+      const selectedRemarkTags = Array.isArray(values.remarkTags)
+        ? values.remarkTags.filter((item: unknown) => String(item || '').trim())
+        : [];
+      const customRemark = String(values.remarkCustom || '').trim();
+      const fixedRemark = selectedRemarkTags.length > 0 ? `固定备注: ${selectedRemarkTags.join('、')}` : '';
+      const finalRemark = [fixedRemark, customRemark].filter(Boolean).join('；');
 
       const payload = {
         customerId: values.clientCode,
@@ -324,17 +357,21 @@ export const OrderCreate: React.FC<OrderCreateProps> = ({ onCancel, onSubmit, bu
         sender: values.senderName,
         senderPhone: values.senderPhone,
         senderAddress: values.senderAddress,
-        consignee: values.consigneeName,
-        consigneePhone: values.consigneePhone,
-        consigneeEmail: values.consigneeEmail,
-        destCountry: selectedCountry?.countryName || values.destCountry,
-        destCity: selectedCity?.cityName || values.destCity,
-        destAddress: values.consigneeAddress,
+        consignee: primaryReceiver.consigneeName,
+        consigneePhone: primaryReceiver.consigneePhone,
+        consigneeEmail: primaryReceiver.consigneeEmail,
+        destCountry: selectedCountry?.countryName || primaryReceiver.destCountry,
+        destCity: selectedCity?.cityName || primaryReceiver.destCity,
+        destAddress: primaryReceiver.consigneeAddress,
+        consigneeState: primaryReceiver.consigneeState,
+        consigneeZipCode: primaryReceiver.consigneeZipCode,
+        allReceivers: values.receivers,
         transportType: values.transportType,
         serviceType: values.serviceType,
         routeId: values.routeId,
         routeCode: finalRouteCode,
         warehouseEntryNo: finalWarehouseEntryNo,
+        exportMode: values.exportMode,
         containerType: values.containerType,
         totalPieces: computedTotalPieces,
         totalWeight: computedTotalWeight,
@@ -344,6 +381,7 @@ export const OrderCreate: React.FC<OrderCreateProps> = ({ onCancel, onSubmit, bu
         salesPerson: values.salesPerson,
         paymentMethod: values.paymentMethod,
         paymentChannel: values.paymentChannel,
+        deliveryMethod: values.deliveryMethod || null,
         currency: values.currency,
         remark: finalRemark,
         expressPackages: pkgs.map((p: any) => ({
@@ -351,7 +389,7 @@ export const OrderCreate: React.FC<OrderCreateProps> = ({ onCancel, onSubmit, bu
           trackingNo: p.trackingNo,
           itemName: p.itemName,
           category: p.category,
-          cargoType: p.cargoType,
+          cargoType: normalizeCargoType(p.cargoType),
           pieces: p.pieces || 1,
           weight: p.weight || 0,
           declaredValue: p.declaredValue || 0,
@@ -392,21 +430,21 @@ export const OrderCreate: React.FC<OrderCreateProps> = ({ onCancel, onSubmit, bu
       size="middle"
       onValuesChange={() => setTimeout(recalcStats, 0)}
       initialValues={{
-        expressPackages: [{}],
+        expressPackages: [{ cargoType: 'GENERAL' }],
         paymentMethod: 'PREPAID',
-        paymentChannel: 'WECHAT',
+        paymentChannel: 'PUBLIC_ACCOUNT',
+        deliveryMethod: undefined,
         currency: 'CNY',
         salesPerson: '张业务',
         transportType: resolvedTransportType,
         serviceType: resolvedTransportType === 'AIR' ? 'STANDARD_AIR' : 'LCL_SEA',
+        exportMode: 'BUYER_EXPORT',
         senderName: '',
         senderPhone: '',
         senderAddress: '',
-        consigneeName: '',
-        consigneePhone: '',
-        consigneeEmail: '',
-        consigneeAddress: '',
-        remark: '',
+        receivers: [{}],
+        remarkTags: [],
+        remarkCustom: '',
       }}
     >
       <Form.Item name="transportType" hidden>
@@ -421,12 +459,7 @@ export const OrderCreate: React.FC<OrderCreateProps> = ({ onCancel, onSubmit, bu
       <Form.Item name="currency" hidden>
         <Input />
       </Form.Item>
-      <Form.Item name="paymentMethod" hidden>
-        <Input />
-      </Form.Item>
-      <Form.Item name="paymentChannel" hidden>
-        <Input />
-      </Form.Item>
+      {/* paymentMethod / paymentChannel / deliveryMethod 已移到基础信息区域可见 */}
       <Form.Item name="containerType" hidden>
         <Input />
       </Form.Item>
@@ -492,38 +525,107 @@ export const OrderCreate: React.FC<OrderCreateProps> = ({ onCancel, onSubmit, bu
                 {...formItemLayout}
                 name="warehouseEntryNo"
                 label="入仓号"
-                tooltip="留空后系统自动生成短号，便于客户标注快递"
+                tooltip="选择客户后自动生成，格式：客户编号+流水号"
                 style={formItemStyle}
               >
-                <Input placeholder="留空自动生成短号" />
+                <Input
+                  placeholder={selectedClient ? '已自动生成' : '请先选择客户'}
+                  readOnly
+                  style={{ fontFamily: 'monospace', fontWeight: 600 }}
+                />
               </Form.Item>
             </Col>
             <Col span={12}>
               <Form.Item
                 {...formItemLayout}
-                name="routeId"
-                label="线路"
+                name="exportMode"
+                label="出口方式"
                 style={formItemStyle}
               >
-                <Select
-                  showSearch
-                  allowClear
-                  loading={routesLoading}
-                  placeholder={routesLoading ? '加载线路中...' : '请选择线路'}
-                  optionFilterProp="label"
-                  onChange={(value) => handleRouteChange(value)}
-                  options={routes.map((route: any) => ({
-                    value: route.id,
-                    label: `${route.originCountry}-${route.originCity} → ${route.destCountry}-${route.destCity}`,
-                  }))}
-                />
+                <Select>
+                  <Option value="BUYER_EXPORT">买单出口</Option>
+                  <Option value="SELF_DOCS_EXPORT">自备单证出口</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={20}>
+            <Col span={12}>
+              <Form.Item
+                {...formItemLayout}
+                name="paymentMethod"
+                label="支付方式"
+                style={formItemStyle}
+              >
+                <Select>
+                  <Option value="PREPAID">预付</Option>
+                  <Option value="COLLECT">到付</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                {...formItemLayout}
+                name="deliveryMethod"
+                label="交付方式"
+                style={formItemStyle}
+              >
+                <Select placeholder="可选，入库后由仓管决定" allowClear>
+                  <Option value="DELIVERY">配送（送货上门）</Option>
+                  <Option value="PICKUP">自提（客户到站取货）</Option>
+                </Select>
               </Form.Item>
             </Col>
           </Row>
         </div>
 
         <div style={sectionStyle}>
-          <div style={sectionTitleStyle}>发货信息</div>
+          <div style={{ ...sectionTitleStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>发货信息</span>
+            {selectedClient && (
+              <Button type="link" size="small" onClick={() => setSenderPickerVisible(true)}>从客户发货人中选择</Button>
+            )}
+          </div>
+          <Modal
+            title="选择发货人"
+            open={senderPickerVisible}
+            onCancel={() => setSenderPickerVisible(false)}
+            footer={null}
+            width={700}
+            destroyOnClose
+          >
+            <Table
+              dataSource={[
+                ...(selectedClient?.logisticsInfo?.senderContacts || []),
+                ...(selectedClient?.senderProfiles || []),
+              ].map((c: any, i: number) => ({ ...c, _idx: i }))}
+              rowKey="_idx"
+              size="small"
+              pagination={false}
+              columns={[
+                { title: '姓名', dataIndex: 'senderName', key: 'name', width: 100, render: (_: any, r: any) => r.senderName || r.name || '-' },
+                { title: '电话', dataIndex: 'senderPhone', key: 'phone', width: 130, render: (_: any, r: any) => r.senderPhone || r.phone || '-' },
+                { title: '国家', dataIndex: 'senderCountry', key: 'country', width: 80, render: (_: any, r: any) => r.senderCountry || r.country || '-' },
+                { title: '城市', dataIndex: 'senderCity', key: 'city', width: 80, render: (_: any, r: any) => r.senderCity || r.city || '-' },
+                { title: '地址', dataIndex: 'senderAddress', key: 'address', ellipsis: true, render: (_: any, r: any) => r.senderAddress || r.address || '-' },
+                {
+                  title: '操作', key: 'action', width: 70,
+                  render: (_: any, r: any) => (
+                    <Button type="link" size="small" onClick={() => {
+                      form.setFieldsValue({
+                        senderName: r.senderName || r.name || '',
+                        senderPhone: r.senderPhone || r.phone || '',
+                        senderAddress: r.senderAddress || r.address || '',
+                      });
+                      setSenderPickerVisible(false);
+                      message.success('已选择发货人');
+                    }}>选择</Button>
+                  ),
+                },
+              ]}
+              locale={{ emptyText: '暂无发货人信息，请先在客户详情中添加' }}
+            />
+          </Modal>
           <Row gutter={20}>
             <Col span={12}>
               <Form.Item
@@ -564,99 +666,142 @@ export const OrderCreate: React.FC<OrderCreateProps> = ({ onCancel, onSubmit, bu
         </div>
 
         <div style={sectionStyle}>
-          <div style={sectionTitleStyle}>收货信息</div>
-          <Row gutter={20}>
-            <Col span={12}>
-              <Form.Item
-                {...formItemLayout}
-                name="consigneeName"
-                label="姓名"
-                rules={[{ required: true, message: '请输入收货人姓名' }]}
-                style={formItemStyle}
-              >
-                <Input placeholder="收货人姓名" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                {...formItemLayout}
-                name="consigneePhone"
-                label="电话"
-                rules={[{ required: true, message: '请输入收货人电话' }]}
-                style={formItemStyle}
-              >
-                <Input placeholder="联系电话" />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={20}>
-            <Col span={12}>
-              <Form.Item
-                {...formItemLayout}
-                name="destCountry"
-                label="国家"
-                rules={[{ required: true, message: '请选择国家' }]}
-                style={formItemStyle}
-              >
-                <Select
-                  placeholder="选择国家"
-                  loading={baseLoading}
-                  onChange={() => {
-                    form.setFieldsValue({
-                      routeId: undefined,
-                      destCity: undefined,
-                    });
-                  }}
-                >
-                  {countries.map((country) => (
-                    <Option key={country.countryCode} value={country.countryCode}>
-                      {country.countryName}
-                    </Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                {...formItemLayout}
-                name="destCity"
-                label="城市"
-                rules={[{ required: true, message: '请选择城市' }]}
-                style={formItemStyle}
-              >
-                <Select
-                  placeholder={destCountry ? '选择城市' : '请先选择国家'}
-                  disabled={!destCountry}
-                  loading={baseLoading}
-                  onChange={() => form.setFieldValue('routeId', undefined)}
-                >
-                  {cityOptions.map((city) => (
-                    <Option key={city.cityCode} value={city.cityCode}>
-                      {city.cityName}
-                    </Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={20}>
-            <Col span={12}>
-              <Form.Item {...formItemLayout} name="consigneeEmail" label="邮箱" style={formItemStyle}>
-                <Input placeholder="邮箱（选填）" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                {...formItemLayout}
-                name="consigneeAddress"
-                label="详细地址"
-                rules={[{ required: true, message: '请输入收货地址' }]}
-                style={formItemStyle}
-              >
-                <Input placeholder="收货详细地址" />
-              </Form.Item>
-            </Col>
-          </Row>
+          <div style={{ ...sectionTitleStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>收货信息</span>
+            {selectedClient && (
+              <Button type="link" size="small" onClick={() => setReceiverPickerVisible(true)}>从客户收件人中选择</Button>
+            )}
+          </div>
+          <Modal
+            title="选择收件人"
+            open={receiverPickerVisible}
+            onCancel={() => setReceiverPickerVisible(false)}
+            footer={null}
+            width={850}
+            destroyOnClose
+          >
+            <Table
+              dataSource={[
+                ...(selectedClient?.logisticsInfo?.receiverContacts || []),
+                ...(selectedClient?.recipientAddresses || []),
+              ].map((c: any, i: number) => ({ ...c, _idx: i }))}
+              rowKey="_idx"
+              size="small"
+              pagination={false}
+              columns={[
+                { title: '姓名', key: 'name', width: 90, render: (_: any, r: any) => r.consigneeName || r.name || '-' },
+                { title: '电话', key: 'phone', width: 130, render: (_: any, r: any) => r.consigneePhone || r.phone || '-' },
+                { title: '国家', key: 'country', width: 80, render: (_: any, r: any) => r.consigneeCountry || r.country || '-' },
+                { title: '城市', key: 'city', width: 80, render: (_: any, r: any) => r.consigneeCity || r.city || '-' },
+                { title: '邮编', key: 'zip', width: 70, render: (_: any, r: any) => r.consigneeZipCode || r.zipCode || '-' },
+                { title: '地址', key: 'address', ellipsis: true, render: (_: any, r: any) => r.consigneeAddress || r.address || '-' },
+                {
+                  title: '操作', key: 'action', width: 70,
+                  render: (_: any, r: any) => (
+                    <Button type="link" size="small" onClick={() => {
+                      const receivers = form.getFieldValue('receivers') || [];
+                      const newReceiver = {
+                        consigneeName: r.consigneeName || r.name || '',
+                        consigneePhone: r.consigneePhone || r.phone || '',
+                        destCountry: r.consigneeCountry || r.countryId || '',
+                        destCity: r.consigneeCity || r.cityId || '',
+                        consigneeState: r.consigneeState || '',
+                        consigneeZipCode: r.consigneeZipCode || r.zipCode || '',
+                        consigneeAddress: r.consigneeAddress || r.address || '',
+                        consigneeEmail: r.consigneeEmail || r.email || '',
+                      };
+                      const first = receivers[0];
+                      const isFirstEmpty = !first?.consigneeName && !first?.consigneePhone;
+                      form.setFieldsValue({
+                        receivers: isFirstEmpty ? [newReceiver] : [...receivers, newReceiver],
+                      });
+                      setReceiverPickerVisible(false);
+                      message.success('已添加收件人');
+                    }}>选择</Button>
+                  ),
+                },
+              ]}
+              locale={{ emptyText: '暂无收件人信息，请先在客户详情中添加' }}
+            />
+          </Modal>
+
+          <Form.List name="receivers" initialValue={[{}]}>
+            {(fields, { add, remove }) => (
+              <>
+                {fields.map(({ key, name, ...restField }, index) => (
+                  <div key={key} style={{ background: index % 2 === 0 ? '#fafafa' : '#fff', padding: '12px 8px', borderRadius: 6, marginBottom: 8, position: 'relative' }}>
+                    {fields.length > 1 && (
+                      <div style={{ position: 'absolute', right: 8, top: 8 }}>
+                        <Button type="text" danger size="small" icon={<DeleteOutlined />} onClick={() => remove(name)}>删除</Button>
+                      </div>
+                    )}
+                    {fields.length > 1 && <Text type="secondary" style={{ fontSize: 12, marginBottom: 8, display: 'block' }}>收件人 #{index + 1}</Text>}
+                    <Row gutter={20}>
+                      <Col span={12}>
+                        <Form.Item {...restField} {...formItemLayout} name={[name, 'consigneeName']} label="姓名"
+                          rules={[{ required: true, message: '请输入收货人姓名' }]} style={formItemStyle}>
+                          <Input placeholder="收货人姓名" />
+                        </Form.Item>
+                      </Col>
+                      <Col span={12}>
+                        <Form.Item {...restField} {...formItemLayout} name={[name, 'consigneePhone']} label="电话"
+                          rules={[{ required: true, message: '请输入收货人电话' }]} style={formItemStyle}>
+                          <Input placeholder="联系电话（含国际区号）" />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                    <Row gutter={20}>
+                      <Col span={12}>
+                        <Form.Item {...restField} {...formItemLayout} name={[name, 'destCountry']} label="国家"
+                          rules={[{ required: true, message: '请选择国家' }]} style={formItemStyle}>
+                          <Select placeholder="选择国家" loading={baseLoading}>
+                            {countries.map((country) => (
+                              <Option key={country.countryCode} value={country.countryCode}>
+                                {country.countryName}
+                              </Option>
+                            ))}
+                          </Select>
+                        </Form.Item>
+                      </Col>
+                      <Col span={12}>
+                        <Form.Item {...restField} {...formItemLayout} name={[name, 'destCity']} label="城市" style={formItemStyle}>
+                          <Input placeholder="城市名称" />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                    <Row gutter={20}>
+                      <Col span={12}>
+                        <Form.Item {...restField} {...formItemLayout} name={[name, 'consigneeState']} label="州/省" style={formItemStyle}>
+                          <Input placeholder="州/省（如适用）" />
+                        </Form.Item>
+                      </Col>
+                      <Col span={12}>
+                        <Form.Item {...restField} {...formItemLayout} name={[name, 'consigneeZipCode']} label="邮编" style={formItemStyle}>
+                          <Input placeholder="邮政编码" />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                    <Row gutter={20}>
+                      <Col span={12}>
+                        <Form.Item {...restField} {...formItemLayout} name={[name, 'consigneeAddress']} label="详细地址"
+                          rules={[{ required: true, message: '请输入收货地址' }]} style={formItemStyle}>
+                          <Input placeholder="街道门牌号等详细地址" />
+                        </Form.Item>
+                      </Col>
+                      <Col span={12}>
+                        <Form.Item {...restField} {...formItemLayout} name={[name, 'consigneeEmail']} label="邮箱" style={formItemStyle}>
+                          <Input placeholder="邮箱（选填）" />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                  </div>
+                ))}
+                <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />} style={{ marginBottom: 0 }}>
+                  添加收件人
+                </Button>
+              </>
+            )}
+          </Form.List>
         </div>
 
         <div style={sectionStyle}>
@@ -685,14 +830,14 @@ export const OrderCreate: React.FC<OrderCreateProps> = ({ onCancel, onSubmit, bu
                     marginBottom: 6,
                   }}
                 >
-                  <Col span={4}>物流公司</Col>
+                  <Col span={3}>物流公司</Col>
                   <Col span={5}>第三方运单</Col>
                   <Col span={4}>品名</Col>
+                  <Col span={3}>货物属性</Col>
                   <Col span={3}>重量Kg</Col>
                   <Col span={2}>件数</Col>
                   <Col span={3}>货值USD</Col>
-                  <Col span={2}>备注</Col>
-                  <Col span={1}>删</Col>
+                  <Col span={1}></Col>
                 </Row>
                 {fields.map(({ key, name, ...restField }) => (
                   <Row
@@ -704,7 +849,7 @@ export const OrderCreate: React.FC<OrderCreateProps> = ({ onCancel, onSubmit, bu
                       borderBottom: `1px solid ${token.colorBorderSecondary}`,
                     }}
                   >
-                    <Col span={4}>
+                    <Col span={3}>
                       <Form.Item {...restField} name={[name, 'courier']} noStyle>
                         <Select placeholder="物流公司" allowClear>
                           {expressCompanyOptions.map((item) => (
@@ -724,6 +869,15 @@ export const OrderCreate: React.FC<OrderCreateProps> = ({ onCancel, onSubmit, bu
                       </Form.Item>
                     </Col>
                     <Col span={3}>
+                      <Form.Item {...restField} name={[name, 'cargoType']} noStyle>
+                        <Select placeholder="普/非普">
+                          {cargoTypeOptions.map((item) => (
+                            <Option key={item.value} value={item.value}>{item.label}</Option>
+                          ))}
+                        </Select>
+                      </Form.Item>
+                    </Col>
+                    <Col span={3}>
                       <Form.Item {...restField} name={[name, 'weight']} noStyle>
                         <InputNumber min={0} step={0.1} style={{ width: '100%' }} placeholder="0" />
                       </Form.Item>
@@ -738,11 +892,6 @@ export const OrderCreate: React.FC<OrderCreateProps> = ({ onCancel, onSubmit, bu
                         <InputNumber min={0} style={{ width: '100%' }} placeholder="0" />
                       </Form.Item>
                     </Col>
-                    <Col span={2}>
-                      <Form.Item {...restField} name={[name, 'remark']} noStyle>
-                        <Input placeholder="备注" />
-                      </Form.Item>
-                    </Col>
                     <Col span={1}>
                       <Button
                         type="text"
@@ -754,7 +903,7 @@ export const OrderCreate: React.FC<OrderCreateProps> = ({ onCancel, onSubmit, bu
                   </Row>
                 ))}
                 <div style={{ paddingTop: 10 }}>
-                  <Button type="dashed" icon={<PlusOutlined />} onClick={() => add()} block>
+                  <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ cargoType: 'GENERAL' })} block>
                     添加一行
                   </Button>
                 </div>
@@ -767,8 +916,16 @@ export const OrderCreate: React.FC<OrderCreateProps> = ({ onCancel, onSubmit, bu
           <div style={sectionTitleStyle}>备注</div>
           <Row gutter={20}>
             <Col span={24}>
-              <Form.Item {...formItemLayout} name="remark" label="备注" style={{ marginBottom: 0 }}>
-                <TextArea rows={3} maxLength={120} showCount placeholder="可补充备注说明（最多120字）" />
+              <Form.Item {...formItemLayout} name="remarkTags" label="固定备注" style={formItemStyle}>
+                <Select
+                  mode="multiple"
+                  allowClear
+                  placeholder="选择固定备注（可多选）"
+                  options={remarkTagOptions.map((item) => ({ value: item.code, label: item.label }))}
+                />
+              </Form.Item>
+              <Form.Item {...formItemLayout} name="remarkCustom" label="自定义备注" style={{ marginBottom: 0 }}>
+                <TextArea rows={3} maxLength={120} showCount placeholder="补充自定义说明（最多120字）" />
               </Form.Item>
             </Col>
           </Row>

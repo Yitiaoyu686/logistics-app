@@ -250,6 +250,7 @@ export function createV2Tables(): void {
   ensureColumn('crm_customer', 'credit_level', 'TEXT');
   ensureColumn('crm_customer', 'remark', 'TEXT');
   ensureColumn('crm_customer', 'enter_pool_time', 'TEXT');
+  ensureColumn('crm_customer', 'enterprise_info', 'TEXT');
 
   // WMS unmatched-item fields (no-order inbound pool + recommendation/matching context).
   ensureColumn('wms_inbound_item', 'sender_name', 'TEXT');

@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   Card, Table, Button, Input, Select, DatePicker, Tag, Space,
-  Row, Col, message, theme
+  Row, Col, message, theme, Modal, Form
 } from 'antd';
 import {
   SearchOutlined, ReloadOutlined, BellOutlined,
@@ -27,9 +27,7 @@ interface StockWaybillRecord {
   paymentMethod: 'PREPAID' | 'COD';
   paymentStatus: 'PAID' | 'UNPAID';
   fulfillmentMethod: 'DELIVERY' | 'SELF_PICKUP';
-  deliveryStatus: 'IN_STOCK' | 'DPN_BOUND' | 'OUT_FOR_DELIVERY' | 'DELIVERED' | 'PICKUP_PENDING' | 'PICKED_UP' | 'DELIVERY_EXCEPTION';
-  dpnNo: string | null;
-  pickupNo: string | null;
+  deliveryStatus: 'IN_STOCK' | 'DPN_BOUND' | 'PICKUP_PENDING';
   logisticsStatus: string;
   logisticsStation: string;
   notified: boolean;
@@ -57,51 +55,79 @@ const LOCATION_DATA: Record<string, Record<string, string[]>> = {
 };
 
 // ---- Mock data ----
-const TRACKING_NOS = [
-  '190828000021', '191025000041', '191025000040', '191012000003', '191013000009',
-  '191021000039', '191023000002', '191025000039', '191025000038', '190922000006',
-];
 const USER_NAMES = ['Karena', '箴媄子', 'Tom', 'Karena', '敏敏lena', 'Smile', '良大大', '光明', '小莫', 'Karena'];
 const WEIGHTS = [13.5, 1, 7, 22.5, 4, 1, 31, 16, 1, 8];
 const PIECES = [1, 1, 1, 18, 1, 1, 1, 1, 1, 1];
 const DESCRIPTIONS = ['普货', '其它', '普货', '其它', '普货', '其它', '普货', '其它', '普货', '其它'];
+const MOCK_MASTER_GROUP_SIZES = [4, 3, 2, 3, 2, 4, 2];
+
+const formatMockMasterOrderNo = (index: number) => {
+  const day = 20 + (index % 9);
+  return `S-202603${String(day).padStart(2, '0')}990001`;
+};
+
+const formatMockSubOrderNo = (masterOrderNo: string, lineNo: number) => {
+  return `${masterOrderNo}-${String(lineNo).padStart(2, '0')}`;
+};
 
 const buildMockData = (): StockWaybillRecord[] => {
   const locationEntries = Object.entries(LOCATION_DATA);
   const records: StockWaybillRecord[] = [];
-  for (let i = 0; i < 20; i++) {
-    const idx = i % 10;
-    const salesPerson = i < 10 ? 'Smile' : 'Andi';
-    const [countryLabel, cities] = locationEntries[i % locationEntries.length];
+  let globalIndex = 0;
+
+  MOCK_MASTER_GROUP_SIZES.forEach((groupSize, groupIndex) => {
+    const masterOrderNo = formatMockMasterOrderNo(groupIndex);
+    const idx = groupIndex % 10;
+    const salesPerson = groupIndex % 2 === 0 ? 'Smile' : 'Andi';
+    const [countryLabel, cities] = locationEntries[groupIndex % locationEntries.length];
     const cityNames = Object.keys(cities);
-    const cityLabel = cityNames[(i + idx) % cityNames.length];
+    const cityLabel = cityNames[(groupIndex + idx) % cityNames.length];
     const stationList = cities[cityLabel];
-    const stationName = stationList[i % stationList.length];
-    records.push({
-      id: `stock-${i + 1}`,
-      trackingNo: TRACKING_NOS[idx],
-      orderNo: `ORD-${20260310 + (i % 7)}-${String(100 + i).padStart(3, '0')}`,
-      country: countryLabel,
-      city: cityLabel,
-      salesPerson,
-      userName: USER_NAMES[idx],
-      route: 'CAN.CHN-LOS.NGN',
-      serviceType: i % 2 === 0 ? 'EXPRESS' : 'STANDARD',
-      description: DESCRIPTIONS[idx],
-      weightKg: WEIGHTS[idx],
-      pieces: PIECES[idx],
-      paymentMethod: i % 2 === 0 ? 'COD' : 'PREPAID',
-      paymentStatus: i % 2 === 0 ? 'PAID' : 'UNPAID',
-      fulfillmentMethod: i % 4 === 0 ? 'SELF_PICKUP' : 'DELIVERY',
-      deliveryStatus: (['IN_STOCK', 'DPN_BOUND', 'OUT_FOR_DELIVERY', 'PICKUP_PENDING', 'DELIVERED', 'PICKED_UP', 'DELIVERY_EXCEPTION'] as const)[i % 7],
-      dpnNo: i % 4 === 0 ? null : `DPN202603${String(100 + (i % 12)).padStart(3, '0')}`,
-      pickupNo: i % 4 === 0 ? `PUP-${dayjs().format('YYYYMMDD')}-${String(50 + i).padStart(3, '0')}` : null,
-      logisticsStatus: '在库',
-      logisticsStation: stationName,
-      notified: false,
-      updatedAt: dayjs().subtract(i, 'day').format('YYYY-MM-DD HH:mm'),
-    });
-  }
+    const route = groupIndex % 3 === 0 ? 'CAN.CHN-LOS.NGN' : groupIndex % 3 === 1 ? 'CAN.CHN-ACC.GHA' : 'SZX.CHN-ABV.NGN';
+    const paymentMethod = groupIndex % 2 === 0 ? 'COD' : 'PREPAID';
+    const paymentStatus = groupIndex % 2 === 0 ? 'PAID' : 'UNPAID';
+    const fulfillmentMethod = groupIndex % 3 === 0 ? 'SELF_PICKUP' : 'DELIVERY';
+
+    for (let lineIndex = 0; lineIndex < groupSize; lineIndex++) {
+      const recordIndex = globalIndex % 10;
+      const stationName = stationList[lineIndex % stationList.length];
+      const subOrderNo = formatMockSubOrderNo(masterOrderNo, lineIndex + 1);
+
+      records.push({
+        id: `stock-${globalIndex + 1}`,
+        trackingNo: subOrderNo,
+        orderNo: masterOrderNo,
+        country: countryLabel,
+        city: cityLabel,
+        salesPerson,
+        userName: USER_NAMES[idx],
+        route,
+        serviceType: lineIndex % 2 === 0 ? 'EXPRESS' : 'STANDARD',
+        description: DESCRIPTIONS[recordIndex],
+        weightKg: WEIGHTS[recordIndex],
+        pieces: PIECES[recordIndex],
+        paymentMethod,
+        paymentStatus,
+        fulfillmentMethod,
+        deliveryStatus: fulfillmentMethod === 'SELF_PICKUP'
+          ? 'PICKUP_PENDING'
+          : globalIndex % 2 === 0
+            ? 'IN_STOCK'
+            : 'DPN_BOUND',
+        logisticsStatus: fulfillmentMethod === 'SELF_PICKUP'
+          ? '待自提'
+          : globalIndex % 2 === 0
+            ? '在库待分配'
+            : '待配送',
+        logisticsStation: stationName,
+        notified: false,
+        updatedAt: dayjs().subtract(globalIndex, 'day').format('YYYY-MM-DD HH:mm'),
+      });
+
+      globalIndex += 1;
+    }
+  });
+
   return records;
 };
 
@@ -137,7 +163,7 @@ export const DestStockList: React.FC<{ warehouseId?: string; businessMode?: stri
 
   // Filtered data
   const filteredRecords = useMemo(() => {
-    let list = [...records];
+    let list = records.filter(r => ['IN_STOCK', 'DPN_BOUND', 'PICKUP_PENDING'].includes(r.deliveryStatus));
 
     if (country) {
       list = list.filter(r => r.country === country);
@@ -188,9 +214,7 @@ export const DestStockList: React.FC<{ warehouseId?: string; businessMode?: stri
           r.orderNo.toLowerCase().includes(kw) ||
           r.userName.toLowerCase().includes(kw) ||
           r.salesPerson.toLowerCase().includes(kw) ||
-          r.route.toLowerCase().includes(kw) ||
-          String(r.dpnNo || '').toLowerCase().includes(kw) ||
-          String(r.pickupNo || '').toLowerCase().includes(kw)
+          r.route.toLowerCase().includes(kw)
       );
     }
 
@@ -237,25 +261,58 @@ export const DestStockList: React.FC<{ warehouseId?: string; businessMode?: stri
     message.success('打印任务已发送');
   };
 
+  // 安排配送
+  const handleArrangeDelivery = (id: string) => {
+    Modal.confirm({
+      title: '安排配送',
+      content: (
+        <Form layout="vertical" id="deliveryForm" style={{ marginTop: 16 }}>
+          <Form.Item label="配送员姓名" required><Input placeholder="请输入配送员姓名" id="driverName" /></Form.Item>
+          <Form.Item label="配送员电话" required><Input placeholder="请输入配送员电话" id="driverPhone" /></Form.Item>
+        </Form>
+      ),
+      okText: '确认安排',
+      onOk: () => {
+        setRecords(prev => prev.map(r => r.id === id ? {
+          ...r, fulfillmentMethod: 'DELIVERY' as const, deliveryStatus: 'DPN_BOUND' as const, logisticsStatus: '待配送',
+        } : r));
+        message.success('已安排配送');
+      },
+    });
+  };
+
+  // 安排自提
+  const handleArrangePickup = (id: string) => {
+    setRecords(prev => prev.map(r => r.id === id ? {
+      ...r, fulfillmentMethod: 'SELF_PICKUP' as const, deliveryStatus: 'PICKUP_PENDING' as const, logisticsStatus: '待自提',
+    } : r));
+    message.success('已安排自提');
+  };
+
+  // 转为配送
+  const handleSwitchToDelivery = (id: string) => {
+    handleArrangeDelivery(id);
+  };
+
+  // 转为自提
+  const handleSwitchToPickup = (id: string) => {
+    setRecords(prev => prev.map(r => r.id === id ? {
+      ...r, fulfillmentMethod: 'SELF_PICKUP' as const, deliveryStatus: 'PICKUP_PENDING' as const, logisticsStatus: '待自提',
+    } : r));
+    message.success('已转为自提');
+  };
+
   const columns = [
     {
-      title: '序号',
-      key: 'index',
-      width: 60,
-      align: 'center' as const,
-      render: (_: unknown, __: StockWaybillRecord, index: number) => index + 1,
-    },
-    {
       title: '运单号',
-      dataIndex: 'trackingNo',
-      key: 'trackingNo',
-      width: 140,
-    },
-    {
-      title: '订单号',
-      dataIndex: 'orderNo',
-      key: 'orderNo',
-      width: 170,
+      key: 'waybillNo',
+      width: 220,
+      render: (_: unknown, record: StockWaybillRecord) => (
+        <Space direction="vertical" size={2}>
+          <span style={{ fontWeight: 600, color: token.colorText }}>{record.trackingNo}</span>
+          <span style={{ fontSize: 12, color: token.colorTextSecondary }}>{record.orderNo}</span>
+        </Space>
+      ),
     },
     {
       title: '业务员',
@@ -339,34 +396,22 @@ export const DestStockList: React.FC<{ warehouseId?: string; businessMode?: stri
       ),
     },
     {
-      title: 'DPN/自提单',
-      key: 'dispatchNo',
-      width: 170,
-      render: (_: unknown, record: StockWaybillRecord) => record.dpnNo || record.pickupNo || '-',
-    },
-    {
       title: '末端状态',
       key: 'deliveryStatus',
       width: 180,
       render: (_: unknown, record: StockWaybillRecord) => (
         <Space size={4}>
           <Tag color={
-            record.deliveryStatus === 'DELIVERED' || record.deliveryStatus === 'PICKED_UP'
-              ? 'green'
-              : record.deliveryStatus === 'DELIVERY_EXCEPTION'
-                ? 'red'
-                : record.deliveryStatus === 'OUT_FOR_DELIVERY'
-                  ? 'processing'
-                  : 'default'
+            record.deliveryStatus === 'PICKUP_PENDING'
+              ? 'purple'
+              : record.deliveryStatus === 'DPN_BOUND'
+                ? 'blue'
+                : 'processing'
           }>
             {{
               IN_STOCK: '在库待分配',
-              DPN_BOUND: '已分配DPN',
-              OUT_FOR_DELIVERY: '配送中',
-              DELIVERED: '已签收',
+              DPN_BOUND: '待配送',
               PICKUP_PENDING: '待自提',
-              PICKED_UP: '已自提',
-              DELIVERY_EXCEPTION: '配送异常',
             }[record.deliveryStatus]}
           </Tag>
           <span style={{ fontSize: 12, color: token.colorTextSecondary }}>{record.logisticsStation}</span>
@@ -376,9 +421,21 @@ export const DestStockList: React.FC<{ warehouseId?: string; businessMode?: stri
     {
       title: '操作',
       key: 'action',
-      width: 140,
+      width: 220,
       render: (_: unknown, record: StockWaybillRecord) => (
-        <Space size={4}>
+        <Space size={4} wrap>
+          {record.deliveryStatus === 'IN_STOCK' && (
+            <>
+              <Button type="link" size="small" onClick={() => handleArrangeDelivery(record.id)}>安排配送</Button>
+              <Button type="link" size="small" onClick={() => handleArrangePickup(record.id)}>安排自提</Button>
+            </>
+          )}
+          {record.deliveryStatus === 'DPN_BOUND' && (
+            <Button type="link" size="small" onClick={() => handleSwitchToPickup(record.id)}>转为自提</Button>
+          )}
+          {record.deliveryStatus === 'PICKUP_PENDING' && (
+            <Button type="link" size="small" onClick={() => handleSwitchToDelivery(record.id)}>转为配送</Button>
+          )}
           <Button
             type="link"
             size="small"
@@ -460,7 +517,7 @@ export const DestStockList: React.FC<{ warehouseId?: string; businessMode?: stri
           </Col>
           <Col flex="auto">
             <Input
-              placeholder="运单号/订单号/DPN号/自提单号"
+              placeholder="子运单号/运单号/业务员/线路"
               value={keyword}
               onChange={e => setKeyword(e.target.value)}
               prefix={<SearchOutlined />}
@@ -498,12 +555,8 @@ export const DestStockList: React.FC<{ warehouseId?: string; businessMode?: stri
               <Select value={logisticsStatus} onChange={setLogisticsStatus} style={{ width: '100%' }}>
                 <Select.Option value="ALL">全部末端状态</Select.Option>
                 <Select.Option value="IN_STOCK">在库待分配</Select.Option>
-                <Select.Option value="DPN_BOUND">已分配DPN</Select.Option>
-                <Select.Option value="OUT_FOR_DELIVERY">配送中</Select.Option>
-                <Select.Option value="DELIVERED">已签收</Select.Option>
+                <Select.Option value="DPN_BOUND">待配送</Select.Option>
                 <Select.Option value="PICKUP_PENDING">待自提</Select.Option>
-                <Select.Option value="PICKED_UP">已自提</Select.Option>
-                <Select.Option value="DELIVERY_EXCEPTION">配送异常</Select.Option>
               </Select>
             </Col>
             <Col span={3}>

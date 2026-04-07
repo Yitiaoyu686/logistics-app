@@ -271,6 +271,7 @@ export function createTables() {
       industry TEXT,
       contact TEXT NOT NULL,
       logisticsInfo TEXT,
+      enterpriseInfo TEXT,
       status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN ('ACTIVE','DORMANT','FROZEN')),
       poolType TEXT NOT NULL DEFAULT 'PUBLIC' CHECK(poolType IN ('PRIVATE','PUBLIC')),
       salesId TEXT REFERENCES users(id) ON DELETE SET NULL,
@@ -308,6 +309,7 @@ export function createTables() {
   // Migration: add columns that may not exist yet
   try { db.exec('ALTER TABLE clients ADD COLUMN companyType TEXT'); } catch (_) { /* already exists */ }
   try { db.exec('ALTER TABLE clients ADD COLUMN creditLevel TEXT'); } catch (_) { /* already exists */ }
+  try { db.exec('ALTER TABLE clients ADD COLUMN enterpriseInfo TEXT'); } catch (_) { /* already exists */ }
 
   db.exec(`
 

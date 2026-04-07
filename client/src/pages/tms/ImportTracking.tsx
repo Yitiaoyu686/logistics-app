@@ -10,6 +10,13 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { jobApi } from '../../api';
+import {
+  ListPageToolbar,
+  ListPageToolbarActions,
+  ListPageToolbarCard,
+  ListPageToolbarField,
+  ListPageToolbarFilters,
+} from '../../components/ListPageToolbar';
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
@@ -242,22 +249,34 @@ export const ImportTracking = () => {
         </Col>
       </Row>
 
-      <Card style={{ marginBottom: 16 }}>
-        <Space wrap>
-          <Input placeholder="搜索任务号/船名航班" value={searchText} onChange={e => setSearchText(e.target.value)} onPressEnter={handleSearch} style={{ width: 220 }} allowClear />
-          <Select value={filterRoute} onChange={setFilterRoute} style={{ width: 130 }}>
-            <Option value="ALL">全部航线</Option>
-            {routes.map(r => <Option key={r} value={r}>{r}</Option>)}
-          </Select>
-          <Select value={filterStatus} onChange={setFilterStatus} style={{ width: 120 }}>
-            <Option value="ALL">全部状态</Option>
-            {Object.entries(STATUS_CONFIG).map(([k, v]) => <Option key={k} value={k}>{v.text}</Option>)}
-          </Select>
-          <RangePicker value={dateRange} onChange={setDateRange as any} format="YYYY-MM-DD" placeholder={['ETA开始', 'ETA结束']} />
-          <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>查询</Button>
-          <Button icon={<ReloadOutlined />} onClick={handleReset}>重置</Button>
-        </Space>
-      </Card>
+      <ListPageToolbarCard>
+        <ListPageToolbar>
+          <ListPageToolbarFilters>
+            <ListPageToolbarField flex="1 1 260px" minWidth={220}>
+              <Input placeholder="搜索任务号/船名航班" value={searchText} onChange={e => setSearchText(e.target.value)} onPressEnter={handleSearch} allowClear />
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={130}>
+              <Select value={filterRoute} onChange={setFilterRoute} style={{ width: '100%' }}>
+                <Option value="ALL">全部航线</Option>
+                {routes.map(r => <Option key={r} value={r}>{r}</Option>)}
+              </Select>
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={120}>
+              <Select value={filterStatus} onChange={setFilterStatus} style={{ width: '100%' }}>
+                <Option value="ALL">全部状态</Option>
+                {Object.entries(STATUS_CONFIG).map(([k, v]) => <Option key={k} value={k}>{v.text}</Option>)}
+              </Select>
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={260}>
+              <RangePicker value={dateRange} onChange={setDateRange as any} format="YYYY-MM-DD" placeholder={['ETA开始', 'ETA结束']} />
+            </ListPageToolbarField>
+          </ListPageToolbarFilters>
+          <ListPageToolbarActions>
+            <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>查询</Button>
+            <Button icon={<ReloadOutlined />} onClick={handleReset}>重置</Button>
+          </ListPageToolbarActions>
+        </ListPageToolbar>
+      </ListPageToolbarCard>
 
       <Card>
         <Table

@@ -174,7 +174,7 @@ export const ShippingUnitList: React.FC = () => {
       setFilteredUnits([newUnit, ...filteredUnits]);
       setCreateModalVisible(false);
       form.resetFields();
-      message.success('运输单元创建成功');
+      message.success('集装号创建成功');
       setLoading(false);
     } catch (error) {
       setLoading(false);
@@ -269,7 +269,7 @@ export const ShippingUnitList: React.FC = () => {
   // 表格列定义
   const columns = [
     {
-      title: '单元号',
+      title: '集装号',
       dataIndex: 'unitNo',
       key: 'unitNo',
       width: 150,
@@ -485,7 +485,7 @@ export const ShippingUnitList: React.FC = () => {
       <Card size="small" bordered={false} style={{ marginBottom: 10, background: '#fafafa' }}>
         <Space wrap>
           <Input
-            placeholder="搜索单元号/任务号"
+            placeholder="搜索集装号/任务号"
             value={searchText}
             onChange={e => {
               setSearchText(e.target.value);
@@ -627,9 +627,9 @@ export const ShippingUnitList: React.FC = () => {
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item
-                label="单元号"
+                label="集装号"
                 name="unitNo"
-                rules={[{ required: true, message: '请输入单元号' }]}
+                rules={[{ required: true, message: '请输入集装号' }]}
               >
                 <Input placeholder="例如: MSKU1234567 或 PALLET-A001" />
               </Form.Item>

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   Card,
   Table,
@@ -88,6 +88,152 @@ interface LegacyCostItem {
   createdBy?: string;
 }
 
+// ---- 成本录入（与 JobCostInputPOL 共享 localStorage） ----
+type CostRelationLevel = 'JOB' | 'UNIT' | 'ORDER' | 'SUB_ORDER';
+type CostItemReviewStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED';
+
+interface CostInputItem {
+  id: string;
+  kind: 'NORMAL' | 'CHANGE';
+  originalItemId?: string;
+  originalSnapshot?: CostInputItemSnapshot;
+  relationLevel: CostRelationLevel;
+  relationTargetNo: string;
+  supplierName: string;
+  feeType: string;
+  unitPrice: number;
+  quantity: number;
+  currency: string;
+  amount: number;
+  exchangeRate?: number;
+  paymentStatus: 'UNPAID' | 'PARTIAL' | 'PAID';
+  reviewStatus: CostItemReviewStatus;
+  reviewComment?: string;
+  remark: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface CostInputItemSnapshot {
+  relationLevel: CostRelationLevel;
+  relationTargetNo: string;
+  supplierName: string;
+  feeType: string;
+  unitPrice: number;
+  quantity: number;
+  currency: string;
+  amount: number;
+  remark: string;
+}
+
+interface CostTaskRecord {
+  jobNo: string;
+  station: string;
+  route: string;
+  serviceType: string;
+  carrier: string;
+  blNo: string;
+  originPort: string;
+  destinationPort: string;
+  pieces: number;
+  blWeight: number;
+  orderWeight: number;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  supervisor?: string;
+  reviewedAt?: string;
+  supervisorRemark?: string;
+  items: CostInputItem[];
+}
+
+const COST_STORAGE_KEY = 'job-cost-pol-task-demo-v4';
+
+const COST_RELATION_LEVEL_OPTIONS: Array<{ value: CostRelationLevel; label: string }> = [
+  { value: 'JOB', label: 'JOB公摊' },
+  { value: 'UNIT', label: '集装箱号公摊' },
+  { value: 'ORDER', label: '订单号' },
+  { value: 'SUB_ORDER', label: '子单号' },
+];
+
+const COST_FEE_TYPE_OPTIONS = [
+  { value: 'BOOKING', label: '订舱费' },
+  { value: 'CUSTOMS', label: '报关费' },
+  { value: 'TRUCKING', label: '拖车费' },
+  { value: 'PICKUP', label: '提货费' },
+  { value: 'DELIVERY', label: '送货费' },
+  { value: 'PACKING', label: '包装费' },
+  { value: 'INSPECTION', label: '商检费' },
+  { value: 'OTHER', label: '其他' },
+];
+
+const COST_CURRENCY_OPTIONS = [
+  { value: 'CNY', label: 'CNY' },
+  { value: 'USD', label: 'USD' },
+];
+
+const COST_SUPPLIER_OPTIONS = [
+  '广州喵喵国际货运代理有限公司深圳分公司',
+  '广州喵喵国际货运代理有限公司白云分公司',
+  '广东广运拖车服务有限公司',
+  '深圳华洋报关有限公司',
+];
+
+const COST_ITEM_STATUS_CONFIG: Record<CostItemReviewStatus, { text: string; color: string }> = {
+  DRAFT: { text: '草稿', color: 'default' },
+  PENDING: { text: '待审核', color: 'orange' },
+  APPROVED: { text: '已审核', color: 'green' },
+  REJECTED: { text: '已驳回', color: 'red' },
+};
+
+function loadCostRecords(): CostTaskRecord[] {
+  try {
+    const raw = localStorage.getItem(COST_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCostRecords(records: CostTaskRecord[]) {
+  localStorage.setItem(COST_STORAGE_KEY, JSON.stringify(records));
+}
+
+function costCalcAmount(unitPrice: number, quantity: number) {
+  return Number((unitPrice * quantity).toFixed(2));
+}
+
+function costCreateId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function isCostItemEditable(items: CostInputItem[], row: CostInputItem) {
+  if (row.reviewStatus === 'PENDING') return false;
+  if (row.reviewStatus === 'APPROVED') return false;
+  if (row.kind === 'NORMAL' && items.some((item) => item.originalItemId === row.id && item.reviewStatus !== 'REJECTED')) return false;
+  return true;
+}
+
+function isCostItemHistorical(items: CostInputItem[], row: CostInputItem) {
+  return row.kind === 'NORMAL' && items.some((item) => item.originalItemId === row.id && item.reviewStatus !== 'REJECTED');
+}
+
+function getCostRowTypeText(items: CostInputItem[], row: CostInputItem) {
+  if (row.kind === 'CHANGE') {
+    if (row.reviewStatus === 'PENDING') return '修改待审';
+    if (row.reviewStatus === 'REJECTED') return '修改驳回';
+    if (row.reviewStatus === 'DRAFT') return '修改草稿';
+    return '变更后条目';
+  }
+  if (isCostItemHistorical(items, row)) return '原始版本';
+  if (row.reviewStatus === 'APPROVED') return '已审核条目';
+  if (row.reviewStatus === 'PENDING') return '新增待审';
+  if (row.reviewStatus === 'REJECTED') return '新增驳回';
+  return '新增草稿';
+}
+
 interface TaskFormMeta {
   jobNo: string;
   createdBy: string;
@@ -147,6 +293,32 @@ const FILTER_LABEL: Record<CargoFilter, string> = {
 const STATION_OPTIONS = ['海珠区站点', '白云区站点', '福田区站点', '南方大厦站点', '广园西站点'];
 const PORT_OPTIONS = ['CAN', 'SZX', 'HKG', 'SHA', 'LOS', 'ACC', 'ABV', 'KAN', 'ADD'];
 const DELIVERY_COMPANIES = ['顺丰速运', '德邦物流', '韵达快递', '中通快递', '申通快递', '圆通速递'];
+// 海运船公司
+const SEA_CARRIER_OPTIONS = [
+  { value: 'COSCO', label: '中远海运 COSCO' },
+  { value: 'MSK', label: '马士基 Maersk' },
+  { value: 'MSC', label: '地中海航运 MSC' },
+  { value: 'CMA', label: '达飞轮船 CMA-CGM' },
+  { value: 'ONE', label: '海洋网联 ONE' },
+  { value: 'EMC', label: '长荣海运 Evergreen' },
+  { value: 'HPL', label: '赫伯罗特 Hapag-Lloyd' },
+];
+// 海运柜型
+const CONTAINER_TYPE_OPTIONS = [
+  { value: '20GP', label: '20GP（20尺普柜）' },
+  { value: '40GP', label: '40GP（40尺普柜）' },
+  { value: '40HQ', label: '40HQ（40尺高柜）' },
+  { value: '45HQ', label: '45HQ（45尺高柜）' },
+];
+// 空运航空公司
+const AIR_CARRIER_OPTIONS = [
+  { value: 'ET', label: '埃塞俄比亚航空 ET' },
+  { value: 'CZ', label: '南方航空 CZ' },
+  { value: 'CX', label: '国泰航空 CX' },
+  { value: 'TK', label: '土耳其航空 TK' },
+  { value: 'EK', label: '阿联酋航空 EK' },
+  { value: 'QR', label: '卡塔尔航空 QR' },
+];
 
 const ORIGIN_NODE_FLOW = [
   { nodeCode: 'WAREHOUSE_OUT', nodeName: '已离库' },
@@ -241,7 +413,7 @@ function aggregateTaskRow(task: MutableLegacyTask, mode: LegacyTaskMode): TaskLi
   const totalWeightKg = task.jobs.reduce((sum, job) => sum + Number(job.weightKg || 0), 0);
   const totalPieces = task.jobs.reduce((sum, job) => sum + Number(job.pieces || 0), 0);
   const routeNames = Array.from(new Set(task.jobs.map((job) => job.routeName).filter(Boolean)));
-  const routeName = routeNames.length > 1 ? `${routeNames[0]} 等${routeNames.length}条` : (routeNames[0] || '');
+  const routeName = routeNames[0] || '';
   const serviceTypes = Array.from(new Set(task.jobs.map((job) => job.serviceType)));
   const serviceTypeLabel = serviceTypes.length > 1 ? '混合' : SERVICE_LABEL[serviceTypes[0] || firstJob.serviceType];
   const cargoFilters = Array.from(new Set(task.jobs.map((job) => job.cargoFilter)));
@@ -324,9 +496,10 @@ function genContainers(prefix: string, routeName: string, serviceType: string, c
 
 interface LegacyTaskManagerProps {
   mode?: LegacyTaskMode;
+  businessMode?: LegacyBusinessMode;
 }
 
-export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'ORIGIN' }) => {
+export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'ORIGIN', businessMode = 'ALL' }) => {
   const [tasks, setTasks] = useState<MutableLegacyTask[]>(() => cloneTasks());
   const detailScrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -365,6 +538,205 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
   const [attachmentOverrides, setAttachmentOverrides] = useState<Record<string, LegacyAttachment[]>>({});
   const [attachmentOpen, setAttachmentOpen] = useState(false);
   const [activeNodeKey, setActiveNodeKey] = useState<string | null>(null);
+
+  // ---- 成本录入 Drawer 状态 ----
+  const [costRecords, setCostRecords] = useState<CostTaskRecord[]>(() => loadCostRecords());
+  const [costEditorOpen, setCostEditorOpen] = useState(false);
+  const [costEditorTaskId, setCostEditorTaskId] = useState<string | null>(null);
+  const [costEditorRows, setCostEditorRows] = useState<CostInputItem[]>([]);
+
+  useEffect(() => { saveCostRecords(costRecords); }, [costRecords]);
+
+  const costEditorTask = useMemo(
+    () => (costEditorTaskId ? tasks.find((t) => t.id === costEditorTaskId) || null : null),
+    [tasks, costEditorTaskId],
+  );
+
+  const costEditorJobNo = useMemo(() => {
+    if (!costEditorTask) return '';
+    const prefix = businessMode === 'AIR' ? 'A' : 'S';
+    const raw = costEditorTask.id;
+    return /^[AS]-/.test(raw) ? raw : `${prefix}-${raw}`;
+  }, [costEditorTask, businessMode]);
+
+  const costEditorAmount = useMemo(
+    () => costEditorRows
+      .filter((row) => {
+        if (row.reviewStatus === 'REJECTED') return false;
+        if (isCostItemHistorical(costEditorRows, row)) return false;
+        return true;
+      })
+      .reduce((sum, row) => sum + row.amount, 0),
+    [costEditorRows],
+  );
+
+  const getCostRelationTargetOptions = (level?: CostRelationLevel): string[] => {
+    if (!costEditorTask || !level) return [];
+    const firstJob = costEditorTask.jobs[0];
+    if (!firstJob) return [];
+    if (level === 'JOB') return [costEditorJobNo];
+    if (level === 'UNIT') return costEditorTask.jobs.flatMap((j) => j.containers.map((c) => c.containerNo));
+    if (level === 'ORDER') return Array.from(new Set(costEditorTask.jobs.flatMap((j) => j.containers.flatMap((c) => c.orders.map((o) => o.orderNo)))));
+    return Array.from(new Set(costEditorTask.jobs.flatMap((j) => j.containers.flatMap((c) => c.orders.map((o) => o.orderNo + '-1')))));
+  };
+
+  const openCostEditor = (row: TaskListRow) => {
+    const taskId = row.taskId;
+    const prefix = businessMode === 'AIR' ? 'A' : 'S';
+    const jobNo = /^[AS]-/.test(taskId) ? taskId : `${prefix}-${taskId}`;
+    const existed = costRecords.find((r) => r.jobNo === jobNo);
+    setCostEditorTaskId(taskId);
+    setCostEditorRows(existed ? existed.items.map((item) => ({ ...item, originalSnapshot: item.originalSnapshot ? { ...item.originalSnapshot } : undefined })) : []);
+    setCostEditorOpen(true);
+    if (existed) {
+      message.info('当前任务已有成本记录，本次录入会在原任务下继续追加条目。');
+    }
+  };
+
+  const updateCostEditorRow = (rowId: string, patch: Partial<CostInputItem>) => {
+    setCostEditorRows((prev) =>
+      prev.map((row) => {
+        if (row.id !== rowId) return row;
+        const unitPrice = patch.unitPrice !== undefined ? Number(patch.unitPrice) : row.unitPrice;
+        const quantity = patch.quantity !== undefined ? Number(patch.quantity) : row.quantity;
+        return {
+          ...row,
+          ...patch,
+          unitPrice,
+          quantity,
+          amount: costCalcAmount(unitPrice, quantity),
+          updatedAt: dayjs().format('YYYY-MM-DD HH:mm'),
+        };
+      }),
+    );
+  };
+
+  const addCostEditorRow = () => {
+    if (!costEditorJobNo) { message.warning('请先选择任务'); return; }
+    const now = dayjs().format('YYYY-MM-DD HH:mm');
+    setCostEditorRows((prev) => [
+      ...prev,
+      {
+        id: costCreateId('task-cost-item'),
+        kind: 'NORMAL',
+        relationLevel: 'JOB',
+        relationTargetNo: costEditorJobNo,
+        supplierName: COST_SUPPLIER_OPTIONS[0],
+        feeType: 'BOOKING',
+        unitPrice: 0,
+        quantity: 1,
+        currency: 'CNY',
+        amount: 0,
+        paymentStatus: 'UNPAID',
+        reviewStatus: 'DRAFT',
+        remark: '',
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+  };
+
+  const removeCostEditorRow = (rowId: string) => {
+    setCostEditorRows((prev) => prev.filter((row) => row.id !== rowId));
+  };
+
+  const requestModifyCostApprovedRow = (row: CostInputItem) => {
+    if (costEditorRows.some((item) => item.originalItemId === row.id && item.reviewStatus !== 'REJECTED')) {
+      message.warning('该已审核条目已有待处理的修改记录');
+      return;
+    }
+    const now = dayjs().format('YYYY-MM-DD HH:mm');
+    const snapshot: CostInputItemSnapshot = {
+      relationLevel: row.relationLevel,
+      relationTargetNo: row.relationTargetNo,
+      supplierName: row.supplierName,
+      feeType: row.feeType,
+      unitPrice: row.unitPrice,
+      quantity: row.quantity,
+      currency: row.currency,
+      amount: row.amount,
+      remark: row.remark,
+    };
+    setCostEditorRows((prev) => [
+      ...prev,
+      {
+        ...snapshot,
+        id: costCreateId('task-cost-change'),
+        kind: 'CHANGE',
+        originalItemId: row.id,
+        originalSnapshot: snapshot,
+        paymentStatus: row.paymentStatus,
+        reviewStatus: 'DRAFT',
+        reviewComment: '',
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    message.success('已生成修改行');
+  };
+
+  const persistCostEditor = (submitForReview: boolean) => {
+    if (!costEditorJobNo || !costEditorTask) { message.error('未找到对应任务'); return; }
+    if (!costEditorRows.length) { message.error('请至少保留 1 条费用条目'); return; }
+    const editableRows = costEditorRows.filter((row) => isCostItemEditable(costEditorRows, row));
+    for (const row of editableRows) {
+      if (!row.relationTargetNo || !row.supplierName || !row.feeType || !row.currency) {
+        message.error('请完整填写费用条目'); return;
+      }
+      if (row.unitPrice <= 0 || row.quantity <= 0) {
+        message.error('单价和数量必须大于 0'); return;
+      }
+    }
+
+    const now = dayjs().format('YYYY-MM-DD HH:mm');
+    const currentUser = (() => { try { const raw = localStorage.getItem('user'); const p = raw ? JSON.parse(raw) : {}; return p?.username || p?.id || '当前用户'; } catch { return '当前用户'; } })();
+    const firstJob = costEditorTask.jobs[0];
+
+    const nextItems = costEditorRows.map((row) => {
+      if (!isCostItemEditable(costEditorRows, row)) return row;
+      return { ...row, amount: costCalcAmount(row.unitPrice, row.quantity), reviewStatus: (submitForReview ? 'PENDING' : 'DRAFT') as CostItemReviewStatus, updatedAt: now };
+    });
+
+    setCostRecords((prev) => {
+      const existed = prev.find((r) => r.jobNo === costEditorJobNo);
+      const nextRecord: CostTaskRecord = {
+        jobNo: costEditorJobNo,
+        station: firstJob?.stationName || '',
+        route: firstJob?.routeName || '',
+        serviceType: SERVICE_LABEL[firstJob?.serviceType || 'STANDARD'],
+        carrier: '',
+        blNo: '',
+        originPort: firstJob?.originPort || '',
+        destinationPort: firstJob?.destPort || '',
+        pieces: costEditorTask.jobs.reduce((sum, j) => sum + Number(j.pieces || 0), 0),
+        blWeight: 0,
+        orderWeight: costEditorTask.jobs.reduce((sum, j) => sum + Number(j.weightKg || 0), 0),
+        createdBy: existed?.createdBy || currentUser,
+        createdAt: existed?.createdAt || now,
+        updatedAt: now,
+        supervisor: existed?.supervisor,
+        reviewedAt: existed?.reviewedAt,
+        supervisorRemark: existed?.supervisorRemark,
+        items: nextItems,
+      };
+      if (existed) return prev.map((r) => (r.jobNo === costEditorJobNo ? nextRecord : r));
+      return [nextRecord, ...prev];
+    });
+
+    message.success(submitForReview ? '已提交主管审核' : '已保存为草稿');
+    setCostEditorOpen(false);
+    setCostEditorTaskId(null);
+    setCostEditorRows([]);
+  };
+
+  // 获取详情页面的成本数据
+  const getDetailCostItems = (task: MutableLegacyTask | null): CostInputItem[] => {
+    if (!task) return [];
+    const prefix = businessMode === 'AIR' ? 'A' : 'S';
+    const jobNo = /^[AS]-/.test(task.id) ? task.id : `${prefix}-${task.id}`;
+    const record = costRecords.find((r) => r.jobNo === jobNo);
+    return record?.items || [];
+  };
 
   const rows = useMemo(
     () => tasks
@@ -423,10 +795,16 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
     return selectedTask.jobs[0] || null;
   }, [selectedTask, detailJobId]);
 
-  const selectedCostItems = (selectedTask?.costItems || []) as LegacyCostItem[];
+  const selectedCostItems = getDetailCostItems(selectedTask);
   const selectedContainers = useMemo(
-    () => (selectedTask ? selectedTask.jobs.flatMap((job) => job.containers) : []),
-    [selectedTask],
+    () => {
+      if (!selectedTask) return [];
+      const all = selectedTask.jobs.flatMap((job) => job.containers);
+      // 海运：一个任务只展示一个集装箱（取第一个）
+      if (businessMode === 'SEA') return all.slice(0, 1);
+      return all;
+    },
+    [selectedTask, businessMode],
   );
 
   const baseNodeChangeRows = useMemo<NodeChangeRow[]>(() => {
@@ -720,13 +1098,7 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
   };
 
   const openCostInput = (row: TaskListRow) => {
-    setDetailTaskId(row.taskId);
-    setDetailJobId(row.firstJob.id);
-    setActiveNodeKey(null);
-    setDetailOpen(true);
-    setTimeout(() => {
-      scrollDetailTo('task-cost-detail');
-    }, 320);
+    openCostEditor(row);
   };
 
   const openNodeUpdate = (row: TaskListRow) => {
@@ -912,26 +1284,28 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
       align: 'center',
     },
     {
-      title: '筛选条件',
+      title: '货物类型',
       dataIndex: 'cargoFilterLabel',
       key: 'cargoFilterLabel',
       width: 90,
       align: 'center',
     },
     {
-      title: '集装号',
+      title: businessMode === 'AIR' ? '集装号' : '集装箱',
       key: 'containers',
-      width: 260,
+      width: 180,
       render: (_value, row) => {
         const list = row.allContainers;
-        const visible = list.slice(0, 4);
-        const hidden = list.slice(4);
+        // 海运只展示第一个集装箱
+        const display = businessMode === 'SEA' ? list.slice(0, 1) : list.slice(0, 4);
+        const hidden = businessMode === 'SEA' ? [] : list.slice(4);
         return (
           <Space wrap size={[4, 4]}>
-            {visible.map((container) => (
+            {display.map((container) => (
               <Tag
                 key={container.containerNo}
-                style={{ cursor: 'pointer', marginInlineEnd: 0 }}
+                color={businessMode === 'SEA' ? 'blue' : undefined}
+                style={{ cursor: 'pointer', marginInlineEnd: 0, fontFamily: businessMode === 'SEA' ? 'monospace' : undefined, fontWeight: businessMode === 'SEA' ? 600 : undefined }}
                 onClick={() => openContainerDetail(container)}
               >
                 {container.containerNo}
@@ -1109,25 +1483,196 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
     },
   ];
 
-  const costColumns = [
+  // 详情页的费用条目详情列定义（与 JobCostInputPOL 详情列一致）
+  const costDetailColumns = [
     {
-      title: '序号',
-      key: 'index',
-      width: 60,
-      align: 'center' as const,
-      render: (_value: unknown, _row: LegacyCostItem, index: number) => index + 1,
+      title: '条目类型',
+      key: 'rowType',
+      width: 110,
+      render: (_: unknown, row: CostInputItem) => <Tag>{getCostRowTypeText(selectedCostItems, row)}</Tag>,
     },
-    { title: '费用类型', dataIndex: 'feeType', key: 'feeType', width: 120 },
     {
-      title: '金额',
-      key: 'amount',
-      width: 140,
+      title: '归属层级',
+      dataIndex: 'relationLevel',
+      key: 'relationLevel',
+      width: 120,
+      render: (value: CostRelationLevel) => COST_RELATION_LEVEL_OPTIONS.find((o) => o.value === value)?.label || value,
+    },
+    { title: '归属对象', dataIndex: 'relationTargetNo', key: 'relationTargetNo', width: 120 },
+    { title: '供应商', dataIndex: 'supplierName', key: 'supplierName', width: 220 },
+    {
+      title: '费用项目',
+      dataIndex: 'feeType',
+      key: 'feeType',
+      width: 110,
+      render: (value: string) => COST_FEE_TYPE_OPTIONS.find((o) => o.value === value)?.label || value,
+    },
+    { title: '单价', dataIndex: 'unitPrice', key: 'unitPrice', width: 100, render: (value: number) => value?.toFixed(2) },
+    { title: '数量', dataIndex: 'quantity', key: 'quantity', width: 90 },
+    { title: '小计', dataIndex: 'amount', key: 'amount', width: 100, render: (value: number) => value?.toFixed(2) },
+    { title: '币种', dataIndex: 'currency', key: 'currency', width: 70 },
+    {
+      title: '录入汇率',
+      key: 'exchangeRate',
+      width: 90,
+      render: (_: unknown, row: CostInputItem) => (row.currency === 'CNY' ? '-' : (row.exchangeRate || '-')),
+    },
+    {
+      title: '折合CNY',
+      key: 'amountCNY',
+      width: 100,
       align: 'right' as const,
-      render: (_value: unknown, row: LegacyCostItem) => `${Number(row.amount || 0).toFixed(2)} ${row.currency || 'CNY'}`,
+      render: (_: unknown, row: CostInputItem) => {
+        const rate = row.exchangeRate || (row.currency === 'CNY' ? 1 : 0.0055);
+        return <span style={{ color: '#8c8c8c' }}>¥{(row.amount * rate).toFixed(2)}</span>;
+      },
     },
-    { title: '状态', dataIndex: 'status', key: 'status', width: 100, align: 'center' as const },
-    { title: '创建人', dataIndex: 'createdBy', key: 'createdBy', width: 120 },
-    { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 180 },
+    {
+      title: '审核状态',
+      dataIndex: 'reviewStatus',
+      key: 'reviewStatus',
+      width: 100,
+      render: (value: CostItemReviewStatus) => <Tag color={COST_ITEM_STATUS_CONFIG[value].color}>{COST_ITEM_STATUS_CONFIG[value].text}</Tag>,
+    },
+    {
+      title: '原数据',
+      key: 'originalSnapshot',
+      width: 240,
+      render: (_: unknown, row: CostInputItem) => (
+        row.originalSnapshot
+          ? `${row.originalSnapshot.supplierName} / ${COST_FEE_TYPE_OPTIONS.find((o) => o.value === row.originalSnapshot?.feeType)?.label || row.originalSnapshot.feeType} / ${row.originalSnapshot.unitPrice.toFixed(2)} x ${row.originalSnapshot.quantity}`
+          : '-'
+      ),
+    },
+    { title: '备注', dataIndex: 'remark', key: 'remark', width: 180, render: (value: string) => value || '-' },
+    { title: '审核意见', dataIndex: 'reviewComment', key: 'reviewComment', width: 180, render: (value: string) => value || '-' },
+  ];
+
+  // 成本录入 Drawer 的编辑列
+  const costEditorColumns = [
+    {
+      title: '条目类型',
+      key: 'rowType',
+      width: 110,
+      fixed: 'left' as const,
+      render: (_: unknown, row: CostInputItem) => <Tag>{getCostRowTypeText(costEditorRows, row)}</Tag>,
+    },
+    {
+      title: '归属层级',
+      dataIndex: 'relationLevel',
+      key: 'relationLevel',
+      width: 120,
+      render: (value: CostRelationLevel, row: CostInputItem) => (
+        isCostItemEditable(costEditorRows, row)
+          ? <Select value={value} style={{ width: '100%' }} options={COST_RELATION_LEVEL_OPTIONS} onChange={(v) => { const target = getCostRelationTargetOptions(v)[0] || ''; updateCostEditorRow(row.id, { relationLevel: v, relationTargetNo: target }); }} />
+          : COST_RELATION_LEVEL_OPTIONS.find((o) => o.value === value)?.label || value
+      ),
+    },
+    {
+      title: '归属对象',
+      dataIndex: 'relationTargetNo',
+      key: 'relationTargetNo',
+      width: 140,
+      render: (value: string, row: CostInputItem) => {
+        const options = getCostRelationTargetOptions(row.relationLevel);
+        return isCostItemEditable(costEditorRows, row) ? (
+          <Select value={value} style={{ width: '100%' }} options={options.map((o) => ({ value: o, label: o }))} onChange={(v) => updateCostEditorRow(row.id, { relationTargetNo: v })} />
+        ) : value;
+      },
+    },
+    {
+      title: '供应商',
+      dataIndex: 'supplierName',
+      key: 'supplierName',
+      width: 220,
+      render: (value: string, row: CostInputItem) => (
+        isCostItemEditable(costEditorRows, row)
+          ? <Select value={value} showSearch optionFilterProp="children" style={{ width: '100%' }} onChange={(v) => updateCostEditorRow(row.id, { supplierName: v })}>{COST_SUPPLIER_OPTIONS.map((s) => <Select.Option key={s} value={s}>{s}</Select.Option>)}</Select>
+          : value
+      ),
+    },
+    {
+      title: '费用项目',
+      dataIndex: 'feeType',
+      key: 'feeType',
+      width: 120,
+      render: (value: string, row: CostInputItem) => (
+        isCostItemEditable(costEditorRows, row)
+          ? <Select value={value} style={{ width: '100%' }} options={COST_FEE_TYPE_OPTIONS} onChange={(v) => updateCostEditorRow(row.id, { feeType: v })} />
+          : COST_FEE_TYPE_OPTIONS.find((o) => o.value === value)?.label || value
+      ),
+    },
+    {
+      title: '单价',
+      dataIndex: 'unitPrice',
+      key: 'unitPrice',
+      width: 110,
+      render: (value: number, row: CostInputItem) => (
+        isCostItemEditable(costEditorRows, row)
+          ? <InputNumber min={0} precision={2} value={value} style={{ width: '100%' }} onChange={(v) => updateCostEditorRow(row.id, { unitPrice: Number(v || 0) })} />
+          : value.toFixed(2)
+      ),
+    },
+    {
+      title: '数量',
+      dataIndex: 'quantity',
+      key: 'quantity',
+      width: 90,
+      render: (value: number, row: CostInputItem) => (
+        isCostItemEditable(costEditorRows, row)
+          ? <InputNumber min={0} precision={2} value={value} style={{ width: '100%' }} onChange={(v) => updateCostEditorRow(row.id, { quantity: Number(v || 0) })} />
+          : value
+      ),
+    },
+    {
+      title: '币种',
+      dataIndex: 'currency',
+      key: 'currency',
+      width: 90,
+      render: (value: string, row: CostInputItem) => (
+        isCostItemEditable(costEditorRows, row)
+          ? <Select value={value} style={{ width: '100%' }} options={COST_CURRENCY_OPTIONS} onChange={(v) => updateCostEditorRow(row.id, { currency: v })} />
+          : value
+      ),
+    },
+    {
+      title: '小计',
+      dataIndex: 'amount',
+      key: 'amount',
+      width: 110,
+      align: 'right' as const,
+      render: (value: number) => value.toFixed(2),
+    },
+    {
+      title: '备注',
+      dataIndex: 'remark',
+      key: 'remark',
+      width: 180,
+      render: (value: string, row: CostInputItem) => (
+        isCostItemEditable(costEditorRows, row)
+          ? <Input value={value} onChange={(e) => updateCostEditorRow(row.id, { remark: e.target.value })} />
+          : value || '-'
+      ),
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 120,
+      fixed: 'right' as const,
+      render: (_: unknown, row: CostInputItem) => {
+        if (row.reviewStatus === 'APPROVED' && !isCostItemHistorical(costEditorRows, row)) {
+          return <Button type="link" size="small" onClick={() => requestModifyCostApprovedRow(row)}>申请修改</Button>;
+        }
+        if (isCostItemEditable(costEditorRows, row)) {
+          return (
+            <Popconfirm title="确认删除该条目？" onConfirm={() => removeCostEditorRow(row.id)}>
+              <Button type="link" size="small" danger>删除</Button>
+            </Popconfirm>
+          );
+        }
+        return '-';
+      },
+    },
   ];
 
   const { token } = theme.useToken();
@@ -1278,12 +1823,12 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
               <div style={createSectionTitleStyle}>基础信息</div>
               <Row gutter={20}>
                 <Col span={8}>
-                  <Form.Item {...createFormItemLayout} label="JOB" style={createFormItemStyle}>
+                  <Form.Item {...createFormItemLayout} label="任务编号" style={createFormItemStyle}>
                     <Input value={taskFormMeta.jobNo} disabled />
                   </Form.Item>
                 </Col>
                 <Col span={8}>
-                  <Form.Item {...createFormItemLayout} label="创建账号" style={createFormItemStyle}>
+                  <Form.Item {...createFormItemLayout} label="创建人" style={createFormItemStyle}>
                     <Input value={taskFormMeta.createdBy} disabled />
                   </Form.Item>
                 </Col>
@@ -1294,145 +1839,202 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
                 </Col>
               </Row>
               <Row gutter={20}>
-                <Col span={12}>
-                  <Form.Item
-                    {...createFormItemLayout}
-                    name="stationName"
-                    label="站点"
-                    rules={[{ required: true, message: '请选择站点' }]}
-                    style={createFormItemStyle}
-                  >
+                <Col span={8}>
+                  <Form.Item {...createFormItemLayout} name="stationName" label="操作站点" rules={[{ required: true, message: '请选择站点' }]} style={createFormItemStyle}>
                     <Select placeholder="选择站点">
                       {STATION_OPTIONS.map((item) => <Option key={item} value={item}>{item}</Option>)}
                     </Select>
                   </Form.Item>
                 </Col>
-                <Col span={12}>
-                  <Form.Item
-                    {...createFormItemLayout}
-                    name="serviceType"
-                    label="服务类型"
-                    rules={[{ required: true }]}
-                    style={createFormItemStyle}
-                  >
+                <Col span={8}>
+                  <Form.Item {...createFormItemLayout} name="serviceType" label="服务类型" rules={[{ required: true }]} style={createFormItemStyle}>
                     <Select>
                       <Option value="EXPRESS">特快</Option>
                       <Option value="STANDARD">普快</Option>
                     </Select>
                   </Form.Item>
                 </Col>
-              </Row>
-              <Row gutter={20}>
-                <Col span={12}>
-                  <Form.Item
-                    {...createFormItemLayout}
-                    name="routeName"
-                    label="线路"
-                    rules={[{ required: true, message: '请输入线路' }]}
-                    style={createFormItemStyle}
-                  >
-                    <Input placeholder="例如 CAN.CHN→LOS.NGN" />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item
-                    {...createFormItemLayout}
-                    name="dispatchCenter"
-                    label="调度中心"
-                    style={createFormItemStyle}
-                  >
-                    <Input placeholder="例如 总调度中心 / R001" />
+                <Col span={8}>
+                  <Form.Item {...createFormItemLayout} name="routeName" label="线路" rules={[{ required: true, message: '请输入线路' }]} style={createFormItemStyle}>
+                    <Input placeholder="如 CAN.CHN→LOS.NGN" />
                   </Form.Item>
                 </Col>
               </Row>
+            </div>
+
+            <div style={createSectionStyle}>
+              <div style={createSectionTitleStyle}>{businessMode === 'AIR' ? '航班信息' : '船务信息'}</div>
+              {businessMode === 'AIR' ? (
+                <>
+                  <Row gutter={20}>
+                    <Col span={8}>
+                      <Form.Item {...createFormItemLayout} name="mawbNo" label="主运单号" rules={[{ required: true, message: '请输入MAWB' }]} style={createFormItemStyle}>
+                        <Input placeholder="如 071-35610222" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item {...createFormItemLayout} name="hawbNo" label="分运单号" style={createFormItemStyle}>
+                        <Input placeholder="选填" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item {...createFormItemLayout} name="carrier" label="航空公司" rules={[{ required: true, message: '请选择航空公司' }]} style={createFormItemStyle}>
+                        <Select placeholder="选择航空公司" options={AIR_CARRIER_OPTIONS} />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Row gutter={20}>
+                    <Col span={8}>
+                      <Form.Item {...createFormItemLayout} name="flightNo" label="航班号" style={createFormItemStyle}>
+                        <Input placeholder="如 ET606" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item {...createFormItemLayout} name="originPort" label="起飞机场" rules={[{ required: true }]} style={createFormItemStyle}>
+                        <Select placeholder="选择机场">
+                          {PORT_OPTIONS.map((item) => <Option key={item} value={item}>{item}</Option>)}
+                        </Select>
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item {...createFormItemLayout} name="destPort" label="目的机场" rules={[{ required: true }]} style={createFormItemStyle}>
+                        <Select placeholder="选择机场">
+                          {PORT_OPTIONS.map((item) => <Option key={item} value={item}>{item}</Option>)}
+                        </Select>
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Row gutter={20}>
+                    <Col span={8}>
+                      <Form.Item {...createFormItemLayout} name="cutoffDate" label="截单时间" rules={[{ required: true }]} style={createFormItemStyle}>
+                        <DatePicker showTime style={{ width: '100%' }} placeholder="截单截止" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item {...createFormItemLayout} name="etd" label="起飞日期" rules={[{ required: true }]} style={createFormItemStyle}>
+                        <DatePicker style={{ width: '100%' }} placeholder="预计起飞" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item {...createFormItemLayout} name="eta" label="预计到达" style={createFormItemStyle}>
+                        <DatePicker style={{ width: '100%' }} placeholder="预计到达" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                </>
+              ) : (
+                <>
+                  <Row gutter={20}>
+                    <Col span={8}>
+                      <Form.Item {...createFormItemLayout} name="blNo" label="提单号" rules={[{ required: true, message: '请输入提单号' }]} style={createFormItemStyle}>
+                        <Input placeholder="如 COSCO-LOS-260301" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item {...createFormItemLayout} name="carrier" label="船公司" rules={[{ required: true, message: '请选择船公司' }]} style={createFormItemStyle}>
+                        <Select placeholder="选择船公司" options={SEA_CARRIER_OPTIONS} />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item {...createFormItemLayout} name="vesselVoyage" label="船名/航次" style={createFormItemStyle}>
+                        <Input placeholder="如 COSCO FORTUNE V.025E" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Row gutter={20}>
+                    <Col span={8}>
+                      <Form.Item {...createFormItemLayout} name="containerNo" label="集装箱号" style={createFormItemStyle}>
+                        <Input placeholder="如 MSKU1234567" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item {...createFormItemLayout} name="containerType" label="柜型" rules={[{ required: true }]} style={createFormItemStyle}>
+                        <Select placeholder="选择柜型" options={CONTAINER_TYPE_OPTIONS} />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item {...createFormItemLayout} name="serviceMode" label="装柜方式" style={createFormItemStyle}>
+                        <Select placeholder="选择方式">
+                          <Option value="FCL">整柜 FCL</Option>
+                          <Option value="LCL">拼柜 LCL</Option>
+                        </Select>
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Row gutter={20}>
+                    <Col span={8}>
+                      <Form.Item {...createFormItemLayout} name="originPort" label="起运港" rules={[{ required: true }]} style={createFormItemStyle}>
+                        <Select placeholder="选择港口">
+                          {PORT_OPTIONS.map((item) => <Option key={item} value={item}>{item}</Option>)}
+                        </Select>
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item {...createFormItemLayout} name="transitPort" label="中转港" style={createFormItemStyle}>
+                        <Select allowClear placeholder="选填">
+                          {PORT_OPTIONS.map((item) => <Option key={item} value={item}>{item}</Option>)}
+                        </Select>
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item {...createFormItemLayout} name="destPort" label="目的港" rules={[{ required: true }]} style={createFormItemStyle}>
+                        <Select placeholder="选择港口">
+                          {PORT_OPTIONS.map((item) => <Option key={item} value={item}>{item}</Option>)}
+                        </Select>
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Row gutter={20}>
+                    <Col span={8}>
+                      <Form.Item {...createFormItemLayout} name="cutoffDate" label="截关日期" rules={[{ required: true }]} style={createFormItemStyle}>
+                        <DatePicker style={{ width: '100%' }} placeholder="货物截止入港" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item {...createFormItemLayout} name="etd" label="开船日期" rules={[{ required: true }]} style={createFormItemStyle}>
+                        <DatePicker style={{ width: '100%' }} placeholder="预计开船" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item {...createFormItemLayout} name="eta" label="预计到港" style={createFormItemStyle}>
+                        <DatePicker style={{ width: '100%' }} placeholder="预计到达" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                </>
+              )}
+            </div>
+
+            <div style={createSectionStyle}>
+              <div style={createSectionTitleStyle}>货物信息</div>
               <Row gutter={20}>
                 <Col span={8}>
-                  <Form.Item
-                    {...createFormItemLayout}
-                    name="originPort"
-                    label="起运港"
-                    rules={[{ required: true, message: '请选择起运港' }]}
-                    style={createFormItemStyle}
-                  >
-                    <Select>
-                      {PORT_OPTIONS.map((item) => <Option key={item} value={item}>{item}</Option>)}
-                    </Select>
-                  </Form.Item>
-                </Col>
-                <Col span={8}>
-                  <Form.Item {...createFormItemLayout} name="transitPort" label="中转港" style={createFormItemStyle}>
-                    <Select allowClear>
-                      {PORT_OPTIONS.map((item) => <Option key={item} value={item}>{item}</Option>)}
-                    </Select>
-                  </Form.Item>
-                </Col>
-                <Col span={8}>
-                  <Form.Item
-                    {...createFormItemLayout}
-                    name="destPort"
-                    label="到达港"
-                    rules={[{ required: true, message: '请选择到达港' }]}
-                    style={createFormItemStyle}
-                  >
-                    <Select>
-                      {PORT_OPTIONS.map((item) => <Option key={item} value={item}>{item}</Option>)}
-                    </Select>
-                  </Form.Item>
-                </Col>
-              </Row>
-              <Row gutter={20}>
-                <Col span={12}>
-                  <Form.Item
-                    {...createFormItemLayout}
-                    name="executeDate"
-                    label="执行日期"
-                    rules={[{ required: true, message: '请选择日期' }]}
-                    style={createFormItemStyle}
-                  >
-                    <DatePicker style={{ width: '100%' }} />
-                  </Form.Item>
-                </Col>
-              </Row>
-              <Row gutter={20}>
-                <Col span={12}>
-                  <Form.Item
-                    {...createFormItemLayout}
-                    name="weightKg"
-                    label="重量KG"
-                    rules={[{ required: true, message: '请输入重量' }]}
-                    style={createFormItemStyle}
-                  >
+                  <Form.Item {...createFormItemLayout} name="weightKg" label="总重量(KG)" rules={[{ required: true, message: '请输入重量' }]} style={createFormItemStyle}>
                     <InputNumber min={0} style={{ width: '100%' }} />
                   </Form.Item>
                 </Col>
-                <Col span={12}>
-                  <Form.Item
-                    {...createFormItemLayout}
-                    name="pieces"
-                    label="件数"
-                    rules={[{ required: true, message: '请输入件数' }]}
-                    style={createFormItemStyle}
-                  >
+                <Col span={8}>
+                  <Form.Item {...createFormItemLayout} name="pieces" label="总件数" rules={[{ required: true, message: '请输入件数' }]} style={createFormItemStyle}>
                     <InputNumber min={0} style={{ width: '100%' }} />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item {...createFormItemLayout} name="volumeCbm" label="总体积(CBM)" style={createFormItemStyle}>
+                    <InputNumber min={0} step={0.01} style={{ width: '100%' }} />
                   </Form.Item>
                 </Col>
               </Row>
               <Row gutter={20}>
                 <Col span={24}>
-                  <Form.Item
-                    {...createFormItemLayout}
-                    name="remark"
-                    label="备注"
-                    style={{ ...createFormItemStyle, marginBottom: 0 }}
-                  >
-                    <Input.TextArea rows={2} />
+                  <Form.Item {...createFormItemLayout} name="remark" label="备注" style={{ ...createFormItemStyle, marginBottom: 0 }}>
+                    <Input.TextArea rows={2} placeholder="特殊要求、注意事项等" />
                   </Form.Item>
                 </Col>
               </Row>
             </div>
 
             {isEditMode ? (
-              <Alert style={{ marginBottom: 16 }} type="info" showIcon message={`关联集装号：${editContainerCount} 个`} />
+              <Alert style={{ marginBottom: 16 }} type="info" showIcon message={businessMode === 'AIR' ? `关联集装号：${editContainerCount} 个` : `关联集装箱：${editContainerCount} 个`} />
             ) : null}
 
             <div style={createSectionStyle}>
@@ -1523,8 +2125,8 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
         width={520}
       >
         <Form form={nodeUpdateForm} layout="vertical" initialValues={{ isAbnormal: false }}>
-          <Form.Item name="containerNo" label="集装号" rules={[{ required: true, message: '请选择集装号' }]}>
-            <Select placeholder="选择集装号">
+          <Form.Item name="containerNo" label={businessMode === 'AIR' ? '集装号' : '集装箱'} rules={[{ required: true, message: '请选择' }]}>
+            <Select placeholder={businessMode === 'AIR' ? '选择集装号' : '选择集装箱'}>
               {(tasks.find((task) => task.id === nodeUpdateTaskId)?.jobs || [])
                 .flatMap((job) => job.containers)
                 .map((container) => (
@@ -1592,9 +2194,10 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
                 getContainer={() => detailScrollRef.current || window}
                 items={[
                   { key: 'basic', href: '#task-basic-info', title: '基本信息' },
+                  { key: 'shipping', href: '#task-basic-info', title: businessMode === 'AIR' ? '航班信息' : '船务信息' },
                   { key: 'supplier', href: '#task-supplier-info', title: '供应商 / 送货' },
                   { key: 'node', href: '#task-node-change', title: '节点变更记录' },
-                  { key: 'container', href: '#task-container-list', title: '集装号列表' },
+                  { key: 'container', href: '#task-container-list', title: businessMode === 'AIR' ? '集装号列表' : '集装箱列表' },
                   { key: 'cost', href: '#task-cost-detail', title: '成本明细' },
                 ]}
               />
@@ -1604,24 +2207,60 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
               style={{ flex: 1, maxHeight: 'calc(100vh - 120px)', overflowY: 'auto', paddingRight: 8 }}
             >
               <Space direction="vertical" size={16} style={{ width: '100%' }}>
-                <Card id="task-basic-info" size="small" title="基本信息">
+                <div id="task-basic-info">
+                  <Text strong style={{ fontSize: 15, display: 'block', marginBottom: 8 }}>基本信息</Text>
                   <Descriptions column={4} size="small" bordered>
                     <Descriptions.Item label="任务编号">{selectedTask.id}</Descriptions.Item>
                     <Descriptions.Item label="JOB号">{selectedJob.jobNo}</Descriptions.Item>
-                    <Descriptions.Item label="服务类型">{SERVICE_LABEL[selectedJob.serviceType]}</Descriptions.Item>
+                    <Descriptions.Item label="操作站点">{selectedJob.stationName}</Descriptions.Item>
                     <Descriptions.Item label="执行状态">{STATUS_LABEL[selectedTask.status]}</Descriptions.Item>
+                    <Descriptions.Item label="服务类型">{SERVICE_LABEL[selectedJob.serviceType]}</Descriptions.Item>
                     <Descriptions.Item label="线路">{selectedJob.routeName}</Descriptions.Item>
-                    <Descriptions.Item label="起运港">{selectedJob.originPort}</Descriptions.Item>
-                    <Descriptions.Item label="目的港">{selectedJob.destPort}</Descriptions.Item>
-                    <Descriptions.Item label="执行日期">{selectedJob.executeDate}</Descriptions.Item>
-                    <Descriptions.Item label="重量Kg">{selectedJob.weightKg.toLocaleString()}</Descriptions.Item>
-                    <Descriptions.Item label="件数">{selectedJob.pieces}</Descriptions.Item>
                     <Descriptions.Item label="创建人">{selectedTask.createdBy}</Descriptions.Item>
                     <Descriptions.Item label="更新日期">{selectedTask.updatedAt}</Descriptions.Item>
                   </Descriptions>
-                </Card>
 
-                <Card id="task-supplier-info" size="small" title="供应商 / 送货信息">
+                  <Text strong style={{ fontSize: 15, display: 'block', margin: '16px 0 8px' }}>{businessMode === 'AIR' ? '航班信息' : '船务信息'}</Text>
+                  {businessMode === 'AIR' ? (
+                    <Descriptions column={4} size="small" bordered>
+                      <Descriptions.Item label="主运单号">{selectedJob.mawbNo || '-'}</Descriptions.Item>
+                      <Descriptions.Item label="分运单号">{selectedJob.hawbNo || '-'}</Descriptions.Item>
+                      <Descriptions.Item label="航空公司">{selectedJob.carrier || '-'}</Descriptions.Item>
+                      <Descriptions.Item label="航班号">{selectedJob.flightNo || '-'}</Descriptions.Item>
+                      <Descriptions.Item label="起飞机场">{selectedJob.originPort}</Descriptions.Item>
+                      <Descriptions.Item label="目的机场">{selectedJob.destPort}</Descriptions.Item>
+                      <Descriptions.Item label="截单时间">{selectedJob.cutoffDate || '-'}</Descriptions.Item>
+                      <Descriptions.Item label="起飞日期">{selectedJob.etd || '-'}</Descriptions.Item>
+                      <Descriptions.Item label="预计到达">{selectedJob.eta || '-'}</Descriptions.Item>
+                    </Descriptions>
+                  ) : (
+                    <Descriptions column={4} size="small" bordered>
+                      <Descriptions.Item label="提单号">{selectedJob.blNo || '-'}</Descriptions.Item>
+                      <Descriptions.Item label="船公司">{selectedJob.carrier || '-'}</Descriptions.Item>
+                      <Descriptions.Item label="船名/航次">{selectedJob.vesselVoyage || '-'}</Descriptions.Item>
+                      <Descriptions.Item label="集装箱号">{selectedJob.containerNo || '-'}</Descriptions.Item>
+                      <Descriptions.Item label="柜型">{selectedJob.containerType || '-'}</Descriptions.Item>
+                      <Descriptions.Item label="装柜方式">{selectedJob.serviceMode === 'FCL' ? '整柜 FCL' : selectedJob.serviceMode === 'LCL' ? '拼柜 LCL' : '-'}</Descriptions.Item>
+                      <Descriptions.Item label="起运港">{selectedJob.originPort}</Descriptions.Item>
+                      <Descriptions.Item label="中转港">{selectedJob.transitPort || '-'}</Descriptions.Item>
+                      <Descriptions.Item label="目的港">{selectedJob.destPort}</Descriptions.Item>
+                      <Descriptions.Item label="截关日期">{selectedJob.cutoffDate || '-'}</Descriptions.Item>
+                      <Descriptions.Item label="开船日期">{selectedJob.etd || '-'}</Descriptions.Item>
+                      <Descriptions.Item label="预计到港">{selectedJob.eta || '-'}</Descriptions.Item>
+                    </Descriptions>
+                  )}
+
+                  <Text strong style={{ fontSize: 15, display: 'block', margin: '16px 0 8px' }}>货物信息</Text>
+                  <Descriptions column={4} size="small" bordered>
+                    <Descriptions.Item label="总重量(KG)">{selectedJob.weightKg.toLocaleString()}</Descriptions.Item>
+                    <Descriptions.Item label="总件数">{selectedJob.pieces}</Descriptions.Item>
+                    <Descriptions.Item label="总体积(CBM)">{selectedJob.volumeCbm?.toFixed(2) || '-'}</Descriptions.Item>
+                    <Descriptions.Item label="备注">{selectedJob.remark || '-'}</Descriptions.Item>
+                  </Descriptions>
+                </div>
+
+                <div id="task-supplier-info" style={{ marginTop: 20 }}>
+                  <Text strong style={{ fontSize: 15, display: 'block', marginBottom: 8 }}>供应商 / 送货信息</Text>
                   <Descriptions column={2} size="small" bordered>
                     <Descriptions.Item label="供应商">{selectedTask.supplier?.supplierName || '-'}</Descriptions.Item>
                     <Descriptions.Item label="电话">{selectedTask.supplier?.phone || '-'}</Descriptions.Item>
@@ -1633,9 +2272,10 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
                     </Descriptions.Item>
                     <Descriptions.Item label="车牌">{selectedTask.deliveryCompany?.plateNo || '-'}</Descriptions.Item>
                   </Descriptions>
-                </Card>
+                </div>
 
-                <Card id="task-node-change" size="small" title={`节点变更记录（${nodeChangeRows.length}）`}>
+                <div id="task-node-change" style={{ marginTop: 20 }}>
+                  <Text strong style={{ fontSize: 15, display: 'block', marginBottom: 8 }}>{`节点变更记录（${nodeChangeRows.length}）`}</Text>
                   <Table
                     rowKey="key"
                     columns={nodeChangeColumns}
@@ -1644,19 +2284,20 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
                     pagination={false}
                     scroll={{ x: 1100 }}
                   />
-                </Card>
+                </div>
 
-                <Card id="task-container-list" size="small" title={`集装号列表（${selectedContainers.length}）`}>
+                <div id="task-container-list" style={{ marginTop: 20 }}>
+                  <Text strong style={{ fontSize: 15, display: 'block', marginBottom: 8 }}>{businessMode === 'AIR' ? `集装号列表（${selectedContainers.length}）` : `集装箱列表（${selectedContainers.length}）`}</Text>
                   <Table
                     rowKey="containerNo"
                     columns={[
                       {
-                        title: '集装号',
+                        title: businessMode === 'AIR' ? '集装号' : '集装箱号',
                         dataIndex: 'containerNo',
                         key: 'containerNo',
-                        width: 120,
+                        width: 140,
                         render: (value: string, record: MutableLegacyContainer) => (
-                          <a onClick={() => openContainerDetail(record)}>{value}</a>
+                          <a onClick={() => openContainerDetail(record)} style={{ fontFamily: 'monospace', fontWeight: 600 }}>{value}</a>
                         ),
                       },
                       { title: '线路', dataIndex: 'routeName', key: 'routeName', width: 220 },
@@ -1692,19 +2333,20 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
                     pagination={false}
                     scroll={{ x: 1100 }}
                   />
-                </Card>
+                </div>
 
-                <Card id="task-cost-detail" size="small" title={`成本明细（${selectedCostItems.length}）`}>
+                <div id="task-cost-detail" style={{ marginTop: 20 }}>
+                  <Text strong style={{ fontSize: 15, display: 'block', marginBottom: 8 }}>{`费用条目详情（${selectedCostItems.length}）`}</Text>
                   <Table
                     rowKey="id"
-                    columns={costColumns}
+                    columns={costDetailColumns}
                     dataSource={selectedCostItems}
                     size="small"
                     pagination={false}
                     locale={{ emptyText: '暂无成本记录' }}
-                    scroll={{ x: 760 }}
+                    scroll={{ x: 2050 }}
                   />
-                </Card>
+                </div>
               </Space>
             </div>
           </div>
@@ -1751,7 +2393,7 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
       </Modal>
 
       <Modal
-        title={detailContainer ? `集装号详情 - ${detailContainer.containerNo}` : '集装号详情'}
+        title={detailContainer ? `${businessMode === 'AIR' ? '集装号' : '集装箱'}详情 - ${detailContainer.containerNo}` : '详情'}
         open={containerDetailOpen}
         onCancel={() => setContainerDetailOpen(false)}
         footer={null}
@@ -1766,6 +2408,53 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
           scroll={{ x: 1300 }}
         />
       </Modal>
+
+      {/* 成本录入 Drawer */}
+      <Drawer
+        title="JOB 成本录入"
+        placement="right"
+        open={costEditorOpen}
+        onClose={() => { setCostEditorOpen(false); setCostEditorTaskId(null); setCostEditorRows([]); }}
+        width="96vw"
+        destroyOnHidden
+        styles={{ body: { padding: 16 } }}
+        extra={(
+          <Space>
+            <Button onClick={() => { setCostEditorOpen(false); setCostEditorTaskId(null); setCostEditorRows([]); }}>取消</Button>
+            <Button onClick={() => persistCostEditor(false)}>保存草稿</Button>
+            <Button type="primary" onClick={() => persistCostEditor(true)}>提交主管审核</Button>
+          </Space>
+        )}
+      >
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 12 }}
+          title={'费用条目使用表格式录入。已审核条目为锁定行，只能通过\u201C申请修改\u201D生成待审核变更；新增条目和驳回条目可直接编辑。'}
+        />
+
+        <Descriptions size="small" column={4} bordered style={{ marginBottom: 12 }}>
+          <Descriptions.Item label="任务号" span={2}>{costEditorJobNo || '-'}</Descriptions.Item>
+          <Descriptions.Item label="站点">{costEditorTask?.jobs[0]?.stationName || '-'}</Descriptions.Item>
+          <Descriptions.Item label="线路">{costEditorTask?.jobs[0]?.routeName || '-'}</Descriptions.Item>
+          <Descriptions.Item label="起运港">{costEditorTask?.jobs[0]?.originPort || '-'}</Descriptions.Item>
+          <Descriptions.Item label="目的港">{costEditorTask?.jobs[0]?.destPort || '-'}</Descriptions.Item>
+          <Descriptions.Item label="服务类型">{costEditorTask ? SERVICE_LABEL[costEditorTask.jobs[0]?.serviceType || 'STANDARD'] : '-'}</Descriptions.Item>
+          <Descriptions.Item label="件数">{costEditorTask ? costEditorTask.jobs.reduce((sum, j) => sum + Number(j.pieces || 0), 0) : '-'}</Descriptions.Item>
+          <Descriptions.Item label="应付合计">CNY {costEditorAmount.toFixed(2)}</Descriptions.Item>
+        </Descriptions>
+
+        <Card size="small" title="费用条目" extra={<Button type="dashed" onClick={addCostEditorRow}>+ 添加行</Button>}>
+          <Table
+            rowKey="id"
+            columns={costEditorColumns}
+            dataSource={costEditorRows}
+            pagination={false}
+            size="small"
+            scroll={{ x: 2100 }}
+          />
+        </Card>
+      </Drawer>
     </div>
   );
 };

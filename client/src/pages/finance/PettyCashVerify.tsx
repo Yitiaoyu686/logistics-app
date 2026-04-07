@@ -46,7 +46,115 @@ interface PettyCashForVerify {
   verifyRemark?: string;
 }
 
-// --- 数据状态（暂无API，使用空数组初始化） ---
+// --- Mock 数据生成 ---
+function generateMockPettyCashVerify(): PettyCashForVerify[] {
+  return [
+    {
+      id: 'PV001',
+      applicationNo: 'P-20260320-0005',
+      applicant: '赵磊',
+      department: '仓储部',
+      appliedAmount: 1800,
+      currency: 'CNY',
+      purpose: '港口临时费用',
+      relatedJob: 'S-JOB2603000028',
+      status: 'PAID',
+      applyTime: '2026-03-20 08:45:00',
+      paidTime: '2026-03-21 10:30:00',
+    },
+    {
+      id: 'PV002',
+      applicationNo: 'P-20260322-0006',
+      applicant: '孙芳',
+      department: '销售部',
+      appliedAmount: 600,
+      currency: 'CNY',
+      purpose: '打印复印费',
+      status: 'PAID',
+      applyTime: '2026-03-22 13:00:00',
+      paidTime: '2026-03-23 09:00:00',
+    },
+    {
+      id: 'PV003',
+      applicationNo: 'P-20260324-0009',
+      applicant: '刘洋',
+      department: '操作部',
+      appliedAmount: 1000,
+      currency: 'CNY',
+      purpose: '客户接待费用',
+      relatedJob: 'S-JOB2603000031',
+      status: 'PAID',
+      applyTime: '2026-03-24 09:30:00',
+      paidTime: '2026-03-25 10:00:00',
+    },
+    {
+      id: 'PV004',
+      applicationNo: 'P-20260315-0007',
+      applicant: '周明',
+      department: '操作部',
+      appliedAmount: 1200,
+      currency: 'CNY',
+      purpose: '码头搬运费',
+      relatedJob: 'S-JOB2603000031',
+      status: 'VERIFIED',
+      applyTime: '2026-03-15 09:00:00',
+      paidTime: '2026-03-16 10:00:00',
+      verifyTime: '2026-03-20 11:30:00',
+      verifier: '财务主管',
+      actualAmount: 1150,
+      expenses: [
+        { id: 'exp001', category: '码头搬运费', description: '蛇口码头装卸搬运', amount: 800, jobNo: 'S-JOB2603000031' },
+        { id: 'exp002', category: '其他费用', description: '搬运工人餐费补贴', amount: 350, jobNo: 'S-JOB2603000031' },
+      ],
+      invoiceUrls: ['搬运费发票-20260320.pdf', '餐费收据-20260320.jpg'],
+      verifyRemark: '实际搬运费用低于预估，节余50元已退回',
+    },
+    {
+      id: 'PV005',
+      applicationNo: 'P-20260310-0008',
+      applicant: '吴丽',
+      department: '美国分部',
+      appliedAmount: 150,
+      currency: 'USD',
+      purpose: '其他临时支出',
+      relatedJob: 'S-JOB2603000035',
+      status: 'VERIFIED',
+      applyTime: '2026-03-10 10:30:00',
+      paidTime: '2026-03-11 09:00:00',
+      verifyTime: '2026-03-18 15:00:00',
+      verifier: 'Mike Chen',
+      actualAmount: 142,
+      expenses: [
+        { id: 'exp003', category: '其他费用', description: '包装材料采购(纸箱、气泡膜)', amount: 98, jobNo: 'S-JOB2603000035' },
+        { id: 'exp004', category: '快递费', description: 'UPS加急件', amount: 44, jobNo: 'S-JOB2603000035' },
+      ],
+      invoiceUrls: ['packaging-receipt-0318.pdf', 'ups-receipt-0318.pdf'],
+      verifyRemark: 'Packaging supplies and UPS express shipment for urgent order',
+    },
+    {
+      id: 'PV006',
+      applicationNo: 'P-20260312-0010',
+      applicant: '陈静',
+      department: '操作部',
+      appliedAmount: 500,
+      currency: 'CNY',
+      purpose: '快递费',
+      relatedJob: 'S-JOB2603000035',
+      status: 'VERIFIED',
+      applyTime: '2026-03-12 11:20:00',
+      paidTime: '2026-03-13 09:10:00',
+      verifyTime: '2026-03-19 14:00:00',
+      verifier: '财务主管',
+      actualAmount: 480,
+      expenses: [
+        { id: 'exp005', category: '快递费', description: '顺丰次日达-报关文件', amount: 280, jobNo: 'S-JOB2603000035' },
+        { id: 'exp006', category: '快递费', description: '顺丰标快-合同文件', amount: 200, jobNo: 'S-JOB2603000035' },
+      ],
+      invoiceUrls: ['sf-invoice-0319.pdf'],
+      verifyRemark: '两笔快递费用，实际低于预估20元',
+    },
+  ];
+}
 
 const STATUS_CONFIG = {
   PAID: { text: '待核销', color: 'blue' },
@@ -62,7 +170,7 @@ const DETAIL_NAV_ITEMS = [
 ];
 
 export const PettyCashVerify: React.FC = () => {
-  const [data, setData] = useState<PettyCashForVerify[]>([]);
+  const [data, setData] = useState<PettyCashForVerify[]>(generateMockPettyCashVerify());
   const [verifyModalVisible, setVerifyModalVisible] = useState(false);
   const [detailVisible, setDetailVisible] = useState(false);
   const [currentRecord, setCurrentRecord] = useState<PettyCashForVerify | null>(null);
@@ -547,9 +655,9 @@ export const PettyCashVerify: React.FC = () => {
                         placeholder="选择归属任务"
                         showSearch
                       >
-                        <Select.Option value="JOB-SZX-LAX-231028">JOB-SZX-LAX-231028</Select.Option>
-                        <Select.Option value="JOB-SZX-NYC-231101">JOB-SZX-NYC-231101</Select.Option>
-                        <Select.Option value="JOB-GZU-LAX-231115">JOB-GZU-LAX-231115</Select.Option>
+                        <Select.Option value="S-JOB2603000028">S-JOB2603000028</Select.Option>
+                        <Select.Option value="S-JOB2603000031">S-JOB2603000031</Select.Option>
+                        <Select.Option value="S-JOB2603000035">S-JOB2603000035</Select.Option>
                       </Select>
                     </Col>
                     <Col span={24} style={{ marginTop: 8 }}>

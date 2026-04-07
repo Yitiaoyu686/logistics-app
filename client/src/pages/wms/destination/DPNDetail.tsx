@@ -49,10 +49,10 @@ interface WaybillRecord {
 const WAYBILL_POOL: WaybillRecord[] = Array.from({ length: 32 }, (_, idx) => ({
   id: `WB-${idx + 1}`,
   trackingNo: `19102${String(1000 + idx).padStart(4, '0')}${String((idx % 9) + 1).padStart(2, '0')}`,
-  orderNo: `ORD-202603${String((idx % 28) + 1).padStart(2, '0')}-${String(100 + idx).padStart(3, '0')}`,
+  orderNo: `S-202603${String((idx % 28) + 1).padStart(2, '0')}${String(100 + idx).padStart(6, '0')}`,
   customerCode: `C${String(2000 + idx).slice(-4)}`,
   customerName: ['联调A客户', '联调B客户', '联调C客户', '联调D客户'][idx % 4],
-  jobNo: `JOB${String(260300 + Math.floor(idx / 3)).padStart(6, '0')}`,
+  jobNo: `S-JOB26030${String(Math.floor(idx / 3)).padStart(4, '0')}`,
   station: idx % 2 === 0 ? 'IKEJ STA' : 'ABUJ STA',
   recipientName: ['Karena', 'Tom', 'Smile', 'Kwame', 'Ada', 'Chidi'][idx % 6],
   recipientPhone: `+234-800-100-${String(1000 + idx).slice(-4)}`,

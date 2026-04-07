@@ -3,7 +3,7 @@ import {
   Drawer, Card, Row, Col, Button, Tag, Descriptions, Table,
   Timeline, Input, Divider, Modal, Form, Collapse, Dropdown,
   Select, InputNumber, Space, Typography, Badge, DatePicker, message,
-  Alert, Radio, Anchor, Spin
+  Alert, Radio, Anchor, Spin, Upload
 } from 'antd';
 import type { MenuProps } from 'antd';
 import {
@@ -949,7 +949,7 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({ orderId, onClose }) =>
                       onClick={() => setPayModalVisible(true)}
                       disabled={masterOrder.paymentStatus === 'PAID' || ['RETURN_APPLIED', 'CANCELLED'].includes(currentStatus)}
                     >
-                      确认收款
+                      登记收款
                     </Button>
                     <Row gutter={8}>
                       <Col span={12}>
@@ -1140,13 +1140,32 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({ orderId, onClose }) =>
         </Form>
       </Modal>
 
-      {/* Payment Modal - 完善版 */}
+      {/* Payment Modal - 登记收款（提交审核） */}
       <Modal
-        title="确认收款"
+        title="登记收款"
         open={payModalVisible}
         onCancel={() => setPayModalVisible(false)}
+        okText="提交审核"
         onOk={() => {
-          message.success('收款确认成功');
+          const receiptStore = JSON.parse(localStorage.getItem('finance_payment_receipt_store') || '{}');
+          const orderNo = masterOrder.orderNo;
+          const outstanding = (masterOrder.totalFees || 0) - (masterOrder.paidAmount || 0);
+          const receipt = {
+            id: `RCV-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            orderNo,
+            amount: outstanding,
+            paymentChannel: 'BANK',
+            receivedAt: dayjs().toISOString(),
+            voucherNames: ['收款凭证.png'],
+            operator: '当前用户',
+            remark: '',
+            status: 'PENDING' as const,
+          };
+          const list = receiptStore[orderNo] || [];
+          list.push(receipt);
+          receiptStore[orderNo] = list;
+          localStorage.setItem('finance_payment_receipt_store', JSON.stringify(receiptStore));
+          message.success('收款登记已提交，等待财务审核');
           setPayModalVisible(false);
         }}
         width={600}
@@ -1190,7 +1209,7 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({ orderId, onClose }) =>
             />
           </Form.Item>
           <Form.Item label="收款方式" required>
-            <Select defaultValue="WECHAT">
+            <Select defaultValue="BANK">
               <Select.Option value="WECHAT">微信支付</Select.Option>
               <Select.Option value="ALIPAY">支付宝</Select.Option>
               <Select.Option value="BANK">银行转账</Select.Option>
@@ -1207,13 +1226,26 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({ orderId, onClose }) =>
             <Col span={12}>
               <Form.Item label="收款账户">
                 <Select placeholder="选择收款账户">
+                  <Select.Option value="COMPANY_BANK">公司银行账户</Select.Option>
                   <Select.Option value="COMPANY_WECHAT">公司微信</Select.Option>
                   <Select.Option value="COMPANY_ALIPAY">公司支付宝</Select.Option>
-                  <Select.Option value="COMPANY_BANK">公司银行账户</Select.Option>
                 </Select>
               </Form.Item>
             </Col>
           </Row>
+          <Form.Item label="上传收款凭证" required extra="支持图片格式，最多5张">
+            <Upload.Dragger
+              name="voucher"
+              multiple
+              maxCount={5}
+              accept="image/*"
+              beforeUpload={() => false}
+              listType="picture"
+            >
+              <p className="ant-upload-drag-icon"><InboxOutlined /></p>
+              <p className="ant-upload-text">点击或拖拽上传收款凭证</p>
+            </Upload.Dragger>
+          </Form.Item>
           <Form.Item label="交易凭证号">
             <Input placeholder="请输入交易流水号或凭证号" />
           </Form.Item>

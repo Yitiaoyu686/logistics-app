@@ -14,13 +14,15 @@ function randomDigits(len: number): string {
   return `${Math.floor(Math.random() * (10 ** len))}`.padStart(len, '0');
 }
 
-function createMasterWaybillNo(db: any): string {
+function createMasterWaybillNo(db: any, transportType?: string): string {
+  const prefix = String(transportType || '').toUpperCase() === 'AIR' ? 'A' : 'S';
+  const day = datePart();
   for (let i = 0; i < 20; i++) {
-    const candidate = `ORD-${datePart()}-${randomDigits(4)}`;
+    const candidate = `${prefix}-${day}${randomDigits(5)}`;
     const exists = db.prepare('SELECT 1 FROM master_orders WHERE id = ? LIMIT 1').get(candidate);
     if (!exists) return candidate;
   }
-  return `ORD-${datePart()}-${Date.now().toString().slice(-6)}`;
+  return `${prefix}-${day}${Date.now().toString().slice(-5)}`;
 }
 
 // ==================== MASTER ORDERS ====================
@@ -140,7 +142,6 @@ router.get('/master/:id', (req, res) => {
 // POST /api/orders/master
 router.post('/master', (req, res) => {
   const db = getDb();
-  const id = createMasterWaybillNo(db);
   const now = new Date().toISOString();
 
   const {
@@ -150,6 +151,7 @@ router.post('/master', (req, res) => {
     routeCode, serviceType, paymentMethod, paymentChannel, paymentTime, inboundDate,
     currency, warehouseEntryNo, containerType, invoiceInfo
   } = req.body;
+  const id = createMasterWaybillNo(db, transportType);
 
   if (!customerId || !sender || !consignee || !consigneePhone || !destCountry || !destCity || !destAddress) {
     error(res, 'Missing required fields');
@@ -547,8 +549,8 @@ router.post('/master/:id/approve-return', (req, res) => {
     // 3. Generate return records if needReturn
     if (order.needReturn) {
       for (const sub of subOrders) {
-        const returnId = generateId('RET');
-        const returnNo = generateId('RTN');
+        const returnId = generateId('R');
+        const returnNo = returnId;
         db.prepare(`
           INSERT INTO return_records (id, returnNo, orderNo, trackingNo, customerName, returnType, returnStage, status, reason, pieces, weight, volume, applicant, applyTime, approver, approveTime, currentLocation, remark, createdAt)
           VALUES (?, ?, ?, ?, ?, ?, 'ORIGIN', 'APPROVED', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

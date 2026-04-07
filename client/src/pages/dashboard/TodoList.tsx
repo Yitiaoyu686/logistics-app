@@ -266,7 +266,7 @@ export const TodoList: React.FC = () => {
   return (
     <div>
       <Card>
-        <Space style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
           <Button
             type="primary"
             icon={<PlusOutlined />}
@@ -274,7 +274,7 @@ export const TodoList: React.FC = () => {
           >
             新建待办
           </Button>
-        </Space>
+        </div>
 
         <Table
           rowKey="id"

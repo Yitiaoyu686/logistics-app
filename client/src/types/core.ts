@@ -56,6 +56,61 @@ export interface Client {
   createdAt: string;
 }
 
+// --- Enterprise Info Types ---
+
+export type EntityType = 'COMPANY_CN' | 'COMPANY_OVERSEAS' | 'INDIVIDUAL';
+
+export interface CustomField {
+  label: string;    // 字段名，用户自己填，如 "CAC Number"
+  value: string;    // 字段值
+}
+
+export interface DocFile {
+  id: string;
+  name: string;       // 文件名
+  url: string;        // 文件路径（mock）
+  type: string;       // 证照类别：营业执照/身份证正面/身份证反面/护照/其他
+  uploadedAt: string;
+}
+
+export interface EnterpriseInfo {
+  entityType: EntityType;
+
+  // 中国企业字段
+  companyName?: string;              // 公司全称
+  unifiedCreditCode?: string;        // 统一社会信用代码（18位）
+  legalRepresentative?: string;      // 法定代表人
+  registeredCapital?: string;        // 注册资本
+  establishDate?: string;            // 成立日期
+  expiryDate?: string;               // 营业期限（空=长期）
+  registeredAddress?: string;        // 注册地址
+  businessScope?: string;            // 经营范围
+
+  // 中国企业开票信息
+  taxpayerId?: string;               // 纳税人识别号
+  invoiceTitle?: string;             // 开票抬头
+  invoiceAddress?: string;           // 开票地址
+  invoicePhone?: string;             // 开票电话
+
+  // 海外企业字段
+  overseasCompanyName?: string;      // 公司名称
+  overseasCountry?: string;          // 注册国家
+  overseasRegNumber?: string;        // 注册号
+  overseasTaxNumber?: string;        // 税号 / TIN
+  overseasDirector?: string;         // 负责人
+  customFields?: CustomField[];      // 自定义字段
+
+  // 个人字段
+  realName?: string;                 // 真实姓名
+  idType?: 'ID_CARD' | 'PASSPORT';   // 身份证/护照
+  idNumber?: string;                 // 证件号码
+
+  // 通用
+  bankName?: string;                 // 开户银行
+  bankAccount?: string;              // 银行账号
+  documents: DocFile[];              // 证照文件
+}
+
 // --- OMS (Order Management System) Types ---
 
 // 订单状态

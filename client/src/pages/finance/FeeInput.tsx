@@ -15,6 +15,13 @@ import {
   FEE_TYPE_CONFIG, FEE_STATUS_CONFIG, CURRENCY_CONFIG
 } from '../../types/finance';
 import { feeApi, orderApi, jobApi, warehouseApi } from '../../api';
+import {
+  ListPageToolbar,
+  ListPageToolbarActions,
+  ListPageToolbarCard,
+  ListPageToolbarField,
+  ListPageToolbarFilters,
+} from '../../components/ListPageToolbar';
 import { FeeInputDetail } from './FeeInputDetail';
 import { useOrderBaseOptions } from '../../hooks/useOrderBaseOptions';
 
@@ -505,6 +512,22 @@ export const FeeInput: React.FC = () => {
       }
     },
     {
+      title: '汇率',
+      key: 'exchangeRate',
+      width: 70,
+      render: (record: FeeRecord) => record.currency === 'CNY' ? '-' : (record.exchangeRate || '-'),
+    },
+    {
+      title: '折合CNY',
+      key: 'amountCNY',
+      width: 100,
+      render: (record: FeeRecord) => {
+        if (record.currency === 'CNY') return '-';
+        const rate = record.exchangeRate || 1;
+        return <Text style={{ color: '#8c8c8c' }}>¥{(record.amount * rate).toFixed(2)}</Text>;
+      },
+    },
+    {
       title: '供应商/客户',
       key: 'party',
       width: 120,
@@ -584,7 +607,7 @@ export const FeeInput: React.FC = () => {
       </Row>
 
       {/* 筛选区域 */}
-      <Card style={{ marginBottom: 16 }}>
+      <ListPageToolbarCard>
         {coverage && (
           <Alert
             style={{ marginBottom: 12 }}
@@ -594,68 +617,69 @@ export const FeeInput: React.FC = () => {
             description="系统会自动从订单/集装单元/任务生成费用草稿；缺失金额可在列表中手动编辑补录。"
           />
         )}
-        <Row gutter={[16, 12]}>
-          <Col span={5}>
-            <div style={{ marginBottom: 4, fontSize: 13, color: '#666' }}>关键词</div>
-            <Input
-              placeholder="费用编号/关联单号/供应商/客户"
-              value={searchText}
-              onChange={e => setSearchText(e.target.value)}
-              allowClear
-            />
-          </Col>
-          <Col span={4}>
-            <div style={{ marginBottom: 4, fontSize: 13, color: '#666' }}>费用类型</div>
-            <Select value={filterFeeType} onChange={setFilterFeeType} style={{ width: '100%' }}>
-              <Option value="ALL">全部类型</Option>
-              {feeTypeOptions.map((item) => (
-                <Option key={item.value} value={item.value}>{item.label}</Option>
-              ))}
-            </Select>
-          </Col>
-          <Col span={3}>
-            <div style={{ marginBottom: 4, fontSize: 13, color: '#666' }}>费用方向</div>
-            <Select value={filterDirection} onChange={setFilterDirection} style={{ width: '100%' }}>
-              <Option value="ALL">全部</Option>
-              <Option value="PAYABLE">应付</Option>
-              <Option value="RECEIVABLE">应收</Option>
-            </Select>
-          </Col>
-          <Col span={3}>
-            <div style={{ marginBottom: 4, fontSize: 13, color: '#666' }}>状态</div>
-            <Select value={filterStatus} onChange={setFilterStatus} style={{ width: '100%' }}>
-              <Option value="ALL">全部状态</Option>
-              {(Object.keys(FEE_STATUS_CONFIG) as FeeStatus[]).map(key => (
-                <Option key={key} value={key}>{FEE_STATUS_CONFIG[key].label}</Option>
-              ))}
-            </Select>
-          </Col>
-          <Col span={3}>
-            <div style={{ marginBottom: 4, fontSize: 13, color: '#666' }}>币种</div>
-            <Select value={filterCurrency} onChange={setFilterCurrency} style={{ width: '100%' }}>
-              <Option value="ALL">全部币种</Option>
-              {currencySelectOptions.map((item) => (
-                <Option key={item.value} value={item.value}>{item.label}</Option>
-              ))}
-            </Select>
-          </Col>
-          <Col span={6} style={{ display: 'flex', alignItems: 'flex-end' }}>
-            <Space>
-              <Button icon={<ReloadOutlined />} onClick={handleReset}>重置</Button>
-              <Button
-                icon={<DownloadOutlined />}
-                loading={autoLoading}
-                onClick={handleAutoBootstrap}
-              >
-                自动获取费用
-              </Button>
-              <Button type="primary" icon={<PlusOutlined />} onClick={handleOpenCreate}>
-                录入费用
-              </Button>
-            </Space>
-          </Col>
-        </Row>
-      </Card>
+        <ListPageToolbar>
+          <ListPageToolbarFilters>
+            <ListPageToolbarField flex="1 1 260px" minWidth={240}>
+              <div style={{ marginBottom: 4, fontSize: 13, color: '#666' }}>关键词</div>
+              <Input
+                placeholder="费用编号/关联单号/供应商/客户"
+                value={searchText}
+                onChange={e => setSearchText(e.target.value)}
+                allowClear
+              />
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={180}>
+              <div style={{ marginBottom: 4, fontSize: 13, color: '#666' }}>费用类型</div>
+              <Select value={filterFeeType} onChange={setFilterFeeType} style={{ width: '100%' }}>
+                <Option value="ALL">全部类型</Option>
+                {feeTypeOptions.map((item) => (
+                  <Option key={item.value} value={item.value}>{item.label}</Option>
+                ))}
+              </Select>
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={140}>
+              <div style={{ marginBottom: 4, fontSize: 13, color: '#666' }}>费用方向</div>
+              <Select value={filterDirection} onChange={setFilterDirection} style={{ width: '100%' }}>
+                <Option value="ALL">全部</Option>
+                <Option value="PAYABLE">应付</Option>
+                <Option value="RECEIVABLE">应收</Option>
+              </Select>
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={140}>
+              <div style={{ marginBottom: 4, fontSize: 13, color: '#666' }}>状态</div>
+              <Select value={filterStatus} onChange={setFilterStatus} style={{ width: '100%' }}>
+                <Option value="ALL">全部状态</Option>
+                {(Object.keys(FEE_STATUS_CONFIG) as FeeStatus[]).map(key => (
+                  <Option key={key} value={key}>{FEE_STATUS_CONFIG[key].label}</Option>
+                ))}
+              </Select>
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={140}>
+              <div style={{ marginBottom: 4, fontSize: 13, color: '#666' }}>币种</div>
+              <Select value={filterCurrency} onChange={setFilterCurrency} style={{ width: '100%' }}>
+                <Option value="ALL">全部币种</Option>
+                {currencySelectOptions.map((item) => (
+                  <Option key={item.value} value={item.value}>{item.label}</Option>
+                ))}
+              </Select>
+            </ListPageToolbarField>
+          </ListPageToolbarFilters>
+          <ListPageToolbarActions style={{ alignSelf: 'flex-end' }}>
+            <Button type="primary" onClick={() => setSearchText((value) => value.trim())}>查询</Button>
+            <Button icon={<ReloadOutlined />} onClick={handleReset}>重置</Button>
+            <Button
+              icon={<DownloadOutlined />}
+              loading={autoLoading}
+              onClick={handleAutoBootstrap}
+            >
+              自动获取费用
+            </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleOpenCreate}>
+              录入费用
+            </Button>
+          </ListPageToolbarActions>
+        </ListPageToolbar>
+      </ListPageToolbarCard>
 
       {/* 数据表格 */}
       <Card>

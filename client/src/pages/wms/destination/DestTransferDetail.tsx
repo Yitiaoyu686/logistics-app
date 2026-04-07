@@ -37,7 +37,7 @@ interface TransferFee {
 // 模拟详情数据
 const getMockDetailData = (transferId: string) => ({
   id: transferId,
-  transferNo: 'TRF-US-20240120-001',
+  transferNo: 'S-T-20240120-0001',
   direction: 'BRANCH_TO_MAIN' as string,
   fromWarehouse: 'US分仓A',
   fromWarehouseLabel: 'US分仓A（纽约）',
@@ -77,7 +77,7 @@ const getMockDetailData = (transferId: string) => ({
   logs: [
     { time: '2024-01-15 14:00', operator: '张仓管', action: '确认发运', detail: '货物已发运，UPS揽收' },
     { time: '2024-01-15 10:05', operator: '张仓管', action: '费用录入', detail: '录入装卸费 USD 50.00' },
-    { time: '2024-01-15 10:00', operator: '张仓管', action: '创建调拨单', detail: '创建调拨单 TRF-US-20240120-001，分仓A → 总仓' }
+    { time: '2024-01-15 10:00', operator: '张仓管', action: '创建调拨单', detail: '创建调拨单 S-T-20240120-0001，分仓A → 总仓' }
   ]
 });
 

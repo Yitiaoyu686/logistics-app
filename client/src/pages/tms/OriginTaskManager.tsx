@@ -1,6 +1,10 @@
 import React from 'react';
 import { LegacyTaskManager } from './LegacyTaskManager';
 
-export const OriginTaskManager: React.FC = () => {
-  return <LegacyTaskManager mode="ORIGIN" />;
+interface OriginTaskManagerProps {
+  businessMode?: 'ALL' | 'AIR' | 'SEA';
+}
+
+export const OriginTaskManager: React.FC<OriginTaskManagerProps> = ({ businessMode = 'ALL' }) => {
+  return <LegacyTaskManager mode="ORIGIN" businessMode={businessMode} />;
 };

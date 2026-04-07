@@ -5,6 +5,6 @@ interface DestJobManagerProps {
   businessMode?: 'ALL' | 'AIR' | 'SEA';
 }
 
-export const DestJobManager: React.FC<DestJobManagerProps> = () => {
-  return <LegacyTaskManager mode="DEST" />;
+export const DestJobManager: React.FC<DestJobManagerProps> = ({ businessMode = 'ALL' }) => {
+  return <LegacyTaskManager mode="DEST" businessMode={businessMode} />;
 };

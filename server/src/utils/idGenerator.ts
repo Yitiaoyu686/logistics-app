@@ -2,6 +2,24 @@ import { getDb } from '../database/connection';
 
 const counters: Record<string, number> = {};
 
+/**
+ * ID format rules:
+ * - Order (master): S-YYYYMMDDNNNNN (sea) / A-YYYYMMDDNNNNN (air)
+ * - Sub-order: S-YYYYMMDDNNNNN-NN / A-YYYYMMDDNNNNN-NN
+ * - JOB: S-JOBYYMMNNNNN (sea) / A-JOBYYMMNNNNN (air)
+ * - DPN: DPN-YYYYMMDD-NNNN
+ * - Delivery: S-D-YYYYMMDD-NNNN / A-D-YYYYMMDD-NNNN
+ * - Return: R-YYYYMMDD-NNNN
+ * - Pickup: P-YYYYMMDD-NNNN
+ * - Transfer: S-T-YYYYMMDD-NNNN / A-T-YYYYMMDD-NNNN
+ * - Fee: F-YYYYMMDD-NNNN
+ * - Petty cash: P-YYYYMMDD-NNNN
+ */
+
+/**
+ * Generate a generic ID with format: PREFIX-YYYYMMDD-NNNN
+ * Used for DPN, Return, Pickup, Fee, Petty cash, etc.
+ */
 export function generateId(prefix: string): string {
   const date = new Date();
   const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
@@ -70,21 +88,121 @@ export function generateId(prefix: string): string {
   }
 
   counters[key]++;
-  return `${prefix}-${dateStr}-${String(counters[key]).padStart(3, '0')}`;
+  return `${prefix}-${dateStr}-${String(counters[key]).padStart(4, '0')}`;
 }
 
+/**
+ * Generate master order ID: S-YYYYMMDDNNNNN or A-YYYYMMDDNNNNN
+ */
+export function generateMasterOrderId(transportType: string): string {
+  const db = getDb();
+  const prefix = String(transportType || '').toUpperCase() === 'AIR' ? 'A' : 'S';
+  const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const likePattern = `${prefix}-${day}%`;
+  const row = db.prepare(`
+    SELECT MAX(CAST(SUBSTR(id, ${prefix.length + 1 + day.length + 1}, 5) AS INTEGER)) AS maxSeq
+    FROM master_orders
+    WHERE id LIKE ? AND id NOT LIKE '%-__'
+  `).get(likePattern) as any;
+  const nextSeq = Number(row?.maxSeq || 0) + 1;
+  return `${prefix}-${day}${String(nextSeq).padStart(5, '0')}`;
+}
+
+/**
+ * Generate sub-order ID: S-YYYYMMDDNNNNN-NN or A-YYYYMMDDNNNNN-NN
+ */
 export function generateSubOrderId(transportType: string): string {
   const db = getDb();
   const prefix = String(transportType || '').toUpperCase() === 'AIR' ? 'A' : 'S';
   const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const likePattern = `${prefix}-${day}%`;
   const row = db.prepare(`
-    SELECT MAX(CAST(SUBSTR(id, 11, 6) AS INTEGER)) AS maxSeq
+    SELECT MAX(CAST(SUBSTR(id, ${prefix.length + 1 + day.length + 1}, 5) AS INTEGER)) AS maxSeq
     FROM sub_orders
     WHERE id LIKE ?
   `).get(likePattern) as any;
   const nextSeq = Number(row?.maxSeq || 0) + 1;
-  return `${prefix}-${day}${String(nextSeq).padStart(6, '0')}`;
+  return `${prefix}-${day}${String(nextSeq).padStart(5, '0')}`;
+}
+
+/**
+ * Generate JOB number: S-JOBYYMMNNNNN or A-JOBYYMMNNNNN
+ */
+export function generateJobNo(transportType: string): string {
+  const db = getDb();
+  const prefix = String(transportType || '').toUpperCase() === 'AIR' ? 'A' : 'S';
+  const date = new Date();
+  const yymm = String(date.getFullYear()).slice(2) + String(date.getMonth() + 1).padStart(2, '0');
+  const likePattern = `${prefix}-JOB${yymm}%`;
+  const row = db.prepare(`
+    SELECT MAX(CAST(SUBSTR(jobNo, ${prefix.length + 4 + yymm.length + 1}, 5) AS INTEGER)) AS maxSeq
+    FROM jobs
+    WHERE jobNo LIKE ?
+  `).get(likePattern) as any;
+  const nextSeq = Number(row?.maxSeq || 0) + 1;
+  return `${prefix}-JOB${yymm}${String(nextSeq).padStart(5, '0')}`;
+}
+
+/**
+ * Generate transfer number: S-T-YYYYMMDD-NNNN or A-T-YYYYMMDD-NNNN
+ */
+export function generateTransferNo(transportType: string): string {
+  const db = getDb();
+  const prefix = String(transportType || '').toUpperCase() === 'AIR' ? 'A' : 'S';
+  const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const likePattern = `${prefix}-T-${day}-%`;
+  const row = db.prepare(`
+    SELECT MAX(CAST(SUBSTR(transferNo, -4) AS INTEGER)) AS maxSeq
+    FROM transfer_orders
+    WHERE transferNo LIKE ?
+  `).get(likePattern) as any;
+  const nextSeq = Number(row?.maxSeq || 0) + 1;
+  return `${prefix}-T-${day}-${String(nextSeq).padStart(4, '0')}`;
+}
+
+/**
+ * Generate fee number: F-YYYYMMDD-NNNN
+ */
+export function generateFeeNo(): string {
+  return generateId('F');
+}
+
+/**
+ * Generate DPN number: DPN-YYYYMMDD-NNNN
+ */
+export function generateDpnNo(): string {
+  return generateId('DPN');
+}
+
+/**
+ * Generate delivery task number: S-D-YYYYMMDD-NNNN or A-D-YYYYMMDD-NNNN
+ */
+export function generateDeliveryNo(transportType: string): string {
+  const db = getDb();
+  const prefix = String(transportType || '').toUpperCase() === 'AIR' ? 'A' : 'S';
+  const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const likePattern = `${prefix}-D-${day}-%`;
+  const row = db.prepare(`
+    SELECT MAX(CAST(SUBSTR(id, -4) AS INTEGER)) AS maxSeq
+    FROM delivery_orders
+    WHERE id LIKE ?
+  `).get(likePattern) as any;
+  const nextSeq = Number(row?.maxSeq || 0) + 1;
+  return `${prefix}-D-${day}-${String(nextSeq).padStart(4, '0')}`;
+}
+
+/**
+ * Generate return number: R-YYYYMMDD-NNNN
+ */
+export function generateReturnNo(): string {
+  return generateId('R');
+}
+
+/**
+ * Generate pickup number: P-YYYYMMDD-NNNN
+ */
+export function generatePickupNo(): string {
+  return generateId('P');
 }
 
 export function generateSimpleId(): string {

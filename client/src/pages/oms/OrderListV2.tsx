@@ -4,13 +4,13 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import {
-  Card, Table, Tag, Space, Button, Input, Select, DatePicker, InputNumber,
+  Card, Table, Tag, Space, Button, Input, Select, DatePicker,
   message, Modal, Row, Col, Typography, Form, Divider
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
   PlusOutlined, SearchOutlined, EditOutlined,
-  DeleteOutlined, EyeOutlined, AuditOutlined, DollarOutlined
+  DeleteOutlined, EyeOutlined, AuditOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 
@@ -18,6 +18,13 @@ import dayjs from 'dayjs';
 import type { MasterOrder } from '../../types/order';
 import { MASTER_ORDER_STATUS_CONFIG } from '../../types/order';
 import { v2OmsApi } from '../../api';
+import {
+  ListPageToolbar,
+  ListPageToolbarActions,
+  ListPageToolbarCard,
+  ListPageToolbarField,
+  ListPageToolbarFilters,
+} from '../../components/ListPageToolbar';
 import { mapV2OrderRowToMasterOrder } from './orderV2Mapper';
 import MasterOrderDetailDrawer from './MasterOrderDetailDrawer';
 import MasterOrderEditModal from './MasterOrderEditModal';
@@ -26,6 +33,23 @@ const { RangePicker } = DatePicker;
 const { Option } = Select;
 const { Text } = Typography;
 const { TextArea } = Input;
+
+// 目的地代码 → 中文名映射
+const COUNTRY_NAME_MAP: Record<string, string> = {
+  NGA: '尼日利亚', GHA: '加纳', CN: '中国', US: '美国', GB: '英国', JP: '日本',
+  'CTRY-NG': '尼日利亚', 'CTRY-GH': '加纳', 'CTRY-CN': '中国',
+  '尼日利亚': '尼日利亚', '加纳': '加纳', '中国': '中国', '美国': '美国', '英国': '英国',
+};
+const CITY_NAME_MAP: Record<string, string> = {
+  LOS: '拉各斯', ABJ: '阿布贾', ACC: '阿克拉', SZX: '深圳', CAN: '广州', HKG: '香港',
+  'CITY-LOS': '拉各斯', 'CITY-ABJ': '阿布贾', 'CITY-ACC': '阿克拉',
+  'CITY-SZ': '深圳', 'CITY-GZ': '广州',
+  '拉各斯': '拉各斯', '深圳': '深圳', '广州': '广州',
+};
+function resolveGeoName(code: string, map: Record<string, string>): string {
+  if (!code || code === '-') return '-';
+  return map[code] || map[code.toUpperCase()] || code;
+}
 
 const PAYMENT_METHOD_LABEL: Record<string, string> = {
   PREPAID: '预付',
@@ -138,11 +162,6 @@ export default function OrderListV2({ businessMode = 'ALL' }: { businessMode?: '
   const [reviewForm] = Form.useForm();
   const [reviewResult, setReviewResult] = useState('');
 
-  // 费用录入
-  const [feeModalVisible, setFeeModalVisible] = useState(false);
-  const [feeRecord, setFeeRecord] = useState<MasterOrderRow | null>(null);
-  const [feeForm] = Form.useForm();
-
   // 筛选状态
   const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
@@ -159,6 +178,9 @@ export default function OrderListV2({ businessMode = 'ALL' }: { businessMode?: '
   const [expandedRowKeys, setExpandedRowKeys] = useState<Array<string | number>>([]);
   const [subOrdersByOrderId, setSubOrdersByOrderId] = useState<Record<string, ExpandedSubOrderRow[]>>({});
   const [subOrderLoadingByOrderId, setSubOrderLoadingByOrderId] = useState<Record<string, boolean>>({});
+  const [billNoFilter, setBillNoFilter] = useState('');
+  const [trackingNoFilter, setTrackingNoFilter] = useState('');
+  const [contactPhoneFilter, setContactPhoneFilter] = useState('');
 
   // 加载数据
   const fetchOrders = async () => {
@@ -209,6 +231,8 @@ export default function OrderListV2({ businessMode = 'ALL' }: { businessMode?: '
         order.salesPerson,
         order.routeCode,
         order.warehouseEntryNo,
+        String((order as any).billNo || (order as any).bill_no || ''),
+        String((order as any).trackingNo || (order as any).tracking_no || ''),
         destinationCountry,
         destinationCity,
         siteCode,
@@ -356,6 +380,18 @@ export default function OrderListV2({ businessMode = 'ALL' }: { businessMode?: '
       const search = searchText.toLowerCase();
       result = result.filter(order => order.searchCorpus.includes(search));
     }
+    if (billNoFilter) {
+      const search = billNoFilter.trim().toLowerCase();
+      result = result.filter(order => order.searchCorpus.includes(search));
+    }
+    if (trackingNoFilter) {
+      const search = trackingNoFilter.trim().toLowerCase();
+      result = result.filter(order => order.searchCorpus.includes(search));
+    }
+    if (contactPhoneFilter) {
+      const search = contactPhoneFilter.trim().toLowerCase();
+      result = result.filter(order => order.searchCorpus.includes(search));
+    }
 
     // 状态过滤
     if (statusFilter) {
@@ -421,6 +457,9 @@ export default function OrderListV2({ businessMode = 'ALL' }: { businessMode?: '
     countryFilter,
     cityFilter,
     siteFilter,
+    billNoFilter,
+    trackingNoFilter,
+    contactPhoneFilter,
     dateRange,
   ]);
 
@@ -467,6 +506,7 @@ export default function OrderListV2({ businessMode = 'ALL' }: { businessMode?: '
         routeId: values.routeId,
         routeCode: values.routeCode,
         warehouseEntryNo: values.warehouseEntryNo,
+        exportMode: values.exportMode,
         currencyCode: values.currency,
         senderProfileId: values.senderProfileId,
         recipientAddressId: values.recipientAddressId,
@@ -575,6 +615,9 @@ export default function OrderListV2({ businessMode = 'ALL' }: { businessMode?: '
     setCityFilter(undefined);
     setSiteFilter(undefined);
     setDateRange(null);
+    setBillNoFilter('');
+    setTrackingNoFilter('');
+    setContactPhoneFilter('');
     setShowAdvancedFilters(false);
     setViewMode('COLLAPSED');
     setExpandedRowKeys([]);
@@ -701,12 +744,7 @@ export default function OrderListV2({ businessMode = 'ALL' }: { businessMode?: '
             key: 'destination',
             width: 180,
             render: (_: unknown, record: MasterOrderRow) => (
-              <Space direction="vertical" size={0}>
-                <Text>{record.destCountry}-{record.destCity}</Text>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  {record.routeCode || record.routes?.[0] || '-'}
-                </Text>
-              </Space>
+              <Text>{record.routeCode || record.routes?.[0] || '-'}</Text>
             ),
           },
         ]),
@@ -824,7 +862,7 @@ export default function OrderListV2({ businessMode = 'ALL' }: { businessMode?: '
     {
       title: '操作',
       key: 'actions',
-      width: 260,
+      width: 220,
       fixed: 'right',
       render: (_: unknown, record: MasterOrderRow) => {
         // 待入库/已入库/待发货阶段允许取消
@@ -848,15 +886,6 @@ export default function OrderListV2({ businessMode = 'ALL' }: { businessMode?: '
               disabled={record.status === 'CANCELLED'}
             >
               编辑
-            </Button>
-            <Button
-              type="link"
-              size="small"
-              icon={<DollarOutlined />}
-              onClick={() => { setFeeRecord(record); setFeeModalVisible(true); feeForm.resetFields(); }}
-              disabled={record.status === 'CANCELLED'}
-            >
-              费用
             </Button>
             {canCancel && (
               <Button
@@ -900,184 +929,215 @@ export default function OrderListV2({ businessMode = 'ALL' }: { businessMode?: '
 
   return (
     <div>
-      <Card size="small" bordered={false} style={{ marginBottom: 10, background: '#fafafa' }}>
-        <Row gutter={[8, 8]} align="middle">
-          <Col span={6}>
-            <Input
-              placeholder="搜索运单/JOB/集装号/快递单/电话"
-              prefix={<SearchOutlined />}
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              allowClear
-            />
-          </Col>
-          <Col span={3}>
-            <Select
-              placeholder="订单状态"
-              value={statusFilter}
-              onChange={setStatusFilter}
-              allowClear
-              style={{ width: '100%' }}
-            >
-              {Object.entries(MASTER_ORDER_STATUS_CONFIG).map(([key, config]) => (
-                <Option key={key} value={key}>
-                  {config.label}
-                </Option>
-              ))}
-              <Option key="RETURN" value="RETURN">退单（全部）</Option>
-            </Select>
-          </Col>
-          <Col span={3}>
-            <Select
-              placeholder="支付状态"
-              value={paymentFilter}
-              onChange={setPaymentFilter}
-              allowClear
-              style={{ width: '100%' }}
-            >
-              <Option value="UNPAID">未付款</Option>
-              <Option value="PARTIAL">部分付款</Option>
-              <Option value="PAID">已付款</Option>
-            </Select>
-          </Col>
-          <Col span={3}>
-            <Select
-              placeholder="业务员"
-              value={salesFilter}
-              onChange={setSalesFilter}
-              allowClear
-              showSearch
-              optionFilterProp="children"
-              style={{ width: '100%' }}
-            >
-              {salesOptions.map((sales) => (
-                <Option key={sales} value={sales}>
-                  {sales}
-                </Option>
-              ))}
-            </Select>
-          </Col>
-          <Col span={3}>
-            <Select
-              placeholder="币种"
-              value={currencyFilter}
-              onChange={setCurrencyFilter}
-              allowClear
-              style={{ width: '100%' }}
-            >
-              {currencyOptions.map((currency) => (
-                <Option key={currency} value={currency}>
-                  {currency}
-                </Option>
-              ))}
-            </Select>
-          </Col>
-          <Col flex="auto">
-            <Space>
-              <Button onClick={handleReset}>重置</Button>
-              <Button type="link" onClick={() => setShowAdvancedFilters(v => !v)}>
-                {showAdvancedFilters ? '收起筛选' : '高级筛选'}
-              </Button>
-              <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-                新建订单
-              </Button>
-            </Space>
-          </Col>
-        </Row>
-        {showAdvancedFilters && (
-          <Row gutter={[8, 8]} style={{ marginTop: 8 }}>
-            <Col span={5}>
-              <RangePicker
-                value={dateRange}
-                onChange={(dates) => setDateRange(dates as [dayjs.Dayjs, dayjs.Dayjs] | null)}
-                style={{ width: '100%' }}
-              />
-            </Col>
-            <Col span={4}>
-              <Select
-                placeholder="服务类型"
-                value={serviceTypeFilter}
-                onChange={setServiceTypeFilter}
-                allowClear
-                style={{ width: '100%' }}
-              >
-                {serviceTypeOptions.map((serviceType) => (
-                  <Option key={serviceType} value={serviceType}>
-                    {serviceType}
-                  </Option>
-                ))}
-              </Select>
-            </Col>
-            <Col span={3}>
-              <Select
-                placeholder="目的国家"
-                value={countryFilter}
-                onChange={setCountryFilter}
-                allowClear
-                style={{ width: '100%' }}
-              >
-                {countryOptions.map((option) => (
-                  <Option key={option.value} value={option.value}>
-                    {option.label}
-                  </Option>
-                ))}
-              </Select>
-            </Col>
-            <Col span={3}>
-              <Select
-                placeholder="目的城市"
-                value={cityFilter}
-                onChange={setCityFilter}
-                allowClear
-                disabled={cityOptions.length === 0}
-                style={{ width: '100%' }}
-              >
-                {cityOptions.map((option) => (
-                  <Option key={option.value} value={option.value}>
-                    {option.label}
-                  </Option>
-                ))}
-              </Select>
-            </Col>
-            <Col span={3}>
-              <Select
-                placeholder="站点代码"
-                value={siteFilter}
-                onChange={setSiteFilter}
-                allowClear
-                disabled={siteOptions.length === 0}
-                style={{ width: '100%' }}
-              >
-                {siteOptions.map((option) => (
-                  <Option key={option.value} value={option.value}>
-                    {option.label}
-                  </Option>
-                ))}
-              </Select>
-            </Col>
-            <Col span={3}>
-              <Select
-                value={viewMode}
-                onChange={(value) => setViewMode(value)}
-                style={{ width: '100%' }}
-              >
-                <Option value="COLLAPSED">收起视图</Option>
-                <Option value="EXPANDED">展开主子单</Option>
-              </Select>
-            </Col>
-            <Col span={3}>
+      <ListPageToolbarCard style={{ marginBottom: 10 }}>
+        <ListPageToolbar>
+          <ListPageToolbarFilters>
+            <ListPageToolbarField flex="1 1 280px" minWidth={240}>
               <Input
-                value={
-                  businessMode === 'ALL'
-                    ? '当前业务：全部'
-                    : `当前业务：${businessMode === 'AIR' ? '空运' : '海运'}`
-                }
-                disabled
+                placeholder="搜索运单/JOB/集装号/快递单/电话"
+                prefix={<SearchOutlined />}
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                allowClear
               />
-            </Col>
-          </Row>
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={150}>
+              <Select
+                placeholder="订单状态"
+                value={statusFilter}
+                onChange={setStatusFilter}
+                allowClear
+                style={{ width: '100%' }}
+              >
+                {Object.entries(MASTER_ORDER_STATUS_CONFIG).map(([key, config]) => (
+                  <Option key={key} value={key}>
+                    {config.label}
+                  </Option>
+                ))}
+                <Option key="RETURN" value="RETURN">退单（全部）</Option>
+              </Select>
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={140}>
+              <Select
+                placeholder="支付状态"
+                value={paymentFilter}
+                onChange={setPaymentFilter}
+                allowClear
+                style={{ width: '100%' }}
+              >
+                <Option value="UNPAID">未付款</Option>
+                <Option value="PARTIAL">部分付款</Option>
+                <Option value="PAID">已付款</Option>
+              </Select>
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={150}>
+              <Select
+                placeholder="业务员"
+                value={salesFilter}
+                onChange={setSalesFilter}
+                allowClear
+                showSearch
+                optionFilterProp="children"
+                style={{ width: '100%' }}
+              >
+                {salesOptions.map((sales) => (
+                  <Option key={sales} value={sales}>
+                    {sales}
+                  </Option>
+                ))}
+              </Select>
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={140}>
+              <Select
+                placeholder="币种"
+                value={currencyFilter}
+                onChange={setCurrencyFilter}
+                allowClear
+                style={{ width: '100%' }}
+              >
+                {currencyOptions.map((currency) => (
+                  <Option key={currency} value={currency}>
+                    {currency}
+                  </Option>
+                ))}
+              </Select>
+            </ListPageToolbarField>
+          </ListPageToolbarFilters>
+          <ListPageToolbarActions>
+            <Button type="primary" icon={<SearchOutlined />} onClick={() => setSearchText((value) => value.trim())}>
+              查询
+            </Button>
+            <Button onClick={handleReset}>重置</Button>
+            <Button type="link" onClick={() => setShowAdvancedFilters(v => !v)}>
+              {showAdvancedFilters ? '收起筛选' : '高级筛选'}
+            </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+              新建订单
+            </Button>
+          </ListPageToolbarActions>
+        </ListPageToolbar>
+        {showAdvancedFilters && (
+          <>
+            <Row gutter={[8, 8]} style={{ marginTop: 8 }}>
+              <Col span={5}>
+                <RangePicker
+                  value={dateRange}
+                  onChange={(dates) => setDateRange(dates as [dayjs.Dayjs, dayjs.Dayjs] | null)}
+                  style={{ width: '100%' }}
+                />
+              </Col>
+              <Col span={4}>
+                <Select
+                  placeholder="服务类型"
+                  value={serviceTypeFilter}
+                  onChange={setServiceTypeFilter}
+                  allowClear
+                  style={{ width: '100%' }}
+                >
+                  {serviceTypeOptions.map((serviceType) => (
+                    <Option key={serviceType} value={serviceType}>
+                      {serviceType}
+                    </Option>
+                  ))}
+                </Select>
+              </Col>
+              <Col span={3}>
+                <Select
+                  placeholder="目的国家"
+                  value={countryFilter}
+                  onChange={setCountryFilter}
+                  allowClear
+                  style={{ width: '100%' }}
+                >
+                  {countryOptions.map((option) => (
+                    <Option key={option.value} value={option.value}>
+                      {option.label}
+                    </Option>
+                  ))}
+                </Select>
+              </Col>
+              <Col span={3}>
+                <Select
+                  placeholder="目的城市"
+                  value={cityFilter}
+                  onChange={setCityFilter}
+                  allowClear
+                  disabled={cityOptions.length === 0}
+                  style={{ width: '100%' }}
+                >
+                  {cityOptions.map((option) => (
+                    <Option key={option.value} value={option.value}>
+                      {option.label}
+                    </Option>
+                  ))}
+                </Select>
+              </Col>
+              <Col span={3}>
+                <Select
+                  placeholder="站点代码"
+                  value={siteFilter}
+                  onChange={setSiteFilter}
+                  allowClear
+                  disabled={siteOptions.length === 0}
+                  style={{ width: '100%' }}
+                >
+                  {siteOptions.map((option) => (
+                    <Option key={option.value} value={option.value}>
+                      {option.label}
+                    </Option>
+                  ))}
+                </Select>
+              </Col>
+              <Col span={3}>
+                <Select
+                  value={viewMode}
+                  onChange={(value) => setViewMode(value)}
+                  style={{ width: '100%' }}
+                >
+                  <Option value="COLLAPSED">收起视图</Option>
+                  <Option value="EXPANDED">展开主子单</Option>
+                </Select>
+              </Col>
+              <Col span={3}>
+                <Input
+                  value={
+                    businessMode === 'ALL'
+                      ? '当前业务：全部'
+                      : `当前业务：${businessMode === 'AIR' ? '空运' : '海运'}`
+                  }
+                  disabled
+                />
+              </Col>
+            </Row>
+            <Row gutter={[8, 8]} style={{ marginTop: 8 }}>
+              <Col span={8}>
+                <Input
+                  placeholder="提单号（Mock）"
+                  value={billNoFilter}
+                  onChange={(e) => setBillNoFilter(e.target.value)}
+                  allowClear
+                />
+              </Col>
+              <Col span={8}>
+                <Input
+                  placeholder="快递单号（Mock）"
+                  value={trackingNoFilter}
+                  onChange={(e) => setTrackingNoFilter(e.target.value)}
+                  allowClear
+                />
+              </Col>
+              <Col span={8}>
+                <Input
+                  placeholder="收发货电话（Mock）"
+                  value={contactPhoneFilter}
+                  onChange={(e) => setContactPhoneFilter(e.target.value)}
+                  allowClear
+                />
+              </Col>
+            </Row>
+          </>
         )}
-      </Card>
+      </ListPageToolbarCard>
 
       {/* 数据表格 */}
       <Table
@@ -1337,101 +1397,6 @@ export default function OrderListV2({ businessMode = 'ALL' }: { businessMode?: '
         </Form>
       </Modal>
 
-      {/* 费用录入 Modal */}
-      <Modal
-        title="录入订单费用"
-        open={feeModalVisible}
-        onCancel={() => { setFeeModalVisible(false); setFeeRecord(null); feeForm.resetFields(); }}
-        onOk={async () => {
-          try {
-            await feeForm.validateFields();
-            message.success('费用录入成功');
-            setFeeModalVisible(false);
-            setFeeRecord(null);
-            feeForm.resetFields();
-          } catch (_) { /* validation error */ }
-        }}
-        okText="提交"
-        cancelText="取消"
-        width={640}
-      >
-        {feeRecord && (
-          <div style={{ marginBottom: 16, padding: '8px 12px', background: '#f5f5f5', borderRadius: 4 }}>
-            <Text>运单号：<Text strong>{feeRecord.orderNo}</Text></Text>
-            <span style={{ marginLeft: 16 }}>客户：{feeRecord.customerName || '-'}</span>
-            <span style={{ marginLeft: 16 }}>线路：{feeRecord.routeCode || feeRecord.routes?.[0] || '-'}</span>
-          </div>
-        )}
-        <Form form={feeForm} layout="vertical">
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="category" label="费用类别" rules={[{ required: true, message: '请选择费用类别' }]}>
-                <Select placeholder="选择费用类别">
-                  <Option value="首重">首重</Option>
-                  <Option value="续重">续重</Option>
-                  <Option value="药品附加运费">药品附加运费</Option>
-                  <Option value="进口报关费">进口报关费</Option>
-                  <Option value="到门费用">到门费用</Option>
-                  <Option value="仓储费">仓储费</Option>
-                  <Option value="打包费">打包费</Option>
-                  <Option value="加固费">加固费</Option>
-                  <Option value="超长费">超长费</Option>
-                  <Option value="超重费">超重费</Option>
-                  <Option value="折扣">折扣</Option>
-                  <Option value="其他费用">其他费用</Option>
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="item" label="费用项目" rules={[{ required: true, message: '请输入费用项目' }]}>
-                <Input placeholder="例如: 续重20KG" />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item name="unitPrice" label="单价" rules={[{ required: true, message: '请输入单价' }]}>
-                <InputNumber style={{ width: '100%' }} placeholder="单价" precision={2} />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="quantity" label="数量" rules={[{ required: true, message: '请输入数量' }]} initialValue={1}>
-                <InputNumber style={{ width: '100%' }} min={0} />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="currency" label="币种" rules={[{ required: true }]} initialValue="USD">
-                <Select>
-                  <Option value="USD">USD (美元)</Option>
-                  <Option value="CNY">CNY (人民币)</Option>
-                  <Option value="NGN">NGN (奈拉)</Option>
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="chargeType" label="费用类型" rules={[{ required: true }]} initialValue="CUSTOMER">
-                <Select>
-                  <Option value="CUSTOMER">向客户收费</Option>
-                  <Option value="SUPPLIER">付给供应商</Option>
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="paymentMethod" label="支付方式" initialValue="COD">
-                <Select>
-                  <Option value="PREPAID">预付</Option>
-                  <Option value="COD">到付</Option>
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
-          <Form.Item name="remark" label="备注说明">
-            <TextArea rows={2} maxLength={200} showCount placeholder="可选备注" />
-          </Form.Item>
-        </Form>
-      </Modal>
     </div>
   );
 }

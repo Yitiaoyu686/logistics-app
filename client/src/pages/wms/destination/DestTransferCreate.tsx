@@ -147,7 +147,7 @@ export const DestTransferCreate: React.FC<DestTransferCreateProps> = ({ onSucces
 
       const result = {
         id: editData?.id || `TF${Date.now()}`,
-        transferNo: editData?.transferNo || `TRF-US-${dayjs().format('YYYYMMDD')}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`,
+        transferNo: editData?.transferNo || `S-T-${dayjs().format('YYYYMMDD')}-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`,
         direction: values.direction,
         fromWarehouse: values.fromWarehouse,
         toWarehouse: values.toWarehouse,

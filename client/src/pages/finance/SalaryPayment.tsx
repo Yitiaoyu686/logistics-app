@@ -2,14 +2,15 @@ import React, { useState, useMemo } from 'react';
 import {
   Card, Table, Button, Space, Tag, Modal, message, Row, Col,
   Statistic, Typography, Descriptions, Divider, Alert, Drawer,
-  Select, DatePicker, Timeline, Progress
+  Select, DatePicker, Timeline, Progress, Form, InputNumber, Input, Popconfirm
 } from 'antd';
 import {
   CheckOutlined, EyeOutlined, SendOutlined,
   PrinterOutlined, FileTextOutlined, TeamOutlined,
   RiseOutlined, FallOutlined, MoneyCollectOutlined,
   CalculatorOutlined, BankOutlined, SafetyOutlined,
-  AuditOutlined
+  AuditOutlined, DownloadOutlined, EditOutlined,
+  PlusOutlined, DeleteOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 
@@ -67,6 +68,83 @@ interface SalaryRecord {
   remark?: string;
 }
 
+// --- 年度排行类型 ---
+interface AnnualRankRecord {
+  key: string;
+  name: string;
+  position: string;
+  monthly: {
+    salary: number;
+    airCommission: number;
+    seaCommission: number;
+  }[];
+  companySocialInsurance: number;
+  yearEndBonus: number;
+  totalAmount: number;
+  totalMonths: number;
+  monthlyAvg: number;
+  leaveDays: number;
+  lateTimes: number;
+}
+
+// --- 年度排行 Mock 数据生成 ---
+function generateAnnualMockData(year: number): AnnualRankRecord[] {
+  const employees = [
+    { name: '黄颖', position: '推广' },
+    { name: '吕沛霖', position: '推广' },
+    { name: '罗泳华', position: '推广部经理' },
+    { name: '朱小飞', position: '推广' },
+    { name: '三凤', position: '推广' },
+    { name: '罗敏', position: '客服' },
+    { name: '张海峰', position: '仓管员' },
+    { name: '李豪', position: '仓管员' },
+    { name: '浦海森', position: '总经理' },
+  ];
+
+  const rng = (min: number, max: number) => Math.round(min + Math.random() * (max - min));
+
+  return employees.map((emp, idx) => {
+    const isManager = emp.position === '推广部经理' || emp.position === '总经理';
+    const monthly = Array.from({ length: 12 }, (_, m) => {
+      const salary = isManager ? rng(12000, 18000) : rng(5000, 9000);
+      const airCommission = rng(500, 4000);
+      // 海运提成: 2024年仅6-12月有，其他年份全部有
+      let seaCommission = 0;
+      if (year === 2024) {
+        seaCommission = m >= 5 ? rng(300, 2500) : 0; // month index 5 = June
+      } else {
+        seaCommission = rng(300, 2500);
+      }
+      return { salary, airCommission, seaCommission };
+    });
+
+    const totalFromMonthly = monthly.reduce(
+      (sum, m) => sum + m.salary + m.airCommission + m.seaCommission,
+      0
+    );
+    const companySI = rng(8000, 15000);
+    const yearEndBonus = isManager ? rng(15000, 40000) : rng(5000, 15000);
+    const totalAmount = totalFromMonthly + companySI + yearEndBonus;
+    const activeMonths = year === 2024
+      ? 12
+      : 12;
+
+    return {
+      key: `${idx}`,
+      name: emp.name,
+      position: emp.position,
+      monthly,
+      companySocialInsurance: companySI,
+      yearEndBonus,
+      totalAmount,
+      totalMonths: activeMonths,
+      monthlyAvg: Math.round(totalAmount / activeMonths),
+      leaveDays: rng(0, 8),
+      lateTimes: rng(0, 5),
+    };
+  });
+}
+
 // --- 数据状态（暂无API，使用空数组初始化） ---
 
 const DEPARTMENT_CONFIG = {
@@ -76,11 +154,427 @@ const DEPARTMENT_CONFIG = {
   '财务部': { color: '#722ed1', icon: <SafetyOutlined /> }
 };
 
+// --- 年度排行组件 ---
+export const AnnualSalaryRank: React.FC = () => {
+  const [selectedYear, setSelectedYear] = useState<number>(2024);
+  const [dataList, setDataList] = useState<AnnualRankRecord[]>(() => generateAnnualMockData(2024));
+  const [prevYear, setPrevYear] = useState<number>(2024);
+
+  // 编辑相关状态
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<AnnualRankRecord | null>(null);
+  const [editForm] = Form.useForm();
+
+  // 当年份变化时重新生成数据
+  if (selectedYear !== prevYear) {
+    setDataList(generateAnnualMockData(selectedYear));
+    setPrevYear(selectedYear);
+  }
+
+  const annualData = dataList;
+
+  const summaryRow = useMemo(() => {
+    const result = {
+      monthly: Array.from({ length: 12 }, (_, m) => ({
+        salary: 0,
+        airCommission: 0,
+        seaCommission: 0,
+      })),
+      companySocialInsurance: 0,
+      yearEndBonus: 0,
+      totalAmount: 0,
+      leaveDays: 0,
+      lateTimes: 0,
+    };
+    annualData.forEach(r => {
+      r.monthly.forEach((m, i) => {
+        result.monthly[i].salary += m.salary;
+        result.monthly[i].airCommission += m.airCommission;
+        result.monthly[i].seaCommission += m.seaCommission;
+      });
+      result.companySocialInsurance += r.companySocialInsurance;
+      result.yearEndBonus += r.yearEndBonus;
+      result.totalAmount += r.totalAmount;
+      result.leaveDays += r.leaveDays;
+      result.lateTimes += r.lateTimes;
+    });
+    return result;
+  }, [annualData]);
+
+  const monthNames = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
+
+  // 打开编辑弹窗
+  const handleEdit = (record: AnnualRankRecord) => {
+    setEditingRecord(record);
+    editForm.setFieldsValue({
+      companySocialInsurance: record.companySocialInsurance,
+      yearEndBonus: record.yearEndBonus,
+      leaveDays: record.leaveDays,
+      lateTimes: record.lateTimes,
+    });
+    setEditModalVisible(true);
+  };
+
+  // 保存编辑
+  const handleEditSave = () => {
+    editForm.validateFields().then(values => {
+      if (!editingRecord) return;
+      const updatedList = dataList.map(item => {
+        if (item.key !== editingRecord.key) return item;
+        const totalFromMonthly = item.monthly.reduce(
+          (sum, m) => sum + m.salary + m.airCommission + m.seaCommission,
+          0
+        );
+        const newTotal = totalFromMonthly + values.companySocialInsurance + values.yearEndBonus;
+        return {
+          ...item,
+          companySocialInsurance: values.companySocialInsurance,
+          yearEndBonus: values.yearEndBonus,
+          leaveDays: values.leaveDays,
+          lateTimes: values.lateTimes,
+          totalAmount: newTotal,
+          monthlyAvg: Math.round(newTotal / item.totalMonths),
+        };
+      });
+      setDataList(updatedList);
+      setEditModalVisible(false);
+      setEditingRecord(null);
+      message.success('已更新');
+    });
+  };
+
+  // 月度明细列（只读展示）
+  const monthlyDetailColumns = [
+    { title: '月份', dataIndex: 'month', width: 60 },
+    { title: '工资', dataIndex: 'salary', width: 100, align: 'right' as const, render: (v: number) => v.toLocaleString() },
+    { title: '空运提成', dataIndex: 'airCommission', width: 100, align: 'right' as const, render: (v: number) => v.toLocaleString() },
+    { title: '海运提成', dataIndex: 'seaCommission', width: 100, align: 'right' as const, render: (v: number) => v > 0 ? v.toLocaleString() : '-' },
+    { title: '小计', width: 100, align: 'right' as const, render: (_: any, row: any) => (row.salary + row.airCommission + row.seaCommission).toLocaleString() },
+  ];
+
+  const columns: any[] = [
+    {
+      title: '序号',
+      width: 50,
+      fixed: 'left' as const,
+      render: (_: any, __: any, index: number) => index + 1,
+    },
+    {
+      title: '姓名',
+      dataIndex: 'name',
+      width: 80,
+      fixed: 'left' as const,
+    },
+    {
+      title: '职务',
+      dataIndex: 'position',
+      width: 80,
+      fixed: 'left' as const,
+    },
+  ];
+
+  // 12 monthly column groups
+  for (let m = 0; m < 12; m++) {
+    const showSea = selectedYear !== 2024 || m >= 5;
+    const children: any[] = [
+      {
+        title: '工资',
+        width: 90,
+        align: 'right' as const,
+        render: (_: any, record: AnnualRankRecord) =>
+          record.monthly[m].salary.toLocaleString(),
+      },
+      {
+        title: '空运提成',
+        width: 90,
+        align: 'right' as const,
+        render: (_: any, record: AnnualRankRecord) =>
+          record.monthly[m].airCommission.toLocaleString(),
+      },
+    ];
+    if (showSea) {
+      children.push({
+        title: '海运提成',
+        width: 90,
+        align: 'right' as const,
+        render: (_: any, record: AnnualRankRecord) =>
+          record.monthly[m].seaCommission > 0
+            ? record.monthly[m].seaCommission.toLocaleString()
+            : '-',
+      });
+    }
+    columns.push({
+      title: monthNames[m],
+      children,
+    });
+  }
+
+  // Fixed right summary columns
+  columns.push(
+    {
+      title: '公司社保费(年)',
+      width: 110,
+      fixed: 'right' as const,
+      align: 'right' as const,
+      render: (_: any, record: AnnualRankRecord) =>
+        record.companySocialInsurance.toLocaleString(),
+    },
+    {
+      title: '年终奖',
+      width: 100,
+      fixed: 'right' as const,
+      align: 'right' as const,
+      render: (_: any, record: AnnualRankRecord) =>
+        record.yearEndBonus.toLocaleString(),
+    },
+    {
+      title: '合计金额',
+      width: 120,
+      fixed: 'right' as const,
+      align: 'right' as const,
+      render: (_: any, record: AnnualRankRecord) => (
+        <Text strong style={{ color: '#1890ff' }}>
+          {record.totalAmount.toLocaleString()}
+        </Text>
+      ),
+    },
+    {
+      title: '共月份',
+      width: 70,
+      fixed: 'right' as const,
+      align: 'center' as const,
+      dataIndex: 'totalMonths',
+    },
+    {
+      title: '月均',
+      width: 100,
+      fixed: 'right' as const,
+      align: 'right' as const,
+      render: (_: any, record: AnnualRankRecord) =>
+        record.monthlyAvg.toLocaleString(),
+    },
+    {
+      title: '请假',
+      width: 60,
+      fixed: 'right' as const,
+      align: 'center' as const,
+      dataIndex: 'leaveDays',
+    },
+    {
+      title: '迟到',
+      width: 60,
+      fixed: 'right' as const,
+      align: 'center' as const,
+      dataIndex: 'lateTimes',
+    },
+    {
+      title: '操作',
+      width: 70,
+      fixed: 'right' as const,
+      align: 'center' as const,
+      render: (_: any, record: AnnualRankRecord) => (
+        <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
+          编辑
+        </Button>
+      ),
+    }
+  );
+
+  return (
+    <div>
+      <Card style={{ marginBottom: 16 }}>
+        <Row justify="space-between" align="middle">
+          <Col>
+            <Space>
+              <Text strong>年份：</Text>
+              <Select
+                value={selectedYear}
+                onChange={setSelectedYear}
+                style={{ width: 100 }}
+              >
+                {[2021, 2022, 2023, 2024, 2025, 2026].map(y => (
+                  <Select.Option key={y} value={y}>{y}</Select.Option>
+                ))}
+              </Select>
+            </Space>
+          </Col>
+          <Col>
+            <Button icon={<DownloadOutlined />} type="primary">
+              导出Excel
+            </Button>
+          </Col>
+        </Row>
+      </Card>
+
+      <Card>
+        <Table
+          rowKey="key"
+          columns={columns}
+          dataSource={annualData}
+          scroll={{ x: 4200 }}
+          pagination={false}
+          size="small"
+          bordered
+          summary={() => {
+            return (
+              <Table.Summary fixed>
+                <Table.Summary.Row style={{ background: '#fafafa', fontWeight: 'bold' }}>
+                  <Table.Summary.Cell index={0}>合计</Table.Summary.Cell>
+                  <Table.Summary.Cell index={1} />
+                  <Table.Summary.Cell index={2} />
+                  {(() => {
+                    const cells: React.ReactNode[] = [];
+                    let cellIndex = 3;
+                    for (let m = 0; m < 12; m++) {
+                      const showSea = selectedYear !== 2024 || m >= 5;
+                      cells.push(
+                        <Table.Summary.Cell key={`s-${m}`} index={cellIndex++} align="right">
+                          {summaryRow.monthly[m].salary.toLocaleString()}
+                        </Table.Summary.Cell>
+                      );
+                      cells.push(
+                        <Table.Summary.Cell key={`a-${m}`} index={cellIndex++} align="right">
+                          {summaryRow.monthly[m].airCommission.toLocaleString()}
+                        </Table.Summary.Cell>
+                      );
+                      if (showSea) {
+                        cells.push(
+                          <Table.Summary.Cell key={`se-${m}`} index={cellIndex++} align="right">
+                            {summaryRow.monthly[m].seaCommission > 0
+                              ? summaryRow.monthly[m].seaCommission.toLocaleString()
+                              : '-'}
+                          </Table.Summary.Cell>
+                        );
+                      }
+                    }
+                    // right fixed columns
+                    cells.push(
+                      <Table.Summary.Cell key="si" index={cellIndex++} align="right">
+                        {summaryRow.companySocialInsurance.toLocaleString()}
+                      </Table.Summary.Cell>
+                    );
+                    cells.push(
+                      <Table.Summary.Cell key="yeb" index={cellIndex++} align="right">
+                        {summaryRow.yearEndBonus.toLocaleString()}
+                      </Table.Summary.Cell>
+                    );
+                    cells.push(
+                      <Table.Summary.Cell key="total" index={cellIndex++} align="right">
+                        <Text strong style={{ color: '#1890ff' }}>
+                          {summaryRow.totalAmount.toLocaleString()}
+                        </Text>
+                      </Table.Summary.Cell>
+                    );
+                    cells.push(
+                      <Table.Summary.Cell key="months" index={cellIndex++} align="center">
+                        -
+                      </Table.Summary.Cell>
+                    );
+                    cells.push(
+                      <Table.Summary.Cell key="avg" index={cellIndex++} align="right">
+                        -
+                      </Table.Summary.Cell>
+                    );
+                    cells.push(
+                      <Table.Summary.Cell key="leave" index={cellIndex++} align="center">
+                        {summaryRow.leaveDays}
+                      </Table.Summary.Cell>
+                    );
+                    cells.push(
+                      <Table.Summary.Cell key="late" index={cellIndex++} align="center">
+                        {summaryRow.lateTimes}
+                      </Table.Summary.Cell>
+                    );
+                    cells.push(
+                      <Table.Summary.Cell key="action" index={cellIndex++} align="center">
+                        -
+                      </Table.Summary.Cell>
+                    );
+                    return cells;
+                  })()}
+                </Table.Summary.Row>
+              </Table.Summary>
+            );
+          }}
+        />
+      </Card>
+
+      {/* 编辑弹窗 */}
+      <Modal
+        title={editingRecord ? `编辑 - ${editingRecord.name}（${editingRecord.position}）` : '编辑'}
+        open={editModalVisible}
+        onCancel={() => { setEditModalVisible(false); setEditingRecord(null); }}
+        onOk={handleEditSave}
+        okText="保存"
+        cancelText="取消"
+        width={700}
+        destroyOnClose
+      >
+        {editingRecord && (
+          <>
+            <Divider orientation="left" style={{ marginTop: 0 }}>年度汇总</Divider>
+            <Form form={editForm} layout="vertical">
+              <Row gutter={16}>
+                <Col span={6}>
+                  <Form.Item label="公司社保费(年)" name="companySocialInsurance" rules={[{ required: true, message: '请输入' }]}>
+                    <InputNumber style={{ width: '100%' }} min={0} step={100} formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} parser={v => Number(v?.replace(/,/g, '') || 0)} />
+                  </Form.Item>
+                </Col>
+                <Col span={6}>
+                  <Form.Item label="年终奖" name="yearEndBonus" rules={[{ required: true, message: '请输入' }]}>
+                    <InputNumber style={{ width: '100%' }} min={0} step={100} formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} parser={v => Number(v?.replace(/,/g, '') || 0)} />
+                  </Form.Item>
+                </Col>
+                <Col span={6}>
+                  <Form.Item label="请假次数" name="leaveDays" rules={[{ required: true, message: '请输入' }]}>
+                    <InputNumber style={{ width: '100%' }} min={0} step={1} precision={0} />
+                  </Form.Item>
+                </Col>
+                <Col span={6}>
+                  <Form.Item label="迟到次数" name="lateTimes" rules={[{ required: true, message: '请输入' }]}>
+                    <InputNumber style={{ width: '100%' }} min={0} step={1} precision={0} />
+                  </Form.Item>
+                </Col>
+              </Row>
+            </Form>
+
+            <Divider orientation="left">月度明细（只读，请在&ldquo;月度薪资&rdquo;标签页编辑）</Divider>
+            <Alert message={'月度薪资数据请切换到"月度薪资"标签页进行编辑'} type="info" showIcon style={{ marginBottom: 12 }} />
+            <Table
+              rowKey="month"
+              columns={monthlyDetailColumns}
+              dataSource={editingRecord.monthly.map((m, i) => ({
+                month: monthNames[i],
+                salary: m.salary,
+                airCommission: m.airCommission,
+                seaCommission: m.seaCommission,
+              }))}
+              pagination={false}
+              size="small"
+              bordered
+              scroll={{ y: 300 }}
+            />
+          </>
+        )}
+      </Modal>
+    </div>
+  );
+};
+
 export const SalaryPayment: React.FC = () => {
   const [data, setData] = useState<SalaryRecord[]>([]);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [currentRecord, setCurrentRecord] = useState<SalaryRecord | null>(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
+
+  // 编辑薪资
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<SalaryRecord | null>(null);
+  const [editForm] = Form.useForm();
+
+  // 新增薪资
+  const [addModalVisible, setAddModalVisible] = useState(false);
+  const [addForm] = Form.useForm();
 
   // 筛选条件
   const [departmentFilter, setDepartmentFilter] = useState<string>('ALL');
@@ -274,6 +768,106 @@ export const SalaryPayment: React.FC = () => {
     });
   };
 
+  // 编辑薪资
+  const handleEdit = (record: SalaryRecord) => {
+    setEditingRecord(record);
+    editForm.setFieldsValue({
+      baseSalary: record.baseSalary,
+      commission: record.commission,
+      bonus: record.bonus,
+      overtime: record.overtime,
+      allowance: record.allowance,
+      socialInsurance: record.socialInsurance,
+      housingFund: record.housingFund,
+      tax: record.tax,
+      otherDeduction: record.otherDeduction,
+    });
+    setEditModalVisible(true);
+  };
+
+  const handleEditSave = () => {
+    editForm.validateFields().then((values) => {
+      if (!editingRecord) return;
+      const totalIncome = (values.baseSalary || 0) + (values.commission || 0) + (values.bonus || 0) + (values.overtime || 0) + (values.allowance || 0);
+      const totalDeduction = (values.socialInsurance || 0) + (values.housingFund || 0) + (values.tax || 0) + (values.otherDeduction || 0);
+      const netSalary = totalIncome - totalDeduction;
+
+      setData(prev => prev.map(r =>
+        r.id === editingRecord.id
+          ? {
+            ...r,
+            baseSalary: values.baseSalary || 0,
+            commission: values.commission || 0,
+            bonus: values.bonus || 0,
+            overtime: values.overtime || 0,
+            allowance: values.allowance || 0,
+            socialInsurance: values.socialInsurance || 0,
+            housingFund: values.housingFund || 0,
+            tax: values.tax || 0,
+            otherDeduction: values.otherDeduction || 0,
+            totalIncome,
+            totalDeduction,
+            netSalary,
+          }
+          : r
+      ));
+      message.success('薪资已更新');
+      setEditModalVisible(false);
+      setEditingRecord(null);
+    });
+  };
+
+  // 新增薪资
+  const handleOpenAdd = () => {
+    addForm.resetFields();
+    addForm.setFieldsValue({ month: monthFilter });
+    setAddModalVisible(true);
+  };
+
+  const handleAddSave = () => {
+    addForm.validateFields().then((values) => {
+      const totalIncome = (values.baseSalary || 0) + (values.commission || 0) + (values.bonus || 0) + (values.overtime || 0) + (values.allowance || 0);
+      const totalDeduction = (values.socialInsurance || 0) + (values.housingFund || 0) + (values.tax || 0) + (values.otherDeduction || 0);
+      const netSalary = totalIncome - totalDeduction;
+      const now = dayjs().format('YYYY-MM-DD HH:mm:ss');
+      const newId = `SAL-${Date.now()}`;
+
+      const newRecord: SalaryRecord = {
+        id: newId,
+        recordNo: newId,
+        employeeId: `EMP-${Date.now()}`,
+        employeeName: values.employeeName,
+        department: values.department,
+        position: values.position,
+        month: values.month || monthFilter,
+        baseSalary: values.baseSalary || 0,
+        commission: values.commission || 0,
+        bonus: values.bonus || 0,
+        overtime: values.overtime || 0,
+        allowance: values.allowance || 0,
+        socialInsurance: values.socialInsurance || 0,
+        housingFund: values.housingFund || 0,
+        tax: values.tax || 0,
+        otherDeduction: values.otherDeduction || 0,
+        totalIncome,
+        totalDeduction,
+        netSalary,
+        status: 'DRAFT',
+        calculateTime: now,
+      };
+
+      setData(prev => [...prev, newRecord]);
+      message.success('薪资记录已创建');
+      setAddModalVisible(false);
+    });
+  };
+
+  // 删除薪资
+  const handleDelete = (record: SalaryRecord) => {
+    setData(prev => prev.filter(r => r.id !== record.id));
+    message.success('薪资记录已删除');
+  };
+
   // 列表列定义
   const columns = [
     {
@@ -382,7 +976,7 @@ export const SalaryPayment: React.FC = () => {
     },
     {
       title: '操作',
-      width: 220,
+      width: 280,
       render: (_: any, record: SalaryRecord) => (
         <Space size="small">
           <Button
@@ -392,6 +986,14 @@ export const SalaryPayment: React.FC = () => {
             onClick={() => handleViewDetail(record)}
           >
             详情
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => handleEdit(record)}
+          >
+            编辑
           </Button>
           {record.status === 'PENDING' && (
             <Button
@@ -424,6 +1026,22 @@ export const SalaryPayment: React.FC = () => {
               工资条
             </Button>
           )}
+          <Popconfirm
+            title="确认删除"
+            description={`确定删除 ${record.employeeName} 的 ${record.month} 薪资记录吗？`}
+            onConfirm={() => handleDelete(record)}
+            okText="确定"
+            cancelText="取消"
+          >
+            <Button
+              type="link"
+              size="small"
+              icon={<DeleteOutlined />}
+              danger
+            >
+              删除
+            </Button>
+          </Popconfirm>
         </Space>
       )
     }
@@ -431,174 +1049,351 @@ export const SalaryPayment: React.FC = () => {
 
   return (
     <div>
-      {/* 统计卡片 */}
-      <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="应发总额"
-              value={stats.totalIncome}
-              prefix="¥"
-              valueStyle={{ color: '#1890ff' }}
-            />
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              本月 {stats.totalPeople} 人
-            </Text>
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="实发总额"
-              value={stats.totalNet}
-              prefix="¥"
-              valueStyle={{ color: '#52c41a', fontSize: 24 }}
-            />
-            <Space style={{ fontSize: 12 }}>
-              <Text type="secondary">环比</Text>
-              {changePercent >= 0 ? (
-                <Text style={{ color: '#cf1322' }}>
-                  <RiseOutlined /> {changePercent.toFixed(1)}%
-                </Text>
-              ) : (
-                <Text style={{ color: '#52c41a' }}>
-                  <FallOutlined /> {Math.abs(changePercent).toFixed(1)}%
-                </Text>
-              )}
-            </Space>
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="人均薪资"
-              value={stats.avgSalary}
-              prefix="¥"
-              precision={0}
-              valueStyle={{ color: '#722ed1' }}
-            />
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              实发平均值
-            </Text>
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Space direction="vertical" size={4} style={{ width: '100%' }}>
-              <Text type="secondary">发放进度</Text>
-              <Progress
-                percent={stats.totalPeople > 0 ? (stats.paid / stats.totalPeople * 100) : 0}
-                strokeColor="#52c41a"
-                format={(percent) => `${stats.paid}/${stats.totalPeople}`}
-              />
-              <Space size={16} style={{ fontSize: 12 }}>
-                <Text type="secondary">待审批: {stats.pending}</Text>
-                <Text type="secondary">已审批: {stats.approved}</Text>
-              </Space>
-            </Space>
-          </Card>
-        </Col>
-      </Row>
+                {/* 统计卡片 */}
+                <Row gutter={16} style={{ marginBottom: 16 }}>
+                  <Col span={6}>
+                    <Card>
+                      <Statistic
+                        title="应发总额"
+                        value={stats.totalIncome}
+                        prefix="¥"
+                        valueStyle={{ color: '#1890ff' }}
+                      />
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        本月 {stats.totalPeople} 人
+                      </Text>
+                    </Card>
+                  </Col>
+                  <Col span={6}>
+                    <Card>
+                      <Statistic
+                        title="实发总额"
+                        value={stats.totalNet}
+                        prefix="¥"
+                        valueStyle={{ color: '#52c41a', fontSize: 24 }}
+                      />
+                      <Space style={{ fontSize: 12 }}>
+                        <Text type="secondary">环比</Text>
+                        {changePercent >= 0 ? (
+                          <Text style={{ color: '#cf1322' }}>
+                            <RiseOutlined /> {changePercent.toFixed(1)}%
+                          </Text>
+                        ) : (
+                          <Text style={{ color: '#52c41a' }}>
+                            <FallOutlined /> {Math.abs(changePercent).toFixed(1)}%
+                          </Text>
+                        )}
+                      </Space>
+                    </Card>
+                  </Col>
+                  <Col span={6}>
+                    <Card>
+                      <Statistic
+                        title="人均薪资"
+                        value={stats.avgSalary}
+                        prefix="¥"
+                        precision={0}
+                        valueStyle={{ color: '#722ed1' }}
+                      />
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        实发平均值
+                      </Text>
+                    </Card>
+                  </Col>
+                  <Col span={6}>
+                    <Card>
+                      <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                        <Text type="secondary">发放进度</Text>
+                        <Progress
+                          percent={stats.totalPeople > 0 ? (stats.paid / stats.totalPeople * 100) : 0}
+                          strokeColor="#52c41a"
+                          format={(percent) => `${stats.paid}/${stats.totalPeople}`}
+                        />
+                        <Space size={16} style={{ fontSize: 12 }}>
+                          <Text type="secondary">待审批: {stats.pending}</Text>
+                          <Text type="secondary">已审批: {stats.approved}</Text>
+                        </Space>
+                      </Space>
+                    </Card>
+                  </Col>
+                </Row>
 
-      {/* 筛选与操作 */}
-      <Card style={{ marginBottom: 16 }}>
-        <Row gutter={16} align="middle">
-          <Col>
-            <Space>
-              <Select
-                value={departmentFilter}
-                onChange={setDepartmentFilter}
-                style={{ width: 120 }}
-              >
-                <Select.Option value="ALL">全部部门</Select.Option>
-                <Select.Option value="销售部">销售部</Select.Option>
-                <Select.Option value="操作部">操作部</Select.Option>
-                <Select.Option value="仓储部">仓储部</Select.Option>
-                <Select.Option value="财务部">财务部</Select.Option>
-              </Select>
+                {/* 筛选与操作 */}
+                <Card style={{ marginBottom: 16 }}>
+                  <Row gutter={16} align="middle">
+                    <Col>
+                      <Space>
+                        <Select
+                          value={departmentFilter}
+                          onChange={setDepartmentFilter}
+                          style={{ width: 120 }}
+                        >
+                          <Select.Option value="ALL">全部部门</Select.Option>
+                          <Select.Option value="销售部">销售部</Select.Option>
+                          <Select.Option value="操作部">操作部</Select.Option>
+                          <Select.Option value="仓储部">仓储部</Select.Option>
+                          <Select.Option value="财务部">财务部</Select.Option>
+                        </Select>
 
-              <Select
-                value={statusFilter}
-                onChange={setStatusFilter}
-                style={{ width: 120 }}
-              >
-                <Select.Option value="ALL">全部状态</Select.Option>
-                <Select.Option value="DRAFT">草稿</Select.Option>
-                <Select.Option value="PENDING">待审批</Select.Option>
-                <Select.Option value="APPROVED">已审批</Select.Option>
-                <Select.Option value="PAID">已发放</Select.Option>
-              </Select>
+                        <Select
+                          value={statusFilter}
+                          onChange={setStatusFilter}
+                          style={{ width: 120 }}
+                        >
+                          <Select.Option value="ALL">全部状态</Select.Option>
+                          <Select.Option value="DRAFT">草稿</Select.Option>
+                          <Select.Option value="PENDING">待审批</Select.Option>
+                          <Select.Option value="APPROVED">已审批</Select.Option>
+                          <Select.Option value="PAID">已发放</Select.Option>
+                        </Select>
 
-              <DatePicker
-                value={dayjs(monthFilter)}
-                onChange={(date) => setMonthFilter(date ? date.format('YYYY-MM') : '2024-01')}
-                picker="month"
-                format="YYYY-MM"
-                style={{ width: 120 }}
-              />
-            </Space>
-          </Col>
-          <Col flex="auto" style={{ textAlign: 'right' }}>
-            <Space>
-              <Button
-                type="primary"
-                icon={<MoneyCollectOutlined />}
-                onClick={handleBatchPay}
-                disabled={selectedRowKeys.length === 0}
-              >
-                批量发放 ({selectedRowKeys.length})
-              </Button>
-              <Button icon={<FileTextOutlined />}>
-                导出工资表
-              </Button>
-            </Space>
-          </Col>
-        </Row>
-      </Card>
+                        <DatePicker
+                          value={dayjs(monthFilter)}
+                          onChange={(date) => setMonthFilter(date ? date.format('YYYY-MM') : '2024-01')}
+                          picker="month"
+                          format="YYYY-MM"
+                          style={{ width: 120 }}
+                        />
+                      </Space>
+                    </Col>
+                    <Col flex="auto" style={{ textAlign: 'right' }}>
+                      <Space>
+                        <Button
+                          type="primary"
+                          icon={<PlusOutlined />}
+                          onClick={handleOpenAdd}
+                        >
+                          新增薪资
+                        </Button>
+                        <Button
+                          type="primary"
+                          icon={<MoneyCollectOutlined />}
+                          onClick={handleBatchPay}
+                          disabled={selectedRowKeys.length === 0}
+                        >
+                          批量发放 ({selectedRowKeys.length})
+                        </Button>
+                        <Button icon={<FileTextOutlined />}>
+                          导出工资表
+                        </Button>
+                      </Space>
+                    </Col>
+                  </Row>
+                </Card>
 
-      {/* 数据表格 */}
-      <Card>
-        <Table
-          rowKey="id"
-          columns={columns}
-          dataSource={filteredData}
-          rowSelection={{
-            selectedRowKeys,
-            onChange: (keys) => setSelectedRowKeys(keys.map((key) => String(key))),
-            getCheckboxProps: (record) => ({
-              disabled: record.status !== 'APPROVED'
-            })
-          }}
-          pagination={{ pageSize: 10 }}
-          size="small"
-          summary={(pageData) => {
-            const totalIncome = pageData.reduce((sum, r) => sum + r.totalIncome, 0);
-            const totalNet = pageData.reduce((sum, r) => sum + r.netSalary, 0);
+                {/* 数据表格 */}
+                <Card>
+                  <Table
+                    rowKey="id"
+                    columns={columns}
+                    dataSource={filteredData}
+                    rowSelection={{
+                      selectedRowKeys,
+                      onChange: (keys) => setSelectedRowKeys(keys.map((key) => String(key))),
+                      getCheckboxProps: (record) => ({
+                        disabled: record.status !== 'APPROVED'
+                      })
+                    }}
+                    pagination={{ pageSize: 10 }}
+                    size="small"
+                    summary={(pageData) => {
+                      const totalIncome = pageData.reduce((sum, r) => sum + r.totalIncome, 0);
+                      const totalNet = pageData.reduce((sum, r) => sum + r.netSalary, 0);
 
-            return (
-              <Table.Summary>
-                <Table.Summary.Row>
-                  <Table.Summary.Cell index={0} colSpan={5}>
-                    <Text strong>本页合计</Text>
-                  </Table.Summary.Cell>
-                  <Table.Summary.Cell index={5} align="right">
-                    <Text strong style={{ color: '#1890ff' }}>
-                      ¥{totalIncome.toLocaleString()}
-                    </Text>
-                  </Table.Summary.Cell>
-                  <Table.Summary.Cell index={6} />
-                  <Table.Summary.Cell index={7} align="right">
-                    <Text strong style={{ color: '#52c41a' }}>
-                      ¥{totalNet.toLocaleString()}
-                    </Text>
-                  </Table.Summary.Cell>
-                  <Table.Summary.Cell index={8} colSpan={3} />
-                </Table.Summary.Row>
-              </Table.Summary>
-            );
-          }}
-        />
-      </Card>
+                      return (
+                        <Table.Summary>
+                          <Table.Summary.Row>
+                            <Table.Summary.Cell index={0} colSpan={5}>
+                              <Text strong>本页合计</Text>
+                            </Table.Summary.Cell>
+                            <Table.Summary.Cell index={5} align="right">
+                              <Text strong style={{ color: '#1890ff' }}>
+                                ¥{totalIncome.toLocaleString()}
+                              </Text>
+                            </Table.Summary.Cell>
+                            <Table.Summary.Cell index={6} />
+                            <Table.Summary.Cell index={7} align="right">
+                              <Text strong style={{ color: '#52c41a' }}>
+                                ¥{totalNet.toLocaleString()}
+                              </Text>
+                            </Table.Summary.Cell>
+                            <Table.Summary.Cell index={8} colSpan={3} />
+                          </Table.Summary.Row>
+                        </Table.Summary>
+                      );
+                    }}
+                  />
+                </Card>
+
+      {/* 编辑薪资 Modal */}
+      <Modal
+        title={editingRecord ? `编辑薪资 - ${editingRecord.employeeName} (${editingRecord.month})` : '编辑薪资'}
+        open={editModalVisible}
+        onOk={handleEditSave}
+        onCancel={() => { setEditModalVisible(false); setEditingRecord(null); }}
+        destroyOnClose
+        width={600}
+        okText="保存"
+        cancelText="取消"
+      >
+        <Form form={editForm} layout="vertical">
+          <Divider orientation="left" plain>收入项</Divider>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="baseSalary" label="基本工资" rules={[{ required: true, message: '请输入基本工资' }]}>
+                <InputNumber style={{ width: '100%' }} min={0} precision={2} prefix="¥" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="commission" label="提成" rules={[{ required: true, message: '请输入提成' }]}>
+                <InputNumber style={{ width: '100%' }} min={0} precision={2} prefix="¥" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item name="bonus" label="奖金">
+                <InputNumber style={{ width: '100%' }} min={0} precision={2} prefix="¥" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="overtime" label="加班费">
+                <InputNumber style={{ width: '100%' }} min={0} precision={2} prefix="¥" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="allowance" label="补贴">
+                <InputNumber style={{ width: '100%' }} min={0} precision={2} prefix="¥" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Divider orientation="left" plain>扣款项</Divider>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="socialInsurance" label="社保">
+                <InputNumber style={{ width: '100%' }} min={0} precision={2} prefix="¥" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="housingFund" label="公积金">
+                <InputNumber style={{ width: '100%' }} min={0} precision={2} prefix="¥" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="tax" label="个税">
+                <InputNumber style={{ width: '100%' }} min={0} precision={2} prefix="¥" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="otherDeduction" label="其他扣款">
+                <InputNumber style={{ width: '100%' }} min={0} precision={2} prefix="¥" />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+      </Modal>
+
+      {/* 新增薪资 Modal */}
+      <Modal
+        title="新增薪资"
+        open={addModalVisible}
+        onOk={handleAddSave}
+        onCancel={() => setAddModalVisible(false)}
+        destroyOnClose
+        width={600}
+        okText="保存"
+        cancelText="取消"
+      >
+        <Form form={addForm} layout="vertical" initialValues={{ commission: 0, bonus: 0, overtime: 0, allowance: 0, socialInsurance: 0, housingFund: 0, tax: 0, otherDeduction: 0 }}>
+          <Divider orientation="left" plain>员工信息</Divider>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item name="employeeName" label="员工姓名" rules={[{ required: true, message: '请输入员工姓名' }]}>
+                <Input placeholder="请输入员工姓名" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="department" label="部门" rules={[{ required: true, message: '请选择部门' }]}>
+                <Select placeholder="请选择部门">
+                  <Select.Option value="销售部">销售部</Select.Option>
+                  <Select.Option value="操作部">操作部</Select.Option>
+                  <Select.Option value="仓储部">仓储部</Select.Option>
+                  <Select.Option value="财务部">财务部</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="position" label="职务" rules={[{ required: true, message: '请输入职务' }]}>
+                <Input placeholder="请输入职务" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item name="month" label="月份">
+                <Input disabled />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Divider orientation="left" plain>收入项</Divider>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="baseSalary" label="基本工资" rules={[{ required: true, message: '请输入基本工资' }]}>
+                <InputNumber style={{ width: '100%' }} min={0} precision={2} prefix="¥" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="commission" label="提成">
+                <InputNumber style={{ width: '100%' }} min={0} precision={2} prefix="¥" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item name="bonus" label="奖金">
+                <InputNumber style={{ width: '100%' }} min={0} precision={2} prefix="¥" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="overtime" label="加班费">
+                <InputNumber style={{ width: '100%' }} min={0} precision={2} prefix="¥" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="allowance" label="补贴">
+                <InputNumber style={{ width: '100%' }} min={0} precision={2} prefix="¥" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Divider orientation="left" plain>扣款项</Divider>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="socialInsurance" label="社保">
+                <InputNumber style={{ width: '100%' }} min={0} precision={2} prefix="¥" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="housingFund" label="公积金">
+                <InputNumber style={{ width: '100%' }} min={0} precision={2} prefix="¥" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="tax" label="个税">
+                <InputNumber style={{ width: '100%' }} min={0} precision={2} prefix="¥" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="otherDeduction" label="其他扣款">
+                <InputNumber style={{ width: '100%' }} min={0} precision={2} prefix="¥" />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+      </Modal>
 
       {/* 工资详情 Drawer */}
       <Drawer

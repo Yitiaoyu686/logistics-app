@@ -32,6 +32,13 @@ import {
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { warehouseManagementApi, systemApi } from '../../api';
+import {
+  ListPageToolbar,
+  ListPageToolbarActions,
+  ListPageToolbarCard,
+  ListPageToolbarField,
+  ListPageToolbarFilters,
+} from '../../components/ListPageToolbar';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -381,66 +388,76 @@ export const WarehouseManagement: React.FC<{ defaultType?: string }> = ({ defaul
       </Row>
 
       {/* 筛选区域 */}
-      <Card bordered={false} style={{ marginBottom: 16 }}>
-        <Space size="middle" wrap>
-          <Select
-            placeholder="仓库类型"
-            value={filterType}
-            onChange={(val) => setFilterType(val)}
-            allowClear
-            style={{ width: 150 }}
-          >
-            <Option value="ORIGIN">起运国</Option>
-            <Option value="DESTINATION">到达国</Option>
-            <Option value="TRANSIT">中转</Option>
-          </Select>
-          <Select
-            placeholder="状态"
-            value={filterStatus}
-            onChange={(val) => setFilterStatus(val)}
-            allowClear
-            style={{ width: 120 }}
-          >
-            <Option value="ACTIVE">启用</Option>
-            <Option value="INACTIVE">停用</Option>
-          </Select>
-          <Select
-            placeholder="国家"
-            value={filterCountry}
-            onChange={(val) => setFilterCountry(val)}
-            allowClear
-            style={{ width: 150 }}
-          >
-            {countryOptions.map(c => (
-              <Option key={c} value={c}>{c}</Option>
-            ))}
-          </Select>
-          <Select
-            placeholder="站点"
-            value={filterSiteId}
-            onChange={(val) => setFilterSiteId(val)}
-            allowClear
-            style={{ width: 180 }}
-            options={sites.map((s) => ({ value: s.id, label: `${s.siteName} (${s.cityName})` }))}
-          />
-          <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
-            搜索
-          </Button>
-          <Button icon={<ReloadOutlined />} onClick={handleReset}>
-            重置
-          </Button>
-        </Space>
-      </Card>
+      <ListPageToolbarCard bordered={false}>
+        <ListPageToolbar>
+          <ListPageToolbarFilters>
+            <ListPageToolbarField minWidth={150}>
+              <Select
+                placeholder="仓库类型"
+                value={filterType}
+                onChange={(val) => setFilterType(val)}
+                allowClear
+                style={{ width: '100%' }}
+              >
+                <Option value="ORIGIN">起运国</Option>
+                <Option value="DESTINATION">到达国</Option>
+                <Option value="TRANSIT">中转</Option>
+              </Select>
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={120}>
+              <Select
+                placeholder="状态"
+                value={filterStatus}
+                onChange={(val) => setFilterStatus(val)}
+                allowClear
+                style={{ width: '100%' }}
+              >
+                <Option value="ACTIVE">启用</Option>
+                <Option value="INACTIVE">停用</Option>
+              </Select>
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={150}>
+              <Select
+                placeholder="国家"
+                value={filterCountry}
+                onChange={(val) => setFilterCountry(val)}
+                allowClear
+                style={{ width: '100%' }}
+              >
+                {countryOptions.map(c => (
+                  <Option key={c} value={c}>{c}</Option>
+                ))}
+              </Select>
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={180}>
+              <Select
+                placeholder="站点"
+                value={filterSiteId}
+                onChange={(val) => setFilterSiteId(val)}
+                allowClear
+                style={{ width: '100%' }}
+                options={sites.map((s) => ({ value: s.id, label: `${s.siteName} (${s.cityName})` }))}
+              />
+            </ListPageToolbarField>
+          </ListPageToolbarFilters>
+          <ListPageToolbarActions>
+            <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
+              查询
+            </Button>
+            <Button icon={<ReloadOutlined />} onClick={handleReset}>
+              重置
+            </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
+              新建仓库
+            </Button>
+          </ListPageToolbarActions>
+        </ListPageToolbar>
+      </ListPageToolbarCard>
 
       {/* 数据表格 */}
       <Card
         bordered={false}
         title="仓库列表"
-        extra={
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>
-            新建仓库
-          </Button>
-        }
       >
         <Table
           columns={columns}

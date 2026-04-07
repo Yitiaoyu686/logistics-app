@@ -107,6 +107,39 @@ export function seedV2Data(): void {
       insertCustomer.run('CUST-001', 'C001', '张三贸易公司', 'U-SALES-01', '老客户转化', now, now);
       insertCustomer.run('CUST-002', 'C002', '义乌小商品出口中心', 'U-SALES-01', '展会线索', now, now);
 
+      // 模拟企业资质数据
+      const updateEnterprise = db.prepare('UPDATE crm_customer SET enterprise_info = ? WHERE id = ?');
+      // CUST-001: 中国企业
+      updateEnterprise.run(JSON.stringify({
+        entityType: 'COMPANY_CN',
+        companyName: '深圳市张三国际贸易有限公司',
+        unifiedCreditCode: '91440300MA5G1234X8',
+        legalRepresentative: '张三',
+        registeredAddress: '深圳市南山区科技园南区数字大厦18楼1806室',
+        taxpayerId: '91440300MA5G1234X8',
+        invoiceAddress: '深圳市南山区科技园南区数字大厦18楼1806室',
+        invoicePhone: '0755-86001234',
+        bankName: '中国工商银行深圳南山支行',
+        bankAccount: '4000 1234 1000 8888 9999',
+        contactPhone: '0755-86001234',
+        contactEmail: 'zhang3trade@163.com',
+      }), 'CUST-001');
+      // CUST-002: 海外企业
+      updateEnterprise.run(JSON.stringify({
+        entityType: 'COMPANY_OVERSEAS',
+        overseasCompanyName: 'Yiwu Global Trading LLC',
+        overseasCountry: '美国',
+        overseasRegNumber: 'EIN-88-1234567',
+        overseasTaxNumber: '88-1234567',
+        overseasDirector: 'Michael Chen',
+        customFields: [
+          { label: 'D-U-N-S Number', value: '12-345-6789' },
+          { label: 'State of Incorporation', value: 'Delaware' },
+        ],
+        bankName: 'Bank of America',
+        bankAccount: '4851 0012 3456 7890',
+      }), 'CUST-002');
+
       const insertSender = db.prepare(`
         INSERT INTO crm_sender_profile (
           id, customer_id, sender_name, sender_phone, sender_address, sender_district, sender_city_id, sender_country_id, is_default, created_at, updated_at

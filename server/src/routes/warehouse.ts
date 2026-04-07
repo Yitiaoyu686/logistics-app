@@ -1390,8 +1390,9 @@ router.get('/transfers', (req, res) => {
 // POST /api/warehouse/transfers
 router.post('/transfers', (req, res) => {
   const db = getDb();
-  const id = generateId('TRF');
-  const transferNo = `TRF-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(Math.floor(Math.random() * 999) + 1).padStart(3, '0')}`;
+  const trfPrefix = String(req.body.transportType || 'SEA').toUpperCase() === 'AIR' ? 'A' : 'S';
+  const id = generateId(`${trfPrefix}-T`);
+  const transferNo = id;
   const now = new Date().toISOString();
 
   const {
@@ -1520,8 +1521,8 @@ router.get('/returns/:id', (req, res) => {
 // POST /api/warehouse/returns
 router.post('/returns', (req, res) => {
   const db = getDb();
-  const id = generateId('RTN');
-  const returnNo = `RTN-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(Math.floor(Math.random() * 999) + 1).padStart(3, '0')}`;
+  const id = generateId('R');
+  const returnNo = id;
   const now = new Date().toISOString();
 
   const {

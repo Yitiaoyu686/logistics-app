@@ -49,8 +49,10 @@ Monorepo 三端架构：Web 客户端 (`/client`) + 移动端 APP (`/app`) + 后
 - **无测试框架** — 项目为 Demo 原型，不要求测试覆盖
 
 ### Styling Convention
-- **纯内联样式** — 不使用 CSS Modules、Styled Components 或 CSS 文件
-- 使用 `theme.useToken()` 获取 Ant Design 设计令牌
+- **混合样式策略**: 内联样式 + 全局工具类 CSS
+- 内联样式 + `theme.useToken()` 获取 Ant Design 设计令牌（组件级样式）
+- `/client/src/styles/ui-compact.css` 提供布局工具类（`.list-page-toolbar`, `.compact-stats`, `.app-content-shell` 等）
+- 不使用 CSS Modules 或 Styled Components
 
 ## Development Environment
 
@@ -74,8 +76,8 @@ Vite dev server 将 `/api` 代理到 `http://localhost:3001`
 
 1. **State-driven 导航**: App.tsx 中 MENU_CONFIG + ContentRenderer switch + Breadcrumb 面包屑 + 卡片式 Tabs
 2. **API-first 数据**: 前端通过 `src/api/index.ts` 调用后端 REST API，SQLite 持久化
-3. **Inline Styles Only**: 统一使用内联样式 + useToken()，避免样式文件管理开销
-4. **无状态管理库**: 仅 useState + useMemo，组件内自治 — 无 Redux/Context
+3. **Hybrid Styling**: 内联样式 + useToken() 处理组件样式，`ui-compact.css` 提供全局布局工具类
+4. **无状态管理库**: 仅 useState + useMemo + useEffect，组件内自治 — 无 Redux/Context
 5. **页面级业务切换**: `useBusinessMode` hook + `BusinessModeSwitcher` 组件实现空运/海运 Segmented 切换
 
 ---

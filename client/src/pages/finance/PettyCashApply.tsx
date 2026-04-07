@@ -3,12 +3,12 @@ import {
   Card, Table, Button, Space, Tag, Modal, Form, Input,
   Select, InputNumber, message, Row, Col, Statistic,
   Typography, Descriptions, Alert, Drawer,
-  Timeline
+  Timeline, Upload
 } from 'antd';
 import {
   PlusOutlined, DollarOutlined, CheckOutlined, CloseOutlined,
   ClockCircleOutlined, EyeOutlined, UserOutlined,
-  MoneyCollectOutlined, AuditOutlined
+  MoneyCollectOutlined, AuditOutlined, UploadOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 
@@ -43,7 +43,135 @@ interface PettyCashApplication {
   remark?: string;
 }
 
-// --- 数据状态（暂无API，使用空数组初始化） ---
+// --- Mock 数据生成 ---
+function generateMockPettyCashApplications(): PettyCashApplication[] {
+  return [
+    {
+      id: 'PC001',
+      applicationNo: 'P-20260328-0001',
+      applicant: '张伟',
+      department: '操作部',
+      amount: 1500,
+      currency: 'CNY',
+      purpose: '码头搬运费',
+      relatedJob: 'S-JOB2603000028',
+      status: 'PENDING',
+      applyTime: '2026-03-28 09:30:00',
+      remark: '码头临时加班搬运，需支付搬运工人加班费用',
+    },
+    {
+      id: 'PC002',
+      applicationNo: 'P-20260329-0002',
+      applicant: '李娜',
+      department: '销售部',
+      amount: 800,
+      currency: 'CNY',
+      purpose: '客户接待费用',
+      status: 'PENDING',
+      applyTime: '2026-03-29 14:15:00',
+      remark: '接待日本客户来访，预计用餐及交通费用',
+    },
+    {
+      id: 'PC003',
+      applicationNo: 'P-20260325-0003',
+      applicant: '王强',
+      department: '仓储部',
+      amount: 2000,
+      currency: 'CNY',
+      purpose: '海关查验费',
+      relatedJob: 'S-JOB2603000031',
+      status: 'APPROVED',
+      applyTime: '2026-03-25 10:00:00',
+      approver: '刘经理',
+      approveTime: '2026-03-25 16:30:00',
+      remark: '海关抽查需支付查验相关费用',
+    },
+    {
+      id: 'PC004',
+      applicationNo: 'P-20260326-0004',
+      applicant: '陈静',
+      department: '操作部',
+      amount: 500,
+      currency: 'CNY',
+      purpose: '快递费',
+      relatedJob: 'S-JOB2603000035',
+      status: 'APPROVED',
+      applyTime: '2026-03-26 11:20:00',
+      approver: '刘经理',
+      approveTime: '2026-03-27 09:10:00',
+      remark: '紧急文件快递至客户，顺丰次日达',
+    },
+    {
+      id: 'PC005',
+      applicationNo: 'P-20260320-0005',
+      applicant: '赵磊',
+      department: '仓储部',
+      amount: 1800,
+      currency: 'CNY',
+      purpose: '港口临时费用',
+      relatedJob: 'S-JOB2603000028',
+      status: 'PAID',
+      applyTime: '2026-03-20 08:45:00',
+      approver: '刘经理',
+      approveTime: '2026-03-20 15:00:00',
+      paymentTime: '2026-03-21 10:30:00',
+      payer: '财务张会计',
+      remark: '港口临时停车及装卸费用',
+    },
+    {
+      id: 'PC006',
+      applicationNo: 'P-20260322-0006',
+      applicant: '孙芳',
+      department: '销售部',
+      amount: 600,
+      currency: 'CNY',
+      purpose: '打印复印费',
+      status: 'PAID',
+      applyTime: '2026-03-22 13:00:00',
+      approver: '刘经理',
+      approveTime: '2026-03-22 17:00:00',
+      paymentTime: '2026-03-23 09:00:00',
+      payer: '财务张会计',
+      remark: '批量打印合同文件及报关材料',
+    },
+    {
+      id: 'PC007',
+      applicationNo: 'P-20260315-0007',
+      applicant: '周明',
+      department: '操作部',
+      amount: 1200,
+      currency: 'CNY',
+      purpose: '码头搬运费',
+      relatedJob: 'S-JOB2603000031',
+      status: 'VERIFIED',
+      applyTime: '2026-03-15 09:00:00',
+      approver: '刘经理',
+      approveTime: '2026-03-15 14:00:00',
+      paymentTime: '2026-03-16 10:00:00',
+      payer: '财务张会计',
+      verifyTime: '2026-03-20 11:30:00',
+      remark: '蛇口码头搬运费，实际使用1150元',
+    },
+    {
+      id: 'PC008',
+      applicationNo: 'P-20260310-0008',
+      applicant: '吴丽',
+      department: '美国分部',
+      amount: 150,
+      currency: 'USD',
+      purpose: '其他临时支出',
+      relatedJob: 'S-JOB2603000035',
+      status: 'VERIFIED',
+      applyTime: '2026-03-10 10:30:00',
+      approver: 'Mike Chen',
+      approveTime: '2026-03-10 18:00:00',
+      paymentTime: '2026-03-11 09:00:00',
+      payer: 'US Finance',
+      verifyTime: '2026-03-18 15:00:00',
+      remark: 'LA仓库临时采购包装材料',
+    },
+  ];
+}
 
 const STATUS_CONFIG = {
   PENDING: { text: '待审批', color: 'orange' },
@@ -54,7 +182,7 @@ const STATUS_CONFIG = {
 };
 
 export const PettyCashApply: React.FC = () => {
-  const [data, setData] = useState<PettyCashApplication[]>([]);
+  const [data, setData] = useState<PettyCashApplication[]>(generateMockPettyCashApplications());
   const [applyModalVisible, setApplyModalVisible] = useState(false);
   const [detailVisible, setDetailVisible] = useState(false);
   const [currentRecord, setCurrentRecord] = useState<PettyCashApplication | null>(null);
@@ -84,7 +212,7 @@ export const PettyCashApply: React.FC = () => {
       const values = await applyForm.validateFields();
       const newApplication: PettyCashApplication = {
         id: `PC${String(data.length + 1).padStart(3, '0')}`,
-        applicationNo: `PETTY-${dayjs().format('YYYY')}-${String(data.length + 1).padStart(3, '0')}`,
+        applicationNo: `P-${dayjs().format('YYYYMMDD')}-${String(data.length + 1).padStart(4, '0')}`,
         applicant: '当前用户',
         department: values.department,
         amount: values.amount,
@@ -175,32 +303,36 @@ export const PettyCashApply: React.FC = () => {
   };
 
   // 发放备用金
+  const [payModalVisible, setPayModalVisible] = useState(false);
+  const [payingRecord, setPayingRecord] = useState<PettyCashApplication | null>(null);
+  const [payForm] = Form.useForm();
+
   const handlePay = (record: PettyCashApplication) => {
-    Modal.confirm({
-      title: '发放备用金',
-      content: (
-        <div>
-          <p>确定发放备用金给 <Text strong>{record.applicant}</Text> 吗？</p>
-          <Descriptions column={1} size="small" style={{ marginTop: 12 }}>
-            <Descriptions.Item label="发放金额">
-              <Text strong style={{ color: '#52c41a', fontSize: 18 }}>
-                {record.currency === 'CNY' ? '¥' : '$'}{record.amount.toLocaleString()}
-              </Text>
-            </Descriptions.Item>
-          </Descriptions>
-          <Alert message="发放后该笔备用金将进入「待核销」状态" type="info" showIcon style={{ marginTop: 12 }} />
-        </div>
-      ),
-      onOk: () => {
+    setPayingRecord(record);
+    payForm.resetFields();
+    payForm.setFieldsValue({ paymentMethod: '银行转账' });
+    setPayModalVisible(true);
+  };
+
+  const handlePaySubmit = async () => {
+    try {
+      const values = await payForm.validateFields();
+      const vouchers = (values.vouchers || []).filter((f: any) => f?.name);
+      if (!vouchers.length) {
+        message.warning('请上传付款凭证');
+        return;
+      }
+      if (payingRecord) {
         setData(prev => prev.map(d =>
-          d.id === record.id
+          d.id === payingRecord.id
             ? { ...d, status: 'PAID' as const, paymentTime: dayjs().format('YYYY-MM-DD HH:mm:ss'), payer: '当前用户' }
             : d
         ));
         message.success('备用金已发放');
+        setPayModalVisible(false);
         setDetailVisible(false);
       }
-    });
+    } catch { /* form validation */ }
   };
 
   // 列表列定义
@@ -415,9 +547,9 @@ export const PettyCashApply: React.FC = () => {
             <Col span={12}>
               <Form.Item name="relatedJob" label="关联任务（可选）">
                 <Select placeholder="选择任务号" allowClear showSearch>
-                  <Select.Option value="JOB-SZX-LAX-231028">JOB-SZX-LAX-231028</Select.Option>
-                  <Select.Option value="JOB-SZX-NYC-231101">JOB-SZX-NYC-231101</Select.Option>
-                  <Select.Option value="JOB-GZU-LAX-231115">JOB-GZU-LAX-231115</Select.Option>
+                  <Select.Option value="S-JOB2603000028">S-JOB2603000028</Select.Option>
+                  <Select.Option value="S-JOB2603000031">S-JOB2603000031</Select.Option>
+                  <Select.Option value="S-JOB2603000035">S-JOB2603000035</Select.Option>
                 </Select>
               </Form.Item>
             </Col>
@@ -648,6 +780,67 @@ export const PettyCashApply: React.FC = () => {
           </Row>
         )}
       </Drawer>
+
+      {/* 发放备用金 Modal - 需上传付款凭证 */}
+      <Modal
+        title="发放备用金"
+        open={payModalVisible}
+        onCancel={() => { setPayModalVisible(false); payForm.resetFields(); }}
+        onOk={handlePaySubmit}
+        okText="确认发放"
+        destroyOnClose
+        width={520}
+      >
+        {payingRecord && (
+          <div>
+            <Card size="small" style={{ marginBottom: 16, background: '#f6ffed' }}>
+              <Descriptions column={2} size="small">
+                <Descriptions.Item label="申请人"><Text strong>{payingRecord.applicant}</Text></Descriptions.Item>
+                <Descriptions.Item label="部门">{payingRecord.department}</Descriptions.Item>
+                <Descriptions.Item label="发放金额">
+                  <Text strong style={{ color: '#52c41a', fontSize: 18 }}>
+                    {payingRecord.currency === 'CNY' ? '¥' : '$'}{payingRecord.amount.toLocaleString()}
+                  </Text>
+                </Descriptions.Item>
+                <Descriptions.Item label="用途">{payingRecord.purpose}</Descriptions.Item>
+              </Descriptions>
+            </Card>
+
+            <Form form={payForm} layout="vertical">
+              <Form.Item name="paymentMethod" label="付款方式" rules={[{ required: true, message: '请选择付款方式' }]}>
+                <Select>
+                  <Select.Option value="银行转账">银行转账</Select.Option>
+                  <Select.Option value="现金">现金</Select.Option>
+                  <Select.Option value="微信转账">微信转账</Select.Option>
+                  <Select.Option value="支付宝转账">支付宝转账</Select.Option>
+                </Select>
+              </Form.Item>
+              <Form.Item name="transactionNo" label="交易流水号">
+                <Input placeholder="银行转账流水号或交易单号" />
+              </Form.Item>
+              <Form.Item
+                name="vouchers"
+                label="上传付款凭证"
+                rules={[{ required: true, message: '请上传付款凭证' }]}
+                valuePropName="fileList"
+                getValueFromEvent={(e: any) => Array.isArray(e) ? e : e?.fileList}
+              >
+                <Upload accept=".pdf,.jpg,.png,.jpeg" maxCount={5} beforeUpload={() => false} listType="picture-card">
+                  <div>
+                    <UploadOutlined />
+                    <div style={{ marginTop: 8 }}>上传</div>
+                  </div>
+                </Upload>
+              </Form.Item>
+              <Form.Item name="remark" label="备注">
+                <Input.TextArea rows={2} placeholder="付款备注说明" />
+              </Form.Item>
+            </Form>
+
+            <Alert message="发放后该笔备用金将进入「待核销」状态" type="info" showIcon />
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };

@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Button,
-  Card,
   Col,
   Form,
   Input,
@@ -15,9 +14,16 @@ import {
   Tag,
   message,
 } from 'antd';
-import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
+import { PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { jobApi, warehouseApi } from '../../../api';
+import {
+  ListPageToolbar,
+  ListPageToolbarActions,
+  ListPageToolbarCard,
+  ListPageToolbarField,
+  ListPageToolbarFilters,
+} from '../../../components/ListPageToolbar';
 import type { ShippingUnit } from '../../../types/core';
 
 const UNIT_STATUS_COLORS: Record<string, string> = {
@@ -53,11 +59,11 @@ export const AirCargoMgt = ({
   const [createForm] = Form.useForm();
   const [bindForm] = Form.useForm();
 
-  const fetchData = async () => {
+  const fetchData = async (queryKeyword = keyword) => {
     setLoading(true);
     try {
       const [unitRes, jobRes]: any[] = await Promise.all([
-        warehouseApi.listUnits({ transportMode, warehouseId, keyword: keyword || undefined }),
+        warehouseApi.listUnits({ transportMode, warehouseId, keyword: queryKeyword || undefined }),
         jobApi.list({ transportType: transportMode }),
       ]);
       const unitRows = Array.isArray(unitRes?.data) ? unitRes.data : [];
@@ -103,6 +109,18 @@ export const AirCargoMgt = ({
 
   const unitTypeOptions = transportMode === 'SEA' ? SEA_UNIT_TYPES : AIR_UNIT_TYPES;
 
+  const handleQuery = () => {
+    const normalizedKeyword = keyword.trim();
+    setKeyword(normalizedKeyword);
+    void fetchData(normalizedKeyword);
+  };
+
+  const handleReset = () => {
+    setKeyword('');
+    setStatusFilter('ALL');
+    void fetchData('');
+  };
+
   const handleCreate = async () => {
     try {
       const values = await createForm.validateFields();
@@ -117,7 +135,7 @@ export const AirCargoMgt = ({
         route: values.route || null,
         remark: values.remark || null,
       });
-      message.success('运输单元创建成功');
+      message.success('集装号创建成功');
       setCreateVisible(false);
       createForm.resetFields();
       fetchData();
@@ -171,7 +189,7 @@ export const AirCargoMgt = ({
 
   const columns = [
     {
-      title: '单元号',
+      title: '集装号',
       dataIndex: 'unitNo',
       width: 160,
       render: (value: string, row: ShippingUnit) => (
@@ -238,7 +256,7 @@ export const AirCargoMgt = ({
             封箱
           </Button>
           <Popconfirm
-            title="确认删除该运输单元？"
+            title="确认删除该集装号？"
             description="删除后不可恢复"
             onConfirm={() => handleDelete(row)}
             okText="删除"
@@ -261,27 +279,38 @@ export const AirCargoMgt = ({
         <Col><Tag color="purple">已绑任务 {stats.boundJob}</Tag></Col>
       </Row>
 
-      <Card size="small" style={{ marginBottom: 12 }}>
-        <Space wrap>
-          <Input
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            placeholder="搜索单元号/任务号/线路"
-            allowClear
-            style={{ width: 260 }}
-          />
-          <Select value={statusFilter} onChange={setStatusFilter} style={{ width: 160 }}>
-            <Select.Option value="ALL">全部状态</Select.Option>
-            <Select.Option value="EMPTY">EMPTY</Select.Option>
-            <Select.Option value="LOADING">LOADING</Select.Option>
-            <Select.Option value="SEALED">SEALED</Select.Option>
-            <Select.Option value="SHIPPED">SHIPPED</Select.Option>
-            <Select.Option value="ARRIVED">ARRIVED</Select.Option>
-          </Select>
-          <Button icon={<ReloadOutlined />} onClick={fetchData}>刷新</Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateVisible(true)}>新增单元</Button>
-        </Space>
-      </Card>
+      <ListPageToolbarCard style={{ marginBottom: 12 }}>
+        <ListPageToolbar>
+          <ListPageToolbarFilters>
+            <ListPageToolbarField flex="1 1 320px" minWidth={260}>
+              <Input
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                onPressEnter={handleQuery}
+                placeholder="搜索集装号/任务号/线路"
+                allowClear
+                prefix={<SearchOutlined />}
+              />
+            </ListPageToolbarField>
+            <ListPageToolbarField minWidth={160}>
+              <Select value={statusFilter} onChange={setStatusFilter}>
+                <Select.Option value="ALL">全部状态</Select.Option>
+                <Select.Option value="EMPTY">EMPTY</Select.Option>
+                <Select.Option value="LOADING">LOADING</Select.Option>
+                <Select.Option value="SEALED">SEALED</Select.Option>
+                <Select.Option value="SHIPPED">SHIPPED</Select.Option>
+                <Select.Option value="ARRIVED">ARRIVED</Select.Option>
+              </Select>
+            </ListPageToolbarField>
+          </ListPageToolbarFilters>
+          <ListPageToolbarActions>
+            <Button type="primary" icon={<SearchOutlined />} onClick={handleQuery}>查询</Button>
+            <Button onClick={handleReset}>重置</Button>
+            <Button icon={<ReloadOutlined />} onClick={() => void fetchData()}>刷新</Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateVisible(true)}>新增集装号</Button>
+          </ListPageToolbarActions>
+        </ListPageToolbar>
+      </ListPageToolbarCard>
 
       <Table
         rowKey="id"
@@ -294,7 +323,7 @@ export const AirCargoMgt = ({
       />
 
       <Modal
-        title={`新增${transportMode === 'SEA' ? '海运' : '空运'}单元`}
+        title={`新增${transportMode === 'SEA' ? '海运' : '空运'}集装号`}
         open={createVisible}
         onCancel={() => {
           setCreateVisible(false);
@@ -315,7 +344,7 @@ export const AirCargoMgt = ({
             warehouse: transportMode === 'SEA' ? 'CN' : 'CN',
           }}
         >
-          <Form.Item name="unitNo" label="单元号" rules={[{ required: true, message: '请输入单元号' }]}> 
+          <Form.Item name="unitNo" label="集装号" rules={[{ required: true, message: '请输入集装号' }]}> 
             <Input placeholder="例如 AK001 / CNT-001" />
           </Form.Item>
           <Form.Item name="unitType" label="类型" rules={[{ required: true, message: '请选择类型' }]}> 

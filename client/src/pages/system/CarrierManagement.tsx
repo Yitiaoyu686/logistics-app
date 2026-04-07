@@ -23,6 +23,13 @@ import {
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { systemApi } from '../../api';
+import {
+  ListPageToolbar,
+  ListPageToolbarActions,
+  ListPageToolbarCard,
+  ListPageToolbarField,
+  ListPageToolbarFilters,
+} from '../../components/ListPageToolbar';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -114,6 +121,10 @@ export const CarrierManagement: React.FC = () => {
       (c.carrierNameEn && c.carrierNameEn.toLowerCase().includes(kw))
     );
   }, [carriers, searchText]);
+
+  const handleReset = () => {
+    setSearchText('');
+  };
 
   const handleAdd = () => {
     setEditingCarrier(null);
@@ -269,19 +280,25 @@ export const CarrierManagement: React.FC = () => {
 
   return (
     <div>
-      <Card bordered={false} style={{ marginBottom: 16 }}>
-        <Space size="middle">
-          <Input
-            placeholder="承运人名称/简称"
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            style={{ width: 240 }}
-            allowClear
-          />
-          <Button type="primary" icon={<SearchOutlined />}>查询</Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>添加承运人</Button>
-        </Space>
-      </Card>
+      <ListPageToolbarCard bordered={false}>
+        <ListPageToolbar>
+          <ListPageToolbarFilters>
+            <ListPageToolbarField flex="1 1 260px" minWidth={240}>
+              <Input
+                placeholder="承运人名称/简称"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                allowClear
+              />
+            </ListPageToolbarField>
+          </ListPageToolbarFilters>
+          <ListPageToolbarActions>
+            <Button type="primary" icon={<SearchOutlined />}>查询</Button>
+            <Button onClick={handleReset}>重置</Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>添加承运人</Button>
+          </ListPageToolbarActions>
+        </ListPageToolbar>
+      </ListPageToolbarCard>
 
       <Card bordered={false}>
         <Table

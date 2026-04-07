@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getDb } from '../database/connection';
+import { getV2Db } from '../database/connectionV2';
 import { success, error } from '../utils/response';
 import { generateId } from '../utils/idGenerator';
 
@@ -16,7 +17,7 @@ const COMMISSION_BIZ_TYPES = new Set(['AIR', 'SEA', 'BOTH']);
 const COMMISSION_STATUSES = new Set(['ACTIVE', 'INACTIVE']);
 
 function generateFeeNo() {
-  return `FEE-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(Math.floor(Math.random() * 999) + 1).padStart(3, '0')}`;
+  return `F-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0')}`;
 }
 
 function normalizeRelatedType(raw: any): string {
@@ -92,10 +93,202 @@ function resolveFeeRelation(db: any, relatedTypeRaw: any, relatedIdRaw: any, rel
     relatedType === 'TRANSFER' ? findTransfer() :
     findDpn();
 
-  if (!resolved) {
-    return { ok: false, message: `Related ${relatedType} not found in database` };
+  if (resolved) {
+    return { ok: true, data: resolved };
   }
-  return { ok: true, data: resolved };
+
+  // Legacy tables may be empty while V2 tables contain live demo data.
+  try {
+    const v2 = getV2Db();
+
+    if (relatedType === 'ORDER') {
+      for (const key of candidates) {
+        const master = v2.prepare('SELECT id, order_no FROM oms_order WHERE id = ? OR order_no = ? LIMIT 1').get(key, key) as any;
+        if (master) return { ok: true, data: { relatedType, relatedId: master.order_no || master.id, relatedNo: master.order_no || master.id } };
+
+        const sub = v2.prepare('SELECT id, sub_order_no FROM oms_sub_order WHERE id = ? OR sub_order_no = ? LIMIT 1').get(key, key) as any;
+        if (sub) return { ok: true, data: { relatedType, relatedId: sub.sub_order_no || sub.id, relatedNo: sub.sub_order_no || sub.id } };
+      }
+    }
+
+    if (relatedType === 'JOB') {
+      for (const key of candidates) {
+        const row = v2.prepare('SELECT id, job_no FROM tms_job WHERE id = ? OR job_no = ? LIMIT 1').get(key, key) as any;
+        if (row) return { ok: true, data: { relatedType, relatedId: row.job_no || row.id, relatedNo: row.job_no || row.id } };
+      }
+    }
+
+    if (relatedType === 'DPN') {
+      for (const key of candidates) {
+        const row = v2.prepare('SELECT id, dpn_no FROM pod_dpn WHERE id = ? OR dpn_no = ? LIMIT 1').get(key, key) as any;
+        if (row) return { ok: true, data: { relatedType, relatedId: row.id, relatedNo: row.dpn_no || row.id } };
+      }
+    }
+  } catch (_) {
+    // Ignore V2 fallback errors and keep original validation message.
+  }
+
+  return { ok: false, message: `Related ${relatedType} not found in database` };
+}
+
+function mapV2FeeLevelToLegacyRelatedType(levelRaw: any): string | null {
+  const level = String(levelRaw || '').trim().toUpperCase();
+  if (level === 'ORDER' || level === 'SUB_ORDER') return 'ORDER';
+  if (level === 'JOB') return 'JOB';
+  if (level === 'DPN') return 'DPN';
+  if (level === 'TRANSFER') return 'TRANSFER';
+  return null;
+}
+
+function mapV2FeeStatusToLegacyStatus(statusRaw: any): string {
+  const status = String(statusRaw || '').trim().toUpperCase();
+  if (status === 'APPROVED') return 'APPROVED';
+  if (status === 'REJECTED') return 'REJECTED';
+  if (status === 'CANCELLED') return 'CANCELLED';
+  if (status === 'PAID' || status === 'PARTIAL_PAID') return 'PAID';
+  return 'PENDING';
+}
+
+function safeNumber(value: any, fallback = 0): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function syncLegacyFeesFromV2IfNeeded(db: any) {
+  let v2: any;
+  try {
+    v2 = getV2Db();
+  } catch (_) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const insertFee = db.prepare(`
+    INSERT OR IGNORE INTO fee_records (
+      id, feeNo, relatedType, relatedId, relatedNo, feeType, feeDirection, amount, currency, exchangeRate, status,
+      supplierId, supplierName, customerId, customerName, description, remark, createdBy, createdAt, updatedAt
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const hasActiveByRelation = db.prepare(`
+    SELECT id
+    FROM fee_records
+    WHERE relatedType = ? AND relatedId = ? AND status != 'CANCELLED'
+    LIMIT 1
+  `);
+
+  const tx = db.transaction(() => {
+    const v2Fees = v2.prepare('SELECT * FROM fin_fee ORDER BY datetime(created_at) DESC').all() as any[];
+    for (const row of v2Fees) {
+      const relatedType = mapV2FeeLevelToLegacyRelatedType(row.fee_level);
+      if (!relatedType) continue;
+
+      const relatedNo = String(row.related_no || row.related_id || '').trim();
+      if (!relatedNo) continue;
+
+      const relatedId = relatedType === 'DPN'
+        ? String(row.related_id || relatedNo).trim()
+        : relatedNo;
+
+      const feeDirection = String(row.fee_direction || '').toUpperCase() === 'PAYABLE' ? 'PAYABLE' : 'RECEIVABLE';
+      const counterpartyId = row.counterparty_id ? String(row.counterparty_id) : null;
+      const counterpartyName = row.counterparty_name ? String(row.counterparty_name) : null;
+      const status = mapV2FeeStatusToLegacyStatus(row.fee_status);
+      const updatedAt = row.updated_at || row.created_at || now;
+
+      insertFee.run(
+        String(row.id || generateId('F')),
+        String(row.fee_no || generateFeeNo()),
+        relatedType,
+        relatedId,
+        relatedNo,
+        String(row.fee_item_code || 'OTHER'),
+        feeDirection,
+        safeNumber(row.amount, 0),
+        String(row.currency_code || 'CNY'),
+        safeNumber(row.fx_rate_to_cny, 1) || 1,
+        status,
+        feeDirection === 'PAYABLE' ? counterpartyId : null,
+        feeDirection === 'PAYABLE' ? counterpartyName : null,
+        feeDirection === 'RECEIVABLE' ? counterpartyId : null,
+        feeDirection === 'RECEIVABLE' ? counterpartyName : null,
+        row.description || null,
+        'SYNCED_FROM_V2',
+        String(row.created_by || 'V2_SYNC'),
+        row.created_at || now,
+        updatedAt
+      );
+    }
+
+    // Ensure JOB cost list has baseline rows in demo environments.
+    const v2Jobs = v2.prepare('SELECT job_no FROM tms_job').all() as any[];
+    for (const row of v2Jobs) {
+      const jobNo = String(row.job_no || '').trim();
+      if (!jobNo) continue;
+      const existing = hasActiveByRelation.get('JOB', jobNo);
+      if (existing) continue;
+      insertFee.run(
+        generateId('F'),
+        generateFeeNo(),
+        'JOB',
+        jobNo,
+        jobNo,
+        'OTHER',
+        'PAYABLE',
+        0,
+        'CNY',
+        1,
+        'PENDING',
+        null,
+        null,
+        null,
+        null,
+        '系统自动补齐：V2 任务成本草稿',
+        'AUTO_BOOTSTRAP_FROM_V2',
+        'SYSTEM',
+        now,
+        now
+      );
+    }
+
+    // Ensure DPN cost list has baseline rows in demo environments.
+    const v2Dpns = v2.prepare('SELECT id, dpn_no FROM pod_dpn').all() as any[];
+    for (const row of v2Dpns) {
+      const relatedId = String(row.id || '').trim();
+      const relatedNo = String(row.dpn_no || row.id || '').trim();
+      if (!relatedId || !relatedNo) continue;
+      const existing = hasActiveByRelation.get('DPN', relatedId);
+      if (existing) continue;
+      insertFee.run(
+        generateId('F'),
+        generateFeeNo(),
+        'DPN',
+        relatedId,
+        relatedNo,
+        'DELIVERY',
+        'PAYABLE',
+        0,
+        'NGN',
+        1,
+        'PENDING',
+        null,
+        null,
+        null,
+        null,
+        '系统自动补齐：V2 DPN 成本草稿',
+        'AUTO_BOOTSTRAP_FROM_V2',
+        'SYSTEM',
+        now,
+        now
+      );
+    }
+  });
+
+  try {
+    tx();
+  } catch (_) {
+    // Keep API available even if sync fails.
+  }
 }
 
 function hasActiveFee(db: any, relatedType: string, relatedId: string) {
@@ -122,7 +315,7 @@ function insertAutoFee(db: any, payload: {
   createdBy: string;
 }) {
   const now = new Date().toISOString();
-  const id = generateId('FEE');
+  const id = generateId('F');
   const feeNo = generateFeeNo();
   db.prepare(`
     INSERT INTO fee_records (
@@ -541,6 +734,7 @@ router.put('/finance/commission/bonus', (req, res) => {
 // GET /api/fees
 router.get('/fees', (req, res) => {
   const db = getDb();
+  syncLegacyFeesFromV2IfNeeded(db);
   const { id, status, feeDirection, relatedType, relatedId, relatedNo, feeNo } = req.query;
 
   let where = 'WHERE 1=1';
@@ -698,7 +892,7 @@ router.post('/fees/bootstrap', (req, res) => {
 // POST /api/fees
 router.post('/fees', (req, res) => {
   const db = getDb();
-  const id = generateId('FEE');
+  const id = generateId('F');
   const feeNo = generateFeeNo();
   const now = new Date().toISOString();
 
@@ -746,19 +940,31 @@ router.put('/fees/:id', (req, res) => {
   const fields = { ...(req.body || {}) } as Record<string, any>;
   const needsRelationValidation = fields.relatedType !== undefined || fields.relatedId !== undefined || fields.relatedNo !== undefined;
   if (needsRelationValidation) {
-    const relation: any = resolveFeeRelation(
-      db,
-      fields.relatedType ?? existing.relatedType,
-      fields.relatedId ?? existing.relatedId,
-      fields.relatedNo ?? existing.relatedNo
-    );
-    if (!relation.ok) {
-      error(res, relation.message);
-      return;
+    const nextType = normalizeRelatedType(fields.relatedType ?? existing.relatedType);
+    const existingType = normalizeRelatedType(existing.relatedType);
+    const nextId = String(fields.relatedId ?? existing.relatedId ?? '');
+    const nextNo = String(fields.relatedNo ?? existing.relatedNo ?? '');
+    const unchanged = nextType === existingType
+      && nextId === String(existing.relatedId ?? '')
+      && nextNo === String(existing.relatedNo ?? '');
+
+    if (unchanged) {
+      // keep as-is; skip relation existence check
+    } else {
+      const relation: any = resolveFeeRelation(
+        db,
+        fields.relatedType ?? existing.relatedType,
+        fields.relatedId ?? existing.relatedId,
+        fields.relatedNo ?? existing.relatedNo
+      );
+      if (!relation.ok) {
+        error(res, relation.message);
+        return;
+      }
+      fields.relatedType = relation.data.relatedType;
+      fields.relatedId = relation.data.relatedId;
+      fields.relatedNo = relation.data.relatedNo;
     }
-    fields.relatedType = relation.data.relatedType;
-    fields.relatedId = relation.data.relatedId;
-    fields.relatedNo = relation.data.relatedNo;
   }
 
   const sets: string[] = [];

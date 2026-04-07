@@ -13,7 +13,7 @@ const { RangePicker } = DatePicker;
 
 // ==================== 类型 ====================
 
-type ViewMode = 'category' | 'supplier' | 'trend';
+type ViewMode = 'category' | 'supplier' | 'trend' | 'expense';
 
 interface CategoryRow {
   key: string;
@@ -50,6 +50,13 @@ interface TrendRow {
   momChange: number | null;
 }
 
+interface ExpenseRow {
+  key: string;
+  itemName: string;
+  amount: number;
+  category: string;
+}
+
 interface Filters {
   dateRange: [any, any] | null;
   transportMode: string;
@@ -69,6 +76,19 @@ const VIEW_MODE_LABEL_MAP: Record<string, ViewMode> = {
   '按费用类别': 'category',
   '按供应商': 'supplier',
   '按月度趋势': 'trend',
+  '经营费用明细': 'expense',
+};
+
+const EXPENSE_CATEGORY_COLOR: Record<string, string> = {
+  '仓储': 'blue',
+  '办公': 'cyan',
+  '物流': 'green',
+  '福利': 'magenta',
+  '耗材': 'orange',
+  '运输': 'purple',
+  '财务': 'gold',
+  '税费': 'red',
+  '营销': 'volcano',
 };
 
 // ==================== 数据 ====================
@@ -76,6 +96,19 @@ const VIEW_MODE_LABEL_MAP: Record<string, ViewMode> = {
 const categoryData: CategoryRow[] = [];
 const supplierData: SupplierRow[] = [];
 const trendData: TrendRow[] = [];
+
+const expenseData: ExpenseRow[] = [
+  { key: '1', itemName: '海运仓租赁水电费', amount: 27107, category: '仓储' },
+  { key: '2', itemName: '办公费', amount: 500, category: '办公' },
+  { key: '3', itemName: '叉车费', amount: 65300, category: '物流' },
+  { key: '4', itemName: '零食福利', amount: 120, category: '福利' },
+  { key: '5', itemName: '仓库用品', amount: 442, category: '耗材' },
+  { key: '6', itemName: 'LOS卡车', amount: 108374, category: '运输' },
+  { key: '7', itemName: '银行手续费', amount: 111.5, category: '财务' },
+  { key: '8', itemName: '信使费', amount: 3, category: '办公' },
+  { key: '9', itemName: 'LOS增值税', amount: 1278, category: '税费' },
+  { key: '10', itemName: '公众号手续费', amount: 241.8, category: '营销' },
+];
 
 // ==================== 工具函数 ====================
 
@@ -331,6 +364,43 @@ export const CostStructureAnalysis: React.FC<{ businessMode?: 'ALL' | 'AIR' | 'S
     };
   }, []);
 
+  // ---- 经营费用月份筛选 ----
+  const [expenseMonth, setExpenseMonth] = useState<any>(null);
+
+  // ---- 经营费用表格列 ----
+  const expenseColumns: ColumnsType<ExpenseRow> = useMemo(() => [
+    {
+      title: '费用项目',
+      dataIndex: 'itemName',
+      key: 'itemName',
+      width: 250,
+    },
+    {
+      title: '金额(¥)',
+      dataIndex: 'amount',
+      key: 'amount',
+      width: 130,
+      align: 'right' as const,
+      render: (val: number) => formatMoney(val),
+    },
+    {
+      title: '分类',
+      dataIndex: 'category',
+      key: 'category',
+      width: 120,
+      render: (val: string) => {
+        const color = EXPENSE_CATEGORY_COLOR[val] || 'default';
+        return <Tag color={color}>{val}</Tag>;
+      },
+    },
+  ], []);
+
+  // ---- 经营费用 Table.Summary ----
+  const expenseSummary = useMemo(() => {
+    const totalAmount = expenseData.reduce((s, r) => s + r.amount, 0);
+    return { totalAmount };
+  }, []);
+
   // ---- 视图切换处理 ----
   const handleViewChange = (val: string | number) => {
     const viewModeVal = VIEW_MODE_LABEL_MAP[val as string];
@@ -365,7 +435,7 @@ export const CostStructureAnalysis: React.FC<{ businessMode?: 'ALL' | 'AIR' | 'S
       {/* ========== 视图切换 ========== */}
       <div style={{ marginBottom: 16 }}>
         <Segmented
-          options={['按费用类别', '按供应商', '按月度趋势']}
+          options={['按费用类别', '按供应商', '按月度趋势', '经营费用明细']}
           onChange={handleViewChange}
           size="large"
         />
@@ -498,6 +568,45 @@ export const CostStructureAnalysis: React.FC<{ businessMode?: 'ALL' | 'AIR' | 'S
                     <Text strong>{formatMoney(trendSummary.total)}</Text>
                   </Table.Summary.Cell>
                   <Table.Summary.Cell index={7} />
+                </Table.Summary.Row>
+              </Table.Summary>
+            )}
+          />
+        </Card>
+      )}
+
+      {/* ========== 经营费用明细 ========== */}
+      {viewMode === 'expense' && (
+        <Card
+          bordered={false}
+          title="经营费用明细"
+          extra={
+            <Space>
+              <span>月份筛选：</span>
+              <DatePicker
+                picker="month"
+                value={expenseMonth}
+                onChange={(val) => setExpenseMonth(val)}
+                placeholder="选择月份"
+              />
+            </Space>
+          }
+        >
+          <Table<ExpenseRow>
+            columns={expenseColumns}
+            dataSource={expenseData}
+            pagination={false}
+            size="middle"
+            summary={() => (
+              <Table.Summary fixed>
+                <Table.Summary.Row>
+                  <Table.Summary.Cell index={0}>
+                    <Text strong>合计</Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={1} align="right">
+                    <Text strong>{formatMoney(expenseSummary.totalAmount)}</Text>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={2} />
                 </Table.Summary.Row>
               </Table.Summary>
             )}

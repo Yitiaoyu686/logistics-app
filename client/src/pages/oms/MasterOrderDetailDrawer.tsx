@@ -3,14 +3,14 @@
  * 展示主订单完整信息和子订单列表
  */
 
-import { Drawer, Card, Descriptions, Tag, Table, Space, Button, Typography, Row, Col, Divider, Modal, Form, Input, Select, InputNumber, message, Anchor, Radio, Alert } from 'antd';
+import { Drawer, Card, Descriptions, Tag, Table, Space, Button, Typography, Row, Col, Divider, Modal, Form, Input, Select, InputNumber, message, Anchor, Radio, Alert, Upload, DatePicker } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { CloseOutlined, PrinterOutlined, RollbackOutlined } from '@ant-design/icons';
-import { useState, useRef, useEffect, type CSSProperties } from 'react';
+import { CloseOutlined, PrinterOutlined, RollbackOutlined, DollarOutlined, InboxOutlined } from '@ant-design/icons';
+import { useState, useRef, useEffect, useMemo, type CSSProperties } from 'react';
 import dayjs from 'dayjs';
 import type { MasterOrder, SubOrder } from '../../types/order';
 import { MASTER_ORDER_STATUS_CONFIG, SUB_ORDER_STATUS_CONFIG } from '../../types/order';
-import { systemApi, v2OmsApi } from '../../api';
+import { systemApi, v2OmsApi, clientApi } from '../../api';
 import { mapV2OrderFull } from './orderV2Mapper';
 import MasterOrderEditModal from './MasterOrderEditModal';
 import InvoiceInfoCard from './components/InvoiceInfoCard';
@@ -80,6 +80,96 @@ const personPanelStyle: CSSProperties = {
   padding: '8px 0',
 };
 
+// 应收总计核算（移到主组件前确保可见）
+const SUMMARY_CURRENCY_SYMBOL: Record<string, string> = { USD: '$', CNY: '¥', NGN: '₦', EUR: '€' };
+
+function ReceivableSummaryCard({ order, fees = [] }: { order: MasterOrder; fees?: any[] }) {
+  // 按币种汇总应收
+  const receivableByCurrency = useMemo(() => {
+    const map: Record<string, number> = {};
+    const rows = (Array.isArray(fees) ? fees : []).filter((f) => f.feeDirection !== 'PAYABLE');
+    rows.forEach(f => {
+      const cur = f.currency || 'USD';
+      map[cur] = (map[cur] || 0) + Number(f.amount || f.amountUsd || 0);
+    });
+    if (Object.keys(map).length === 0) map['USD'] = order.totalFees || 0;
+    return map;
+  }, [fees, order.totalFees]);
+
+  // 按币种汇总收款（已通过 / 待审核）
+  const receiptsByCurrency = useMemo(() => {
+    let receipts: any[] = [];
+    try {
+      const store = JSON.parse(localStorage.getItem('finance_payment_receipt_store') || '{}');
+      receipts = store[order.orderNo] || [];
+    } catch { /* ignore */ }
+    // 同 PaymentReceiptList 的 mock 注入逻辑
+    if (receipts.length === 0) {
+      const now = dayjs();
+      receipts = [
+        { amount: 528, currency: 'USD', status: 'APPROVED' },
+        { amount: 50, currency: 'USD', status: 'APPROVED' },
+        { amount: 120, currency: 'CNY', status: 'APPROVED' },
+        { amount: 80, currency: 'CNY', status: 'PENDING' },
+        { amount: 15000, currency: 'NGN', status: 'PENDING' },
+      ];
+    }
+    const approved: Record<string, number> = {};
+    const pending: Record<string, number> = {};
+    receipts.forEach((r: any) => {
+      const cur = r.currency || 'CNY';
+      if (r.status === 'APPROVED') approved[cur] = (approved[cur] || 0) + (r.amount || 0);
+      else if (r.status === 'PENDING') pending[cur] = (pending[cur] || 0) + (r.amount || 0);
+    });
+    return { approved, pending };
+  }, [order.orderNo]);
+
+  // 所有涉及的币种
+  const currencies = useMemo(() => {
+    const set = new Set<string>();
+    Object.keys(receivableByCurrency).forEach(c => set.add(c));
+    Object.keys(receiptsByCurrency.approved).forEach(c => set.add(c));
+    Object.keys(receiptsByCurrency.pending).forEach(c => set.add(c));
+    return Array.from(set).sort((a, b) => (a === 'USD' ? -1 : b === 'USD' ? 1 : a.localeCompare(b)));
+  }, [receivableByCurrency, receiptsByCurrency]);
+
+  return (
+    <div>
+      {currencies.map(cur => {
+        const symbol = SUMMARY_CURRENCY_SYMBOL[cur] || cur;
+        const receivable = receivableByCurrency[cur] || 0;
+        const approved = receiptsByCurrency.approved[cur] || 0;
+        const pending = receiptsByCurrency.pending[cur] || 0;
+        const outstanding = Math.max(0, receivable - approved);
+        const tagColor = cur === 'USD' ? 'blue' : cur === 'CNY' ? 'red' : cur === 'NGN' ? 'green' : 'default';
+        return (
+          <Row gutter={16} key={cur} style={{ marginBottom: currencies.length > 1 ? 12 : 0 }} align="middle">
+            <Col span={2} style={{ textAlign: 'center' }}>
+              <Tag color={tagColor} style={{ fontSize: 12, margin: 0 }}>{cur}</Tag>
+            </Col>
+            <Col span={5} style={{ textAlign: 'center' }}>
+              <Typography.Text type="secondary" style={{ fontSize: 11 }}>应收</Typography.Text>
+              <div style={{ fontSize: 18, fontWeight: 600, color: '#1677ff' }}>{symbol}{receivable.toFixed(2)}</div>
+            </Col>
+            <Col span={6} style={{ textAlign: 'center' }}>
+              <Typography.Text type="secondary" style={{ fontSize: 11 }}>已确认收款</Typography.Text>
+              <div style={{ fontSize: 18, fontWeight: 600, color: '#52c41a' }}>{symbol}{approved.toFixed(2)}</div>
+            </Col>
+            <Col span={5} style={{ textAlign: 'center' }}>
+              <Typography.Text type="secondary" style={{ fontSize: 11 }}>待审核</Typography.Text>
+              <div style={{ fontSize: 18, fontWeight: 600, color: '#fa8c16' }}>{symbol}{pending.toFixed(2)}</div>
+            </Col>
+            <Col span={6} style={{ textAlign: 'center' }}>
+              <Typography.Text type="secondary" style={{ fontSize: 11 }}>待收余额</Typography.Text>
+              <div style={{ fontSize: 18, fontWeight: 600, color: outstanding > 0 ? '#cf1322' : '#52c41a' }}>{symbol}{outstanding.toFixed(2)}</div>
+            </Col>
+          </Row>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function MasterOrderDetailDrawer({ open, order, onClose, onOrderUpdate }: MasterOrderDetailDrawerProps) {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [reminderModalOpen, setReminderModalOpen] = useState(false);
@@ -109,6 +199,7 @@ export default function MasterOrderDetailDrawer({ open, order, onClose, onOrderU
   const [dpnBySubOrder, setDpnBySubOrder] = useState<Record<string, any[]>>({});
   const [deliveryTaskBySubOrder, setDeliveryTaskBySubOrder] = useState<Record<string, any[]>>({});
   const [detailLoading, setDetailLoading] = useState(false);
+  const [clientInfo, setClientInfo] = useState<any>(null);
   const [freightRateModalOpen, setFreightRateModalOpen] = useState(false);
   const [freightRates, setFreightRates] = useState<any[]>([]);
   const [freightRateLoading, setFreightRateLoading] = useState(false);
@@ -125,6 +216,7 @@ export default function MasterOrderDetailDrawer({ open, order, onClose, onOrderU
       setDeliveryTaskBySubOrder({});
       setFreightRateModalOpen(false);
       setFreightRates([]);
+      setClientInfo(null);
       return;
     }
     const fetchDetail = async () => {
@@ -134,11 +226,30 @@ export default function MasterOrderDetailDrawer({ open, order, onClose, onOrderU
         const mapped = mapV2OrderFull(res.data || res);
         setSubOrders(mapped.subOrders || []);
         setExpressPackages(mapped.expressPackages || order.expressPackages || []);
-        setFees(mapped.fees || []);
+        const apiFees = mapped.fees || [];
+        // 注入 mock 费用数据用于演示（如果 API 没返回费用）
+        if (apiFees.length === 0) {
+          const now = dayjs().format('YYYY-MM-DD HH:mm');
+          apiFees.push(
+            { id: 'FEE-MOCK-01', feeType: '海运运费', feeDirection: 'RECEIVABLE', currency: 'USD', unitPrice: 12, quantity: 44, exchangeRate: 1, amount: 528, amountUsd: 528, createdBy: '仓管A', createdAt: now, remark: '计费重44kg' },
+            { id: 'FEE-MOCK-02', feeType: '报关费', feeDirection: 'RECEIVABLE', currency: 'USD', unitPrice: 50, quantity: 1, exchangeRate: 1, amount: 50, amountUsd: 50, createdBy: '仓管A', createdAt: now, remark: '' },
+            { id: 'FEE-MOCK-03', feeType: '包装费', feeDirection: 'RECEIVABLE', currency: 'CNY', unitPrice: 30, quantity: 4, exchangeRate: 7.25, amount: 120, amountUsd: 16.55, createdBy: '仓管A', createdAt: now, remark: '4件木架加固' },
+            { id: 'FEE-MOCK-04', feeType: '保险费', feeDirection: 'RECEIVABLE', currency: 'CNY', unitPrice: 80, quantity: 1, exchangeRate: 7.25, amount: 80, amountUsd: 11.03, createdBy: '仓管A', createdAt: now, remark: '' },
+            { id: 'FEE-MOCK-05', feeType: '到门费', feeDirection: 'RECEIVABLE', currency: 'NGN', unitPrice: 15000, quantity: 1, exchangeRate: 1650, amount: 15000, amountUsd: 9.09, createdBy: '操作B', createdAt: now, remark: '拉各斯市区配送' },
+          );
+        }
+        setFees(apiFees);
         setTrackingBySubOrder(mapped.trackingBySubOrder || {});
         setJobBindingBySubOrder(mapped.jobBindingBySubOrder || {});
         setDpnBySubOrder(mapped.dpnBySubOrder || {});
         setDeliveryTaskBySubOrder(mapped.deliveryTaskBySubOrder || {});
+        // 获取客户企业资质信息
+        if (order.customerId) {
+          try {
+            const clientRes = await clientApi.get(order.customerId) as any;
+            setClientInfo(clientRes.data || null);
+          } catch { setClientInfo(null); }
+        }
       } catch (error: any) {
         // 回退到订单自身数据
         setSubOrders([]);
@@ -280,6 +391,17 @@ export default function MasterOrderDetailDrawer({ open, order, onClose, onOrderU
         open={open}
         onClose={onClose}
         closeIcon={<CloseOutlined />}
+        styles={{ body: { padding: '16px 24px 0', display: 'flex', flexDirection: 'column', overflow: 'hidden' } }}
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '4px 0' }}>
+            <Space>
+              <Button size="small" onClick={handleOpenFreightRates}>运价列表</Button>
+              <Button size="small" onClick={handleExportBill}>导出账单</Button>
+              <RegisterPaymentButton order={order} />
+              <Button type="primary" icon={<PrinterOutlined />} onClick={handlePrint}>打印面单</Button>
+            </Space>
+          </div>
+        }
       >
         {/* 退单状态提示 */}
         {order.status === 'RETURN_APPLIED' && (
@@ -314,9 +436,9 @@ export default function MasterOrderDetailDrawer({ open, order, onClose, onOrderU
         )}
 
         {/* 左侧导航 + 右侧内容布局 */}
-        <div style={{ display: 'flex', gap: 16, height: '100%' }}>
+        <div style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0 }}>
           {/* 左侧导航菜单 */}
-          <div style={{ width: 180, flexShrink: 0 }}>
+          <div style={{ width: 180, flexShrink: 0, position: 'sticky', top: 0, alignSelf: 'flex-start' }}>
             <Anchor
               affix={false}
               targetOffset={80}
@@ -330,12 +452,13 @@ export default function MasterOrderDetailDrawer({ open, order, onClose, onOrderU
                 { key: 'cargo-info', href: '#cargo-info', title: '订单初始信息' },
                 { key: 'sub-orders', href: '#sub-orders', title: '订单实际信息' },
                 { key: 'receivable-fees', href: '#receivable-fees', title: '应收明细' },
+                { key: 'payment-records', href: '#payment-records', title: '已付款记录' },
               ]}
             />
           </div>
 
           {/* 右侧内容区域 */}
-          <div ref={containerRef} style={{ flex: 1, overflow: 'auto', maxHeight: 'calc(100vh - 200px)' }}>
+          <div ref={containerRef} style={{ flex: 1, overflow: 'auto' }}>
             <section id="basic-info" style={sectionStyle}>
               <SectionTitle title="基本信息" />
               <div style={{ opacity: detailLoading ? 0.68 : 1, transition: 'opacity 0.2s ease' }}>
@@ -348,6 +471,11 @@ export default function MasterOrderDetailDrawer({ open, order, onClose, onOrderU
                         {order.transportType === 'SEA' ? '海运' : '空运'}
                       </Tag>
                       <Tag>{order.serviceType || '-'}</Tag>
+                      {(order as any).warehouseEntryNo && (
+                        <Tag color="purple" style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: 13 }}>
+                          入仓号：{(order as any).warehouseEntryNo}
+                        </Tag>
+                      )}
                     </Space>
                   </Col>
                   <Col span={8} style={{ textAlign: 'right' }}>
@@ -363,6 +491,12 @@ export default function MasterOrderDetailDrawer({ open, order, onClose, onOrderU
                       <Descriptions.Item label="支付日期">{formatDateTime(order.paymentTime)}</Descriptions.Item>
                       <Descriptions.Item label="更新日期">{formatDateTime(order.updatedAt)}</Descriptions.Item>
                       <Descriptions.Item label="路线">{order.routeCode || '-'}</Descriptions.Item>
+                      <Descriptions.Item label="交付方式">
+                        {(order as any).deliveryMethod === 'DELIVERY' ? <Tag color="blue">配送（送货上门）</Tag>
+                          : (order as any).deliveryMethod === 'PICKUP' ? <Tag color="green">自提（客户到站取货）</Tag>
+                          : <Tag>未选择</Tag>}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="出口方式">{(order as any).exportMode || '-'}</Descriptions.Item>
                     </Descriptions>
                   </Col>
                 </Row>
@@ -372,19 +506,86 @@ export default function MasterOrderDetailDrawer({ open, order, onClose, onOrderU
             <section id="user-company-info" style={sectionStyle}>
               <SectionTitle title="用户/公司信息" />
               <div style={{ opacity: detailLoading ? 0.68 : 1, transition: 'opacity 0.2s ease' }}>
-                <Descriptions size="small" column={4}>
-                  <Descriptions.Item label="用户">{order.customerName || '-'}</Descriptions.Item>
-                  <Descriptions.Item label="公司" span={2}>{order.customerName ? `${order.customerName} 国际货运代理有限公司` : '-'}</Descriptions.Item>
-                  <Descriptions.Item label="邮箱">{order.consigneeEmail || '-'}</Descriptions.Item>
-                  <Descriptions.Item label="电话">{order.senderPhone || order.consigneePhone || '-'}</Descriptions.Item>
-                </Descriptions>
+                {(() => {
+                  const ei = clientInfo?.enterpriseInfo;
+                  const contactPhone = clientInfo?.contact?.phone || order.senderPhone || '-';
+                  const contactEmail = clientInfo?.contact?.email || order.consigneeEmail || '-';
+                  const contactName = clientInfo?.contact?.name || '-';
+                  if (!ei?.entityType) {
+                    return (
+                      <Descriptions size="small" column={2} bordered>
+                        <Descriptions.Item label="客户名称">{order.customerName || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="客户类型"><Tag>未设置企业资质</Tag></Descriptions.Item>
+                        <Descriptions.Item label="联系人">{contactName}</Descriptions.Item>
+                        <Descriptions.Item label="联系电话">{contactPhone}</Descriptions.Item>
+                        <Descriptions.Item label="邮箱" span={2}>{contactEmail}</Descriptions.Item>
+                      </Descriptions>
+                    );
+                  }
+                  if (ei.entityType === 'COMPANY_CN') {
+                    return (
+                      <Descriptions size="small" column={2} bordered>
+                        <Descriptions.Item label="客户类型"><Tag color="blue">中国企业</Tag></Descriptions.Item>
+                        <Descriptions.Item label="公司全称">{ei.companyName || order.customerName || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="统一社会信用代码" span={2}>{ei.unifiedCreditCode || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="联系人">{contactName}</Descriptions.Item>
+                        <Descriptions.Item label="联系电话">{ei.contactPhone || contactPhone}</Descriptions.Item>
+                        <Descriptions.Item label="邮箱" span={2}>{ei.contactEmail || contactEmail}</Descriptions.Item>
+                        <Descriptions.Item label="开户银行">{ei.bankName || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="银行账号">{ei.bankAccount || '-'}</Descriptions.Item>
+                      </Descriptions>
+                    );
+                  }
+                  if (ei.entityType === 'COMPANY_OVERSEAS') {
+                    return (
+                      <Descriptions size="small" column={2} bordered>
+                        <Descriptions.Item label="客户类型"><Tag color="green">海外企业</Tag></Descriptions.Item>
+                        <Descriptions.Item label="公司名称">{ei.overseasCompanyName || order.customerName || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="注册国家">{ei.overseasCountry || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="税号">{ei.overseasTaxNumber || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="联系人">{ei.overseasDirector || contactName}</Descriptions.Item>
+                        <Descriptions.Item label="联系电话">{contactPhone}</Descriptions.Item>
+                        <Descriptions.Item label="邮箱" span={2}>{contactEmail}</Descriptions.Item>
+                        <Descriptions.Item label="开户银行">{ei.bankName || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="银行账号">{ei.bankAccount || '-'}</Descriptions.Item>
+                      </Descriptions>
+                    );
+                  }
+                  // INDIVIDUAL
+                  return (
+                    <Descriptions size="small" column={2} bordered>
+                      <Descriptions.Item label="客户类型"><Tag color="orange">个人</Tag></Descriptions.Item>
+                      <Descriptions.Item label="姓名">{ei.realName || order.customerName || '-'}</Descriptions.Item>
+                      <Descriptions.Item label="证件类型">{ei.idType === 'ID_CARD' ? '身份证' : ei.idType === 'PASSPORT' ? '护照' : '-'}</Descriptions.Item>
+                      <Descriptions.Item label="证件号码">{ei.idNumber || '-'}</Descriptions.Item>
+                      <Descriptions.Item label="联系电话">{ei.contactPhone || contactPhone}</Descriptions.Item>
+                      <Descriptions.Item label="邮箱">{ei.contactEmail || contactEmail}</Descriptions.Item>
+                      <Descriptions.Item label="开户银行" span={2}>{ei.bankName || '-'}</Descriptions.Item>
+                    </Descriptions>
+                  );
+                })()}
               </div>
             </section>
 
             <section id="invoice-card" style={sectionStyle}>
               <SectionTitle title="发票信息" />
               <div style={{ opacity: detailLoading ? 0.68 : 1, transition: 'opacity 0.2s ease' }}>
-                <InvoiceInfoCard invoiceInfo={order.invoiceInfo} />
+                {(() => {
+                  const ei = clientInfo?.enterpriseInfo;
+                  if (ei?.entityType === 'COMPANY_CN' && (ei.taxpayerId || ei.unifiedCreditCode)) {
+                    return (
+                      <Descriptions size="small" column={2} bordered>
+                        <Descriptions.Item label="开票抬头">{ei.companyName || order.customerName || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="纳税人识别号">{ei.taxpayerId || ei.unifiedCreditCode || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="开票地址">{ei.invoiceAddress || ei.registeredAddress || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="开票电话">{ei.invoicePhone || ei.contactPhone || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="开户银行">{ei.bankName || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="银行账号">{ei.bankAccount || '-'}</Descriptions.Item>
+                      </Descriptions>
+                    );
+                  }
+                  return <InvoiceInfoCard invoiceInfo={order.invoiceInfo} />;
+                })()}
               </div>
             </section>
 
@@ -437,7 +638,7 @@ export default function MasterOrderDetailDrawer({ open, order, onClose, onOrderU
                       <Descriptions.Item label="名字">{order.consignee || '-'}</Descriptions.Item>
                       <Descriptions.Item label="电话">{order.consigneePhone || '-'}</Descriptions.Item>
                       <Descriptions.Item label="详细地址">{order.destAddress || '-'}</Descriptions.Item>
-                      <Descriptions.Item label="区">{order.district || '-'}</Descriptions.Item>
+                      <Descriptions.Item label="州/省">{(order as any).consigneeState || order.district || '-'}</Descriptions.Item>
                       <Descriptions.Item label="城市">{order.destCity || '-'}</Descriptions.Item>
                       <Descriptions.Item label="国家">{order.destCountry || '-'}</Descriptions.Item>
                     </Descriptions>
@@ -449,6 +650,12 @@ export default function MasterOrderDetailDrawer({ open, order, onClose, onOrderU
             <section id="cargo-info" style={sectionStyle}>
               <SectionTitle title="订单初始信息" />
               <ItemsTable order={order} expressPackages={expressPackages} />
+              {(order as any).remark && (
+                <div style={{ padding: '8px 12px', background: '#fafafa', borderRadius: 4, marginTop: 12 }}>
+                  <Text type="secondary">备注：</Text>
+                  <Text>{(order as any).remark}</Text>
+                </div>
+              )}
             </section>
 
             <section id="sub-orders" style={sectionStyle}>
@@ -467,12 +674,15 @@ export default function MasterOrderDetailDrawer({ open, order, onClose, onOrderU
               />
             </section>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-              <Space>
-                <Button icon={<RollbackOutlined />} onClick={onClose}>返回</Button>
-                <Button type="primary" icon={<PrinterOutlined />} onClick={handlePrint}>打印面单</Button>
-              </Space>
-            </div>
+            <section id="payment-records" style={sectionStyle}>
+              <SectionTitle title="已付款记录" />
+              <PaymentReceiptList orderNo={order.orderNo} />
+            </section>
+
+            <section style={{ ...sectionStyle, background: '#fafafa', borderRadius: 6, padding: '12px 16px' }}>
+              <ReceivableSummaryCard order={order} fees={fees} />
+            </section>
+
 
           </div>
           {/* 右侧内容区域结束 */}
@@ -1321,7 +1531,9 @@ function SubOrdersTable({ order, subOrders, expressPackages: pkgsFromState }: { 
   );
 }
 
-// 应收明细表格组件
+// 应收明细表格组件 — 按币种分组展示
+const CURRENCY_SYMBOL: Record<string, string> = { USD: '$', CNY: '¥', NGN: '₦', EUR: '€' };
+
 function FeesTable({
   order,
   subOrders: _subOrders,
@@ -1336,59 +1548,237 @@ function FeesTable({
   onExportBill?: () => void;
 }) {
   const rows = (Array.isArray(initialFees) ? initialFees : []).filter((f) => f.feeDirection !== 'PAYABLE');
-  const columns: ColumnsType<any> = [
-    { title: '序号', key: 'index', width: 60, render: (_: any, __: any, idx: number) => idx + 1 },
-    { title: '项目', dataIndex: 'feeType', key: 'feeType', width: 180, render: (v: string) => v || '-' },
-    { title: '单价USD', dataIndex: 'unitPrice', key: 'unitPrice', width: 110, align: 'right', render: (v: number) => Number(v || 0).toFixed(2) },
-    { title: '数量', dataIndex: 'quantity', key: 'quantity', width: 90, align: 'right', render: (v: number) => Number(v || 0).toFixed(2) },
-    { title: '小计USD', dataIndex: 'amountUsd', key: 'amountUsd', width: 120, align: 'right', render: (v: number) => Number(v || 0).toFixed(2) },
-    { title: '录入账号', dataIndex: 'createdBy', key: 'createdBy', width: 120, render: (v: string) => v || '-' },
-    { title: '录入日期', dataIndex: 'createdAt', key: 'createdAt', width: 170, render: (v: string) => v ? dayjs(v).format('YYYY/MM/DD HH:mm') : '-' },
-    {
-      title: '支付方式',
-      key: 'paymentMethod',
-      width: 110,
-      render: (_: any, __: any, idx: number) => idx === 0 ? formatPaymentMethod(order.paymentMethod) : '-',
-    },
-    {
-      title: '支付状态',
-      key: 'paymentStatus',
-      width: 110,
-      render: (_: any, __: any, idx: number) => idx === 0 ? formatPaymentStatus(order.paymentStatus) : '-',
-    },
-  ];
 
-  const totalUsd = rows.reduce((sum, f) => sum + Number(f.amountUsd || 0), 0);
-  const usdRateMap: Record<string, number> = { USD: 1, CNY: 7.2, NGN: 535 };
-  const localCurrency = order.currency || 'USD';
-  const usdToLocalRate = usdRateMap[localCurrency] || 1;
-  const localTotal = totalUsd * usdToLocalRate;
+  // 按币种分组
+  const grouped = useMemo(() => {
+    const map: Record<string, any[]> = {};
+    rows.forEach(f => {
+      const cur = f.currency || 'USD';
+      if (!map[cur]) map[cur] = [];
+      map[cur].push(f);
+    });
+    // 确保至少有一组（即使为空也展示 USD 组）
+    if (Object.keys(map).length === 0) map['USD'] = [];
+    return map;
+  }, [rows]);
+
+  const columns: ColumnsType<any> = [
+    { title: '费用类型', dataIndex: 'feeType', key: 'feeType', width: 160, render: (v: string) => v || '-' },
+    { title: '单价', dataIndex: 'unitPrice', key: 'unitPrice', width: 100, align: 'right', render: (v: number) => Number(v || 0).toFixed(2) },
+    { title: '数量', dataIndex: 'quantity', key: 'quantity', width: 80, align: 'right', render: (v: number) => Number(v || 0).toFixed(2) },
+    { title: '汇率', dataIndex: 'exchangeRate', key: 'exchangeRate', width: 80, render: (v: number) => v ? Number(v).toFixed(2) : '-' },
+    { title: '金额', key: 'amount', width: 110, align: 'right', render: (_: any, f: any) => <Text strong>{Number(f.amountUsd || f.amount || 0).toFixed(2)}</Text> },
+    { title: '录入人', dataIndex: 'createdBy', key: 'createdBy', width: 100, render: (v: string) => v || '-' },
+    { title: '日期', dataIndex: 'createdAt', key: 'createdAt', width: 130, render: (v: string) => v ? dayjs(v).format('YYYY-MM-DD HH:mm') : '-' },
+    { title: '备注', dataIndex: 'remark', key: 'remark', ellipsis: true, render: (v: string) => v || '-' },
+  ];
 
   return (
     <>
-      <Table
-        columns={columns}
-        dataSource={rows}
-        rowKey="id"
-        pagination={false}
-        size="small"
-        locale={{ emptyText: '暂无应收明细' }}
-      />
-      <div style={{ marginTop: 10, padding: '10px 12px', background: '#fafafa', borderRadius: 4 }}>
-        <Space size={24} wrap>
-          <Text strong>合计USD: {totalUsd.toFixed(2)}</Text>
-          <Text>汇率: USD1.00={localCurrency}{usdToLocalRate.toFixed(2)}</Text>
-          <Text strong>折合{localCurrency}: {localTotal.toFixed(2)}</Text>
-        </Space>
-      </div>
-      <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
-        <Space>
-          <Button size="small" onClick={onOpenFreightRates}>运价列表</Button>
-          <Button type="primary" size="small" onClick={onExportBill}>导出账单</Button>
-        </Space>
-      </div>
+      {Object.entries(grouped).map(([currency, items]) => {
+        const symbol = CURRENCY_SYMBOL[currency] || currency;
+        const subtotal = items.reduce((sum, f) => sum + Number(f.amountUsd || f.amount || 0), 0);
+        return (
+          <div key={currency} style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <Tag color={currency === 'USD' ? 'blue' : currency === 'CNY' ? 'red' : currency === 'NGN' ? 'green' : 'default'} style={{ fontSize: 13, padding: '2px 10px' }}>
+                {symbol} {currency}
+              </Tag>
+              <Text strong style={{ color: '#1677ff' }}>小计：{symbol} {subtotal.toFixed(2)}</Text>
+            </div>
+            <Table
+              columns={columns}
+              dataSource={items}
+              rowKey="id"
+              pagination={false}
+              size="small"
+              locale={{ emptyText: `暂无 ${currency} 费用` }}
+            />
+          </div>
+        );
+      })}
     </>
   );
 }
 
-// 旧的物流演示组件已移除，详情页统一使用文档结构。
+// 登记收款按钮+弹窗组件
+function RegisterPaymentButton({ order }: { order: MasterOrder }) {
+  const [visible, setVisible] = useState(false);
+  const [form] = Form.useForm();
+  const outstanding = (order.totalFees || 0) - (order.paidAmount || 0);
+  const isPaid = order.paymentStatus === 'PAID';
+
+  const handleSubmit = async () => {
+    try {
+      const values = await form.validateFields();
+      const voucherFiles = (values.vouchers || []).map((f: any) => f.name || f.originFileObj?.name || '凭证').filter(Boolean);
+      const receipt = {
+        id: `RCV-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        orderNo: order.orderNo,
+        amount: values.amount,
+        paymentChannel: values.paymentChannel,
+        receivedAt: values.receivedAt ? values.receivedAt.toISOString() : new Date().toISOString(),
+        voucherNames: voucherFiles,
+        operator: '当前用户',
+        remark: values.remark || '',
+        relatedFeeItem: values.relatedFeeItem || undefined,
+        status: 'PENDING' as const,
+      };
+      const store = JSON.parse(localStorage.getItem('finance_payment_receipt_store') || '{}');
+      const list = store[order.orderNo] || [];
+      list.push(receipt);
+      store[order.orderNo] = list;
+      localStorage.setItem('finance_payment_receipt_store', JSON.stringify(store));
+      message.success('收款登记已提交，等待财务审核');
+      setVisible(false);
+      form.resetFields();
+    } catch { /* validation error */ }
+  };
+
+  return (
+    <>
+      <Button type="primary" size="small" icon={<DollarOutlined />} onClick={() => {
+          form.setFieldsValue({ amount: Math.max(0, Number(outstanding.toFixed(2))), paymentChannel: 'BANK' });
+          setVisible(true);
+        }}>
+          登记收款
+        </Button>
+      <Modal
+        title="登记收款"
+        open={visible}
+        onCancel={() => setVisible(false)}
+        okText="提交审核"
+        onOk={handleSubmit}
+        width={600}
+        destroyOnClose
+      >
+        <div style={{ marginBottom: 16, padding: 12, background: '#f6ffed', borderRadius: 4, border: '1px solid #b7eb8f' }}>
+          <Space direction="vertical" size={4} style={{ width: '100%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}><Typography.Text strong>运单号:</Typography.Text><Typography.Text>{order.orderNo}</Typography.Text></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}><Typography.Text strong>客户:</Typography.Text><Typography.Text>{order.customerName || '-'}</Typography.Text></div>
+            <Divider style={{ margin: '8px 0' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}><Typography.Text type="secondary">订单总额:</Typography.Text><Typography.Text>¥{(order.totalFees || 0).toFixed(2)}</Typography.Text></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}><Typography.Text type="secondary">已支付:</Typography.Text><Typography.Text type="success">¥{(order.paidAmount || 0).toFixed(2)}</Typography.Text></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}><Typography.Text strong style={{ color: '#cf1322' }}>待收款:</Typography.Text><Typography.Text strong style={{ color: '#cf1322', fontSize: 16 }}>¥{outstanding.toFixed(2)}</Typography.Text></div>
+          </Space>
+        </div>
+        <Form form={form} layout="vertical">
+          <Form.Item name="relatedFeeItem" label="关联应收项目">
+            <Select placeholder="选择关联的应收项目（可选，默认整单）" allowClear>
+              <Select.Option value="运费">运费</Select.Option>
+              <Select.Option value="配送费">配送费</Select.Option>
+              <Select.Option value="仓储费">仓储费</Select.Option>
+              <Select.Option value="清关费">清关费</Select.Option>
+              <Select.Option value="包装费">包装费</Select.Option>
+              <Select.Option value="其他费用">其他费用</Select.Option>
+            </Select>
+          </Form.Item>
+          <Form.Item name="amount" label="收款金额" rules={[{ required: true, message: '请输入收款金额' }]}>
+            <InputNumber style={{ width: '100%' }} min={0.01} max={outstanding + 0.01} precision={2} prefix="¥" />
+          </Form.Item>
+          <Form.Item name="paymentChannel" label="收款方式" rules={[{ required: true }]}>
+            <Select>
+              <Select.Option value="BANK">银行转账</Select.Option>
+              <Select.Option value="WECHAT">微信支付</Select.Option>
+              <Select.Option value="ALIPAY">支付宝</Select.Option>
+              <Select.Option value="CASH">现金</Select.Option>
+              <Select.Option value="OTHER">其他</Select.Option>
+            </Select>
+          </Form.Item>
+          <Form.Item name="receivedAt" label="收款时间" rules={[{ required: true }]}>
+            <DatePicker showTime style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="vouchers" label="上传收款凭证" valuePropName="fileList" getValueFromEvent={(e: any) => Array.isArray(e) ? e : e?.fileList || []}
+            rules={[{ validator: (_, v) => v?.length > 0 ? Promise.resolve() : Promise.reject('请上传至少1张凭证') }]}>
+            <Upload.Dragger beforeUpload={() => false} multiple maxCount={5} accept="image/*" listType="picture">
+              <p className="ant-upload-drag-icon"><InboxOutlined /></p>
+              <p className="ant-upload-text">点击或拖拽上传收款凭证</p>
+            </Upload.Dragger>
+          </Form.Item>
+          <Form.Item name="remark" label="备注">
+            <Input.TextArea rows={2} placeholder="收款备注（选填）" />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </>
+  );
+}
+
+// 收款记录展示组件
+// 已付款记录 — 按币种分组展示
+function PaymentReceiptList({ orderNo }: { orderNo: string }) {
+  const receipts = useMemo(() => {
+    try {
+      const store = JSON.parse(localStorage.getItem('finance_payment_receipt_store') || '{}');
+      const list = (store[orderNo] || []) as Array<{
+        id: string; amount: number; currency?: string; paymentChannel: string; receivedAt: string;
+        voucherNames: string[]; operator: string; remark?: string; relatedFeeItem?: string;
+        status: 'PENDING' | 'APPROVED' | 'REJECTED'; reviewedBy?: string; reviewedAt?: string; rejectReason?: string;
+      }>;
+      // 注入 mock 收款记录用于演示
+      if (list.length === 0) {
+        const now = dayjs();
+        list.push(
+          { id: 'RCV-MOCK-01', amount: 528, currency: 'USD', paymentChannel: 'BANK', receivedAt: now.subtract(2, 'day').toISOString(), voucherNames: ['bank_slip_01.jpg'], operator: '财务C', relatedFeeItem: '海运运费', status: 'APPROVED', reviewedBy: '主管D', reviewedAt: now.subtract(1, 'day').toISOString() },
+          { id: 'RCV-MOCK-02', amount: 50, currency: 'USD', paymentChannel: 'BANK', receivedAt: now.subtract(2, 'day').toISOString(), voucherNames: ['bank_slip_01.jpg'], operator: '财务C', relatedFeeItem: '报关费', status: 'APPROVED', reviewedBy: '主管D', reviewedAt: now.subtract(1, 'day').toISOString() },
+          { id: 'RCV-MOCK-03', amount: 120, currency: 'CNY', paymentChannel: 'WECHAT', receivedAt: now.subtract(1, 'day').toISOString(), voucherNames: ['wechat_pay.png'], operator: '财务C', relatedFeeItem: '包装费', status: 'APPROVED', reviewedBy: '主管D' },
+          { id: 'RCV-MOCK-04', amount: 80, currency: 'CNY', paymentChannel: 'ALIPAY', receivedAt: now.toISOString(), voucherNames: [], operator: '财务C', relatedFeeItem: '保险费', status: 'PENDING' },
+          { id: 'RCV-MOCK-05', amount: 15000, currency: 'NGN', paymentChannel: 'CASH', receivedAt: now.toISOString(), voucherNames: ['cash_receipt.jpg'], operator: '操作B', relatedFeeItem: '到门费', status: 'PENDING' },
+        );
+      }
+      return list;
+    } catch { return []; }
+  }, [orderNo]);
+
+  const channelLabel: Record<string, string> = { WECHAT: '微信', ALIPAY: '支付宝', BANK: '银行转账', CASH: '现金', OTHER: '其他' };
+  const statusConfig: Record<string, { color: string; label: string }> = {
+    PENDING: { color: 'orange', label: '待审核' },
+    APPROVED: { color: 'green', label: '已通过' },
+    REJECTED: { color: 'red', label: '已驳回' },
+  };
+
+  const grouped = useMemo(() => {
+    const map: Record<string, typeof receipts> = {};
+    receipts.forEach(r => {
+      const cur = r.currency || 'CNY';
+      if (!map[cur]) map[cur] = [];
+      map[cur].push(r);
+    });
+    return map;
+  }, [receipts]);
+
+  const columns: ColumnsType<any> = [
+    { title: '关联项目', dataIndex: 'relatedFeeItem', key: 'relatedFeeItem', width: 120, render: (v: string) => v || '整单' },
+    { title: '金额', dataIndex: 'amount', key: 'amount', width: 110, align: 'right', render: (v: number, r: any) => <Typography.Text strong style={{ color: '#52c41a' }}>{CURRENCY_SYMBOL[r.currency || 'CNY'] || ''}{v.toFixed(2)}</Typography.Text> },
+    { title: '收款方式', dataIndex: 'paymentChannel', key: 'paymentChannel', width: 90, render: (v: string) => channelLabel[v] || v },
+    { title: '收款时间', dataIndex: 'receivedAt', key: 'receivedAt', width: 140, render: (v: string) => v ? dayjs(v).format('YYYY-MM-DD HH:mm') : '-' },
+    { title: '凭证', dataIndex: 'voucherNames', key: 'voucherNames', width: 70, render: (v: string[]) => v?.length ? <Tag>{v.length}张</Tag> : '-' },
+    { title: '登记人', dataIndex: 'operator', key: 'operator', width: 70 },
+    { title: '状态', dataIndex: 'status', key: 'status', width: 80, render: (v: string) => <Tag color={statusConfig[v]?.color}>{statusConfig[v]?.label}</Tag> },
+    { title: '备注', dataIndex: 'remark', key: 'remark', ellipsis: true, render: (v: string, r: any) => r.rejectReason ? <Typography.Text type="danger">驳回: {r.rejectReason}</Typography.Text> : (v || '-') },
+  ];
+
+  if (receipts.length === 0) {
+    return <Table rowKey="id" size="small" dataSource={[]} pagination={false} locale={{ emptyText: '暂无收款记录' }} columns={columns} />;
+  }
+
+  return (
+    <>
+      {Object.entries(grouped).map(([currency, items]) => {
+        const symbol = CURRENCY_SYMBOL[currency] || currency;
+        const subtotal = items.reduce((sum, r) => sum + (r.amount || 0), 0);
+        return (
+          <div key={currency} style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <Tag color={currency === 'USD' ? 'blue' : currency === 'CNY' ? 'red' : currency === 'NGN' ? 'green' : 'default'} style={{ fontSize: 13, padding: '2px 10px' }}>
+                {symbol} {currency}
+              </Tag>
+              <Text strong style={{ color: '#52c41a' }}>小计：{symbol} {subtotal.toFixed(2)}</Text>
+            </div>
+            <Table rowKey="id" size="small" dataSource={items} pagination={false} columns={columns} />
+          </div>
+        );
+      })}
+    </>
+  );
+}

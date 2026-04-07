@@ -2,53 +2,18 @@ import React, { useMemo, useState } from 'react';
 import { Card, Table, Button, Input, Select, Space, Tag, Row, Col, message, theme } from 'antd';
 import { SearchOutlined, ReloadOutlined, BellOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-
-interface PickupRecord {
-  id: string;
-  pickupNo: string;
-  trackingNo: string;
-  recipientName: string;
-  recipientPhone: string;
-  pickupStation: string;
-  pickupCode: string;
-  paymentMethod: 'PREPAID' | 'COD';
-  paymentStatus: 'PAID' | 'UNPAID';
-  paymentAmount: number;
-  currency: string;
-  notifyStatus: 'PENDING' | 'NOTIFIED' | 'PICKED_UP';
-  notifyTime: string | null;
-  pickedUpTime: string | null;
-  updatedAt: string;
-}
-
-const generatePickupData = (): PickupRecord[] => {
-  const names = ['Karena', '箴媄子', 'Tom', 'Smile', 'Kwame', 'Ada', 'Chidi', 'Emeka'];
-  return Array.from({ length: 16 }, (_, i) => {
-    const notified = i % 3 !== 0;
-    const picked = i % 5 === 0;
-    return {
-      id: `PU-${String(i + 1).padStart(3, '0')}`,
-      pickupNo: `PUP-${dayjs().format('YYYYMMDD')}-${String(i + 1).padStart(3, '0')}`,
-      trackingNo: `19102${String(1000 + i).padStart(4, '0')} ${String(i % 9).padStart(2, '0')}`,
-      recipientName: names[i % names.length],
-      recipientPhone: '+234 9038321727',
-      pickupStation: i % 2 === 0 ? 'IKEJ STA' : 'ABUJ STA',
-      pickupCode: `PK${String(6000 + i)}`,
-      paymentMethod: i % 2 === 0 ? 'COD' : 'PREPAID',
-      paymentStatus: i % 2 === 0 ? 'UNPAID' : 'PAID',
-      paymentAmount: i % 2 === 0 ? 12000 + i * 500 : 0,
-      currency: 'USD',
-      notifyStatus: picked ? 'PICKED_UP' : notified ? 'NOTIFIED' : 'PENDING',
-      notifyTime: notified ? dayjs().subtract(i, 'day').format('YYYY/MM/DD HH:mm:ss') : null,
-      pickedUpTime: picked ? dayjs().subtract(i - 1, 'day').format('YYYY/MM/DD HH:mm:ss') : null,
-      updatedAt: dayjs().subtract(i, 'day').format('YYYY-MM-DD HH:mm:ss'),
-    };
-  });
-};
+import { listPickupRecords, markPickupCompleted, markPickupNotified, type PickupRecord } from './podUiMockStore';
+import {
+  ListPageToolbar,
+  ListPageToolbarActions,
+  ListPageToolbarCard,
+  ListPageToolbarField,
+  ListPageToolbarFilters,
+} from '../../../components/ListPageToolbar';
 
 export const PickupList: React.FC<{ warehouseId?: string; businessMode?: string }> = () => {
   const { token } = theme.useToken();
-  const [data, setData] = useState<PickupRecord[]>(generatePickupData);
+  const [data, setData] = useState<PickupRecord[]>(() => listPickupRecords());
   const [filterStation, setFilterStation] = useState<string>('ALL');
   const [filterPaymentStatus, setFilterPaymentStatus] = useState<string>('ALL');
   const [filterNotifyStatus, setFilterNotifyStatus] = useState<string>('ALL');
@@ -90,11 +55,7 @@ export const PickupList: React.FC<{ warehouseId?: string; businessMode?: string 
       return;
     }
     setData((prev) =>
-      prev.map((item) =>
-        item.id === record.id
-          ? { ...item, notifyStatus: 'NOTIFIED', notifyTime: dayjs().format('YYYY/MM/DD HH:mm:ss') }
-          : item,
-      ),
+      markPickupNotified(record.id).map((item) => ({ ...item })),
     );
     message.success(`已发送自提通知（${record.pickupCode}）`);
   };
@@ -105,11 +66,7 @@ export const PickupList: React.FC<{ warehouseId?: string; businessMode?: string 
       return;
     }
     setData((prev) =>
-      prev.map((item) =>
-        item.id === record.id
-          ? { ...item, notifyStatus: 'PICKED_UP', pickedUpTime: dayjs().format('YYYY/MM/DD HH:mm:ss') }
-          : item,
-      ),
+      markPickupCompleted(record.id).map((item) => ({ ...item })),
     );
     message.success(`已完成自提核销：${record.trackingNo}`);
   };
@@ -122,33 +79,34 @@ export const PickupList: React.FC<{ warehouseId?: string; businessMode?: string 
         <Tag color="green">已核销 {pickedCount}</Tag>
       </Space>
 
-      <Card size="small" bordered={false} style={{ marginBottom: 10, background: '#fafafa' }}>
-        <Row gutter={[8, 8]} align="middle">
-          <Col span={4}>
-            <Select value={filterStation} onChange={setFilterStation} style={{ width: '100%' }}>
-              <Select.Option value="ALL">全部站点</Select.Option>
-              <Select.Option value="IKEJ STA">IKEJ STA</Select.Option>
-              <Select.Option value="ABUJ STA">ABUJ STA</Select.Option>
-            </Select>
-          </Col>
-          <Col flex="auto">
-            <Input
-              placeholder="自提单号/运单号/收件人/电话"
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              prefix={<SearchOutlined />}
-              allowClear
-            />
-          </Col>
-          <Col>
-            <Space>
-              <Button icon={<ReloadOutlined />} onClick={handleReset}>重置</Button>
-              <Button type="link" onClick={() => setShowAdvancedFilters(v => !v)}>
-                {showAdvancedFilters ? '收起筛选' : '高级筛选'}
-              </Button>
-            </Space>
-          </Col>
-        </Row>
+      <ListPageToolbarCard style={{ marginBottom: 10 }}>
+        <ListPageToolbar>
+          <ListPageToolbarFilters>
+            <ListPageToolbarField minWidth={150}>
+              <Select value={filterStation} onChange={setFilterStation} style={{ width: '100%' }}>
+                <Select.Option value="ALL">全部站点</Select.Option>
+                <Select.Option value="IKEJ STA">IKEJ STA</Select.Option>
+                <Select.Option value="ABUJ STA">ABUJ STA</Select.Option>
+              </Select>
+            </ListPageToolbarField>
+            <ListPageToolbarField flex="1 1 320px" minWidth={260}>
+              <Input
+                placeholder="自提单号/运单号/收件人/电话"
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                prefix={<SearchOutlined />}
+                allowClear
+              />
+            </ListPageToolbarField>
+          </ListPageToolbarFilters>
+          <ListPageToolbarActions>
+            <Button type="primary" icon={<SearchOutlined />} onClick={() => setKeyword((value) => value.trim())}>查询</Button>
+            <Button icon={<ReloadOutlined />} onClick={handleReset}>重置</Button>
+            <Button type="link" onClick={() => setShowAdvancedFilters(v => !v)}>
+              {showAdvancedFilters ? '收起筛选' : '高级筛选'}
+            </Button>
+          </ListPageToolbarActions>
+        </ListPageToolbar>
         {showAdvancedFilters && (
           <Row gutter={[8, 8]} style={{ marginTop: 8 }}>
             <Col span={4}>
@@ -168,16 +126,38 @@ export const PickupList: React.FC<{ warehouseId?: string; businessMode?: string 
             </Col>
           </Row>
         )}
-      </Card>
+      </ListPageToolbarCard>
       <Table
         rowKey="id"
         dataSource={filteredData}
         columns={[
-          { title: '自提单号', dataIndex: 'pickupNo', key: 'pickupNo', width: 180 },
+          {
+            title: '自提单号',
+            dataIndex: 'pickupNo',
+            key: 'pickupNo',
+            width: 220,
+            render: (_: unknown, record: PickupRecord) => (
+              <Space size={6} wrap>
+                <span>{record.pickupNo}</span>
+                {record.sourceType ? <Tag color={record.sourceType === 'CONVERTED' ? 'blue' : 'default'}>{record.sourceType === 'CONVERTED' ? '转自配送' : 'Mock'}</Tag> : null}
+              </Space>
+            ),
+          },
           { title: '运单号', dataIndex: 'trackingNo', key: 'trackingNo', width: 160 },
           { title: '收件人', dataIndex: 'recipientName', key: 'recipientName', width: 110 },
           { title: '电话', dataIndex: 'recipientPhone', key: 'recipientPhone', width: 150 },
-          { title: '自提站点', dataIndex: 'pickupStation', key: 'pickupStation', width: 110 },
+          {
+            title: '自提站点',
+            dataIndex: 'pickupStation',
+            key: 'pickupStation',
+            width: 180,
+            render: (_: unknown, record: PickupRecord) => (
+              <Space direction="vertical" size={2}>
+                <span>{record.pickupStation}</span>
+                {record.pickupRemark ? <span style={{ fontSize: 12, color: token.colorTextSecondary }}>{record.pickupRemark}</span> : null}
+              </Space>
+            ),
+          },
           { title: '自提码', dataIndex: 'pickupCode', key: 'pickupCode', width: 100, render: (code: string) => <Tag color="purple">{code}</Tag> },
           {
             title: '支付',
@@ -239,7 +219,7 @@ export const PickupList: React.FC<{ warehouseId?: string; businessMode?: string 
           },
           { title: '更新时间', dataIndex: 'updatedAt', key: 'updatedAt', width: 120, render: (text: string) => dayjs(text).format('YYYY-MM-DD') },
         ]}
-        scroll={{ x: 1700, y: showAdvancedFilters ? 'calc(100vh - 510px)' : 'calc(100vh - 460px)' }}
+        scroll={{ x: 1850, y: showAdvancedFilters ? 'calc(100vh - 510px)' : 'calc(100vh - 460px)' }}
         pagination={{
           pageSize: 20,
           showTotal: (total) => `共 ${total} 条记录`,

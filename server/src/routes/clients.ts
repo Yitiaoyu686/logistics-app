@@ -13,7 +13,7 @@ const CLIENT_SHORT_CODE_REGEX = /^(?=.*[A-Z])(?=.*\d)[A-Z0-9]{4}$/;
 const CLIENT_STATUSES = new Set(['ACTIVE', 'DORMANT', 'FROZEN']);
 const CLIENT_POOLS = new Set(['PRIVATE', 'PUBLIC']);
 const EDITABLE_FIELDS = new Set([
-  'shortCode', 'name', 'country', 'address', 'industry', 'contact', 'logisticsInfo',
+  'shortCode', 'name', 'country', 'address', 'industry', 'contact', 'logisticsInfo', 'enterpriseInfo',
   'status', 'source', 'remark', 'companyType', 'creditLevel'
 ]);
 
@@ -42,7 +42,8 @@ function parseClientRow(row: any) {
   return {
     ...row,
     contact: parseJsonSafely(row.contact, {}),
-    logisticsInfo: parseJsonSafely(row.logisticsInfo, null)
+    logisticsInfo: parseJsonSafely(row.logisticsInfo, null),
+    enterpriseInfo: parseJsonSafely(row.enterpriseInfo, null)
   };
 }
 
@@ -80,6 +81,20 @@ function parseLogisticsInfo(logisticsInfo: any) {
     return { shouldUpdate: true, value: null as string | null };
   }
   const parsed = parseJsonSafely(logisticsInfo, null);
+  if (!parsed || typeof parsed !== 'object') {
+    return { shouldUpdate: true, value: null as string | null };
+  }
+  return { shouldUpdate: true, value: JSON.stringify(parsed) };
+}
+
+function parseEnterpriseInfo(enterpriseInfo: any) {
+  if (enterpriseInfo === undefined) {
+    return { shouldUpdate: false };
+  }
+  if (enterpriseInfo === null || enterpriseInfo === '') {
+    return { shouldUpdate: true, value: null as string | null };
+  }
+  const parsed = parseJsonSafely(enterpriseInfo, null);
   if (!parsed || typeof parsed !== 'object') {
     return { shouldUpdate: true, value: null as string | null };
   }
@@ -304,6 +319,7 @@ router.post('/', (req, res) => {
     industry,
     contact,
     logisticsInfo,
+    enterpriseInfo,
     status,
     poolType,
     salesId,
@@ -374,15 +390,17 @@ router.post('/', (req, res) => {
 
   const logisticsParsed = parseLogisticsInfo(logisticsInfo);
   const logisticsValue = logisticsParsed.shouldUpdate ? logisticsParsed.value : null;
+  const enterpriseParsed = parseEnterpriseInfo(enterpriseInfo);
+  const enterpriseValue = enterpriseParsed.shouldUpdate ? enterpriseParsed.value : null;
   const enterPoolTime = actualPoolType === 'PUBLIC' ? now : null;
 
   try {
     db.prepare(`
       INSERT INTO clients (
-        id, shortCode, name, country, address, industry, contact, logisticsInfo,
+        id, shortCode, name, country, address, industry, contact, logisticsInfo, enterpriseInfo,
         status, poolType, salesId, source, remark, companyType, creditLevel, enterPoolTime, createdAt
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       actualShortCode,
@@ -392,6 +410,7 @@ router.post('/', (req, res) => {
       normalizeNullableText(industry),
       contactParsed.value,
       logisticsValue,
+      enterpriseValue,
       normalizedStatus || 'ACTIVE',
       actualPoolType,
       salesId || null,
@@ -480,6 +499,15 @@ router.put('/:id', (req, res) => {
       const parsed = parseLogisticsInfo(value);
       if (parsed.shouldUpdate) {
         sets.push('logisticsInfo = ?');
+        params.push(parsed.value ?? null);
+      }
+      continue;
+    }
+
+    if (key === 'enterpriseInfo') {
+      const parsed = parseEnterpriseInfo(value);
+      if (parsed.shouldUpdate) {
+        sets.push('enterpriseInfo = ?');
         params.push(parsed.value ?? null);
       }
       continue;

@@ -20,6 +20,7 @@ import {
   DeleteOutlined,
 } from '@ant-design/icons';
 import FeeEntryDrawer, { type FeeItem } from '../../../components/warehouse/FeeEntryDrawer';
+import { systemApi } from '../../../api';
 
 const { Text } = Typography;
 
@@ -27,6 +28,42 @@ const GOODS_CATEGORIES = [
   '日用百货', '机械/五金/仪表', '食品', '化妆品', '保健品',
   '药品', '电子产品', '服装/纺织品', '文件', '其他',
 ];
+
+// 费用类型选项
+const FEE_TYPE_OPTIONS = [
+  { value: 'FREIGHT', label: '运费' },
+  { value: 'SURCHARGE_DRUG', label: '药品附加运费' },
+  { value: 'CUSTOMS', label: '报关费' },
+  { value: 'DOOR_DELIVERY', label: '到门费用' },
+  { value: 'PACKAGING', label: '包装费' },
+  { value: 'WAREHOUSE', label: '仓储费' },
+  { value: 'INSURANCE', label: '保险费' },
+  { value: 'DISCOUNT', label: '折扣' },
+  { value: 'OTHER', label: '其他' },
+];
+const FEE_TYPE_LABEL: Record<string, string> = Object.fromEntries(FEE_TYPE_OPTIONS.map(o => [o.value, o.label]));
+
+const CURRENCY_OPTIONS = [
+  { value: 'CNY', label: '¥ CNY' },
+  { value: 'USD', label: '$ USD' },
+  { value: 'NGN', label: '₦ NGN' },
+];
+
+// 运费自动计算：根据重量/体积 + 运输方式
+const VOLUME_DIVISOR_SEA = 6000; // 海运体积系数
+const VOLUME_DIVISOR_AIR = 5000; // 空运体积系数
+
+interface InboundFeeItem {
+  id: string;
+  feeType: string;
+  currency: string;
+  unitPrice: number;
+  quantity: number;
+  exchangeRate: number;
+  amount: number;
+  remark: string;
+  isAutoFreight?: boolean;
+}
 
 // 尺寸行
 interface DimensionRow {
@@ -114,7 +151,8 @@ const InboundDetailDrawer: React.FC<InboundDetailDrawerProps> = ({
   ]);
   const [feeDrawerVisible, setFeeDrawerVisible] = useState(false);
   const [photos, setPhotos] = useState<string[]>([]);
-  const [feeItems, setFeeItems] = useState<{ project: string; unitPrice: number; quantity: number }[]>([]);
+  const [feeItems, setFeeItems] = useState<InboundFeeItem[]>([]);
+  const [exchangeRateMap, setExchangeRateMap] = useState<Record<string, number>>({ USD: 1, CNY: 1, NGN: 1 });
 
   const siblings: SiblingSubOrder[] = siblingSubOrders && siblingSubOrders.length > 0
     ? siblingSubOrders
@@ -137,8 +175,56 @@ const InboundDetailDrawer: React.FC<InboundDetailDrawerProps> = ({
       setDimensions([{ weightKg: 0, lengthCm: 0, widthCm: 0, heightCm: 0, pieces: 1 }]);
       setPhotos([]);
       setFeeItems([]);
+      // 加载汇率
+      (async () => {
+        try {
+          const res: any = await systemApi.exchangeRates();
+          const rates: Record<string, number> = { USD: 1 };
+          (Array.isArray(res?.data) ? res.data : []).forEach((r: any) => {
+            if (r.fromCurrency && r.rate) rates[r.fromCurrency] = Number(r.rate);
+            if (r.currency && r.rate) rates[r.currency] = Number(r.rate);
+          });
+          if (!rates.CNY) rates.CNY = 7.25;
+          if (!rates.NGN) rates.NGN = 1650;
+          setExchangeRateMap(rates);
+        } catch {
+          setExchangeRateMap({ USD: 1, CNY: 7.25, NGN: 1650 });
+        }
+      })();
     }
   }, [visible, initCategory, initGoodsName, initRemark]);
+
+  // 自动计算运费 — 根据尺寸变化实时更新
+  useEffect(() => {
+    const dim = dimensions[0];
+    if (!dim) return;
+    const actualWeight = dim.weightKg || 0;
+    const volumeM3 = (dim.lengthCm * dim.widthCm * dim.heightCm) / 1000000;
+    const divisor = serviceType === 'EXPRESS' ? VOLUME_DIVISOR_AIR : VOLUME_DIVISOR_SEA;
+    const volumeWeight = (dim.lengthCm * dim.widthCm * dim.heightCm) / divisor;
+    const chargeWeight = Math.max(actualWeight, volumeWeight);
+    // Mock 单价：海运 12 USD/kg，空运 55 USD/kg
+    const unitRate = serviceType === 'EXPRESS' ? 55 : 12;
+    const minCharge = serviceType === 'EXPRESS' ? 150 : 50;
+    const freightAmount = Math.max(chargeWeight * unitRate, minCharge);
+
+    setFeeItems(prev => {
+      const manualItems = prev.filter(f => !f.isAutoFreight);
+      if (chargeWeight <= 0) return manualItems;
+      const autoRow: InboundFeeItem = {
+        id: 'AUTO_FREIGHT',
+        feeType: 'FREIGHT',
+        currency: 'USD',
+        unitPrice: unitRate,
+        quantity: Number(chargeWeight.toFixed(2)),
+        exchangeRate: 1,
+        amount: Number(freightAmount.toFixed(2)),
+        remark: `实重${actualWeight.toFixed(2)}kg｜体积重${volumeWeight.toFixed(2)}kg｜计费重${chargeWeight.toFixed(2)}kg`,
+        isAutoFreight: true,
+      };
+      return [autoRow, ...manualItems];
+    });
+  }, [dimensions, serviceType]);
 
   const handleClose = () => {
     setFeeDrawerVisible(false);
@@ -411,105 +497,165 @@ const InboundDetailDrawer: React.FC<InboundDetailDrawerProps> = ({
         </div>
         </div>{/* 入库录入区结束 */}
 
-        {/* 录入费用 — 内嵌表格 */}
+        {/* 费用明细 — 第一行自动计算运费（只读），其余手动添加 */}
         <div style={{ marginTop: 16 }}>
-          <Text strong style={{ display: 'block', marginBottom: 8, fontSize: 14 }}>录入费用</Text>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <Text strong style={{ fontSize: 14 }}>费用明细</Text>
+            <Button
+              type="primary"
+              size="small"
+              icon={<PlusOutlined />}
+              onClick={() => setFeeItems(prev => [...prev, {
+                id: `FEE-${Date.now()}`,
+                feeType: '',
+                currency: 'USD',
+                unitPrice: 0,
+                quantity: 1,
+                exchangeRate: 1,
+                amount: 0,
+                remark: '',
+              }])}
+            >
+              添加费用
+            </Button>
+          </div>
           <Table
             size="small"
             pagination={false}
-            rowKey={(_, idx) => String(idx)}
+            rowKey="id"
             dataSource={feeItems}
+            rowClassName={(record: InboundFeeItem) => record.isAutoFreight ? 'auto-freight-row' : ''}
             columns={[
               {
-                title: '序号',
-                key: 'index',
-                width: 60,
-                render: (_: unknown, __: unknown, idx: number) => idx + 1,
+                title: '费用类型',
+                dataIndex: 'feeType',
+                width: 140,
+                render: (v: string, record: InboundFeeItem, idx: number) => record.isAutoFreight
+                  ? <Tag color="blue">{FEE_TYPE_LABEL[v] || v}（自动）</Tag>
+                  : (
+                    <Select
+                      size="small"
+                      style={{ width: '100%' }}
+                      value={v || undefined}
+                      onChange={val => setFeeItems(prev => prev.map((r, i) => i === idx ? { ...r, feeType: val } : r))}
+                      placeholder="选择类型"
+                      options={FEE_TYPE_OPTIONS.filter(o => o.value !== 'FREIGHT')}
+                    />
+                  ),
               },
               {
-                title: '项目',
-                key: 'project',
-                width: 160,
-                render: (_: unknown, record: any, idx: number) => (
-                  <Select
-                    size="small"
-                    style={{ width: '100%' }}
-                    value={record.project || undefined}
-                    onChange={v => {
-                      setFeeItems(prev => prev.map((r, i) => i === idx ? { ...r, project: v } : r));
-                    }}
-                    placeholder="选择项目"
-                    options={[
-                      '首重', '续重', '药品附加运费', '进口报关费', '到门费用',
-                      '折扣', '包装费', '仓储费', '保险费', '其他',
-                    ].map(p => ({ label: p, value: p }))}
-                  />
-                ),
+                title: '币种',
+                dataIndex: 'currency',
+                width: 100,
+                render: (v: string, record: InboundFeeItem, idx: number) => record.isAutoFreight
+                  ? <Text>{v}</Text>
+                  : (
+                    <Select
+                      size="small"
+                      style={{ width: '100%' }}
+                      value={v}
+                      onChange={val => setFeeItems(prev => prev.map((r, i) => i === idx ? { ...r, currency: val, exchangeRate: exchangeRateMap[val] ?? 1 } : r))}
+                      options={CURRENCY_OPTIONS}
+                    />
+                  ),
               },
               {
-                title: '单价USD',
-                key: 'unitPrice',
-                width: 120,
-                render: (_: unknown, record: any, idx: number) => (
-                  <InputNumber
-                    size="small"
-                    value={record.unitPrice}
-                    onChange={v => {
-                      setFeeItems(prev => prev.map((r, i) => i === idx ? { ...r, unitPrice: v ?? 0 } : r));
-                    }}
-                    style={{ width: '100%' }}
-                  />
-                ),
+                title: '单价',
+                dataIndex: 'unitPrice',
+                width: 100,
+                render: (v: number, record: InboundFeeItem, idx: number) => record.isAutoFreight
+                  ? <Text>{v.toFixed(2)}</Text>
+                  : (
+                    <InputNumber
+                      size="small"
+                      value={v}
+                      onChange={val => {
+                        const up = val ?? 0;
+                        setFeeItems(prev => prev.map((r, i) => i === idx ? { ...r, unitPrice: up, amount: Number((up * r.quantity).toFixed(2)) } : r));
+                      }}
+                      style={{ width: '100%' }}
+                    />
+                  ),
               },
               {
                 title: '数量',
-                key: 'quantity',
+                dataIndex: 'quantity',
+                width: 90,
+                render: (v: number, record: InboundFeeItem, idx: number) => record.isAutoFreight
+                  ? <Text>{v}</Text>
+                  : (
+                    <InputNumber
+                      size="small"
+                      min={0}
+                      value={v}
+                      onChange={val => {
+                        const q = val ?? 0;
+                        setFeeItems(prev => prev.map((r, i) => i === idx ? { ...r, quantity: q, amount: Number((r.unitPrice * q).toFixed(2)) } : r));
+                      }}
+                      style={{ width: '100%' }}
+                    />
+                  ),
+              },
+              {
+                title: '汇率',
+                dataIndex: 'exchangeRate',
+                width: 80,
+                render: (v: number) => <Text>{v}</Text>,
+              },
+              {
+                title: '金额',
+                dataIndex: 'amount',
                 width: 100,
-                render: (_: unknown, record: any, idx: number) => (
-                  <InputNumber
-                    size="small"
-                    min={0}
-                    value={record.quantity}
-                    onChange={v => {
-                      setFeeItems(prev => prev.map((r, i) => i === idx ? { ...r, quantity: v ?? 0 } : r));
-                    }}
-                    style={{ width: '100%' }}
-                  />
+                align: 'right' as const,
+                render: (v: number, record: InboundFeeItem) => (
+                  <Text strong style={record.isAutoFreight ? { color: '#1677ff' } : undefined}>
+                    {v.toFixed(2)}
+                  </Text>
                 ),
               },
               {
-                title: '小计USD',
-                key: 'subtotal',
-                width: 100,
-                render: (_: unknown, record: any) => (
-                  <Text>{((record.unitPrice || 0) * (record.quantity || 0)).toFixed(2)}</Text>
-                ),
+                title: '备注',
+                dataIndex: 'remark',
+                ellipsis: true,
+                render: (v: string, record: InboundFeeItem, idx: number) => record.isAutoFreight
+                  ? <Text type="secondary" style={{ fontSize: 12 }}>{v}</Text>
+                  : (
+                    <Input
+                      size="small"
+                      value={v}
+                      onChange={e => setFeeItems(prev => prev.map((r, i) => i === idx ? { ...r, remark: e.target.value } : r))}
+                      placeholder="备注"
+                    />
+                  ),
               },
               {
-                title: '操作',
+                title: '',
                 key: 'action',
-                width: 60,
-                render: (_: unknown, __: unknown, idx: number) => (
-                  <Button
-                    type="text"
-                    danger
-                    size="small"
-                    icon={<DeleteOutlined />}
-                    onClick={() => setFeeItems(prev => prev.filter((_, i) => i !== idx))}
-                  />
-                ),
+                width: 40,
+                render: (_: unknown, record: InboundFeeItem, idx: number) => record.isAutoFreight
+                  ? null
+                  : (
+                    <Button
+                      type="text"
+                      danger
+                      size="small"
+                      icon={<DeleteOutlined />}
+                      onClick={() => setFeeItems(prev => prev.filter((_, i) => i !== idx))}
+                    />
+                  ),
               },
             ]}
+            summary={() => {
+              const total = feeItems.reduce((sum, f) => sum + (f.amount || 0), 0);
+              return (
+                <Table.Summary.Row>
+                  <Table.Summary.Cell index={0} colSpan={5} align="right"><Text strong>合计</Text></Table.Summary.Cell>
+                  <Table.Summary.Cell index={1} align="right"><Text strong style={{ color: '#1677ff' }}>USD {total.toFixed(2)}</Text></Table.Summary.Cell>
+                  <Table.Summary.Cell index={2} colSpan={2} />
+                </Table.Summary.Row>
+              );
+            }}
           />
-          <Button
-            type="dashed"
-            block
-            icon={<PlusOutlined />}
-            onClick={() => setFeeItems(prev => [...prev, { project: '', unitPrice: 0, quantity: 1 }])}
-            style={{ marginTop: 8 }}
-          >
-            添加
-          </Button>
         </div>
       </Drawer>
 

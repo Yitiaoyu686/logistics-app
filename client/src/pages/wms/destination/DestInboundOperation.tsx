@@ -1,13 +1,29 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  Table, Button, Checkbox, DatePicker, Space, Tag, message, theme, Input, Typography,
+  Alert,
+  Button,
+  Card,
+  Checkbox,
+  DatePicker,
+  Input,
+  Radio,
+  Select,
+  Space,
+  Table,
+  Tag,
+  Typography,
+  message,
+  theme,
 } from 'antd';
-import { ArrowLeftOutlined, ScanOutlined } from '@ant-design/icons';
+import type { ColumnsType } from 'antd/es/table';
+import { ScanOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
+
+export type TaskDeliveryStatus = 'WAREHOUSE' | 'DIRECT_DELIVERY';
+export type TaskCargoCondition = 'GOOD' | 'DAMAGED' | 'PACKING_DAMAGED' | 'LOST';
 
 export interface InboundOperationItem {
   id: string;
-  jobStation: string;
   jobNo: string;
   collNumber: string;
   collPieces: number;
@@ -17,81 +33,52 @@ export interface InboundOperationItem {
   description: string;
   pieces: number;
   weightKg: number;
-  arrivedWarehouse: boolean;
-  goodsDamaged: boolean;
-  packageDamaged: boolean;
-  goodsLost: boolean;
+  deliveryStatus: TaskDeliveryStatus;
+  cargoCondition: TaskCargoCondition;
+  handled: boolean;
+  lastHandledAt?: string;
 }
 
-export const MOCK_INBOUND_ITEMS: InboundOperationItem[] = [
-  { id: '1', jobStation: '海珠区站点    JOB100145', jobNo: 'JOB100145', collNumber: 'AK1', collPieces: 5, trackingNo: '191018000005 01', clearanceStatus: 'CLEARED', salesPerson: 'AkinGbolahan', description: '普货', pieces: 1, weightKg: 0.52, arrivedWarehouse: true, goodsDamaged: false, packageDamaged: false, goodsLost: false },
-  { id: '2', jobStation: '海珠区站点    JOB100145', jobNo: 'JOB100145', collNumber: 'AK1', collPieces: 5, trackingNo: '191018000005 14', clearanceStatus: 'CLEARED', salesPerson: 'AkinGbolahan', description: '普货', pieces: 1, weightKg: 0.92, arrivedWarehouse: false, goodsDamaged: false, packageDamaged: false, goodsLost: false },
-  { id: '3', jobStation: '海珠区站点    JOB100145', jobNo: 'JOB100145', collNumber: 'AK1', collPieces: 5, trackingNo: '191018000005 15', clearanceStatus: 'NOT_CLEARED', salesPerson: 'AkinGbolahan', description: '其它', pieces: 1, weightKg: 0.12, arrivedWarehouse: true, goodsDamaged: false, packageDamaged: false, goodsLost: false },
-  { id: '4', jobStation: '海珠区站点    JOB100145', jobNo: 'JOB100145', collNumber: 'AK1', collPieces: 5, trackingNo: '191018000005 16', clearanceStatus: 'CLEARED', salesPerson: 'AkinGbolahan', description: '普货', pieces: 1, weightKg: 2.2, arrivedWarehouse: true, goodsDamaged: false, packageDamaged: false, goodsLost: false },
-  { id: '5', jobStation: '海珠区站点    JOB100145', jobNo: 'JOB100145', collNumber: 'AK1', collPieces: 5, trackingNo: '191019000025 06', clearanceStatus: 'CLEARED', salesPerson: 'Andi MailMail', description: '普货', pieces: 1, weightKg: 7.1, arrivedWarehouse: true, goodsDamaged: false, packageDamaged: false, goodsLost: false },
-  { id: '6', jobStation: '海珠区站点    JOB100145', jobNo: 'JOB100145', collNumber: 'AK2', collPieces: 1, trackingNo: '191018000005 02', clearanceStatus: 'CLEARED', salesPerson: 'AkinGbolahan', description: '普货', pieces: 1, weightKg: 1.14, arrivedWarehouse: true, goodsDamaged: false, packageDamaged: false, goodsLost: false },
-  { id: '7', jobStation: '海珠区站点    JOB100137', jobNo: 'JOB100137', collNumber: 'AK3', collPieces: 1, trackingNo: '191018000005 14', clearanceStatus: 'CLEARED', salesPerson: 'AkinGbolahan', description: '普货', pieces: 1, weightKg: 0.92, arrivedWarehouse: true, goodsDamaged: false, packageDamaged: false, goodsLost: false },
-  { id: '8', jobStation: '福田区站点     JOB100158', jobNo: 'JOB100158', collNumber: 'AK2', collPieces: 2, trackingNo: '191018000005 15', clearanceStatus: 'CLEARED', salesPerson: 'AkinGbolahan', description: '其它', pieces: 1, weightKg: 0.12, arrivedWarehouse: true, goodsDamaged: false, packageDamaged: false, goodsLost: false },
-  { id: '9', jobStation: '海珠区站点    JOB100159', jobNo: 'JOB100159', collNumber: 'AK3', collPieces: 2, trackingNo: '191018000005 16', clearanceStatus: 'CLEARED', salesPerson: 'AkinGbolahan', description: '普货', pieces: 1, weightKg: 2.2, arrivedWarehouse: true, goodsDamaged: false, packageDamaged: false, goodsLost: false },
-  { id: '10', jobStation: '福田区站点     JOB100146', jobNo: 'JOB100146', collNumber: 'AK2', collPieces: 3, trackingNo: '191019000025 06', clearanceStatus: 'CLEARED', salesPerson: 'Andi MailMail', description: '普货', pieces: 1, weightKg: 7.1, arrivedWarehouse: true, goodsDamaged: false, packageDamaged: false, goodsLost: false },
-  { id: '11', jobStation: '海珠区站点    JOB100148', jobNo: 'JOB100148', collNumber: 'AK3', collPieces: 3, trackingNo: '191021000001 01', clearanceStatus: 'CLEARED', salesPerson: 'AkinGbolahan', description: '普货', pieces: 1, weightKg: 1.1, arrivedWarehouse: true, goodsDamaged: false, packageDamaged: false, goodsLost: false },
-  { id: '12', jobStation: '福田区站点     JOB100154', jobNo: 'JOB100154', collNumber: 'AK2', collPieces: 4, trackingNo: '191021000003 02', clearanceStatus: 'CLEARED', salesPerson: 'Smile', description: '其它', pieces: 1, weightKg: 0.94, arrivedWarehouse: true, goodsDamaged: false, packageDamaged: false, goodsLost: false },
-  { id: '13', jobStation: '海珠区站点     JOB100153', jobNo: 'JOB100153', collNumber: 'AK3', collPieces: 4, trackingNo: '191021000013 03', clearanceStatus: 'CLEARED', salesPerson: 'Smile', description: '普货', pieces: 1, weightKg: 93.5, arrivedWarehouse: true, goodsDamaged: false, packageDamaged: false, goodsLost: false },
-  { id: '14', jobStation: '福田区站点    JOB100156', jobNo: 'JOB100156', collNumber: 'AK2', collPieces: 5, trackingNo: '191021000033 08', clearanceStatus: 'CLEARED', salesPerson: 'Smile', description: '普货', pieces: 1, weightKg: 18.58, arrivedWarehouse: true, goodsDamaged: false, packageDamaged: false, goodsLost: false },
-  { id: '15', jobStation: '海珠区站点    JOB100136', jobNo: 'JOB100136', collNumber: 'AK3', collPieces: 5, trackingNo: '191022000007 09', clearanceStatus: 'CLEARED', salesPerson: 'Smile', description: '普货', pieces: 1, weightKg: 31.84, arrivedWarehouse: true, goodsDamaged: false, packageDamaged: false, goodsLost: false },
-  { id: '16', jobStation: '福田区站点    JOB100145', jobNo: 'JOB100145', collNumber: 'AK2', collPieces: 6, trackingNo: '191022000036 12', clearanceStatus: 'CLEARED', salesPerson: 'Smile', description: '普货', pieces: 1, weightKg: 2.96, arrivedWarehouse: true, goodsDamaged: false, packageDamaged: false, goodsLost: false },
-  { id: '17', jobStation: '海珠区站点    JOB100137', jobNo: 'JOB100137', collNumber: 'AK3', collPieces: 6, trackingNo: '191023000006 02', clearanceStatus: 'CLEARED', salesPerson: 'Smile', description: '普货', pieces: 1, weightKg: 5.18, arrivedWarehouse: true, goodsDamaged: false, packageDamaged: false, goodsLost: false },
-  { id: '18', jobStation: '福田区站点    JOB100115', jobNo: 'JOB100115', collNumber: 'AK2', collPieces: 7, trackingNo: '191023000010 04', clearanceStatus: 'CLEARED', salesPerson: 'Smile', description: '其它', pieces: 1, weightKg: 433.8, arrivedWarehouse: true, goodsDamaged: false, packageDamaged: false, goodsLost: false },
-  { id: '19', jobStation: '海珠区站点    JOB100116', jobNo: 'JOB100116', collNumber: 'AK3', collPieces: 7, trackingNo: '191023000011 03', clearanceStatus: 'CLEARED', salesPerson: 'Smile', description: '其它', pieces: 1, weightKg: 92, arrivedWarehouse: true, goodsDamaged: false, packageDamaged: false, goodsLost: false },
-  { id: '20', jobStation: '福田区站点          JOB100117', jobNo: 'JOB100117', collNumber: 'AK2', collPieces: 8, trackingNo: '191023000019 02', clearanceStatus: 'CLEARED', salesPerson: 'Smile', description: '其它', pieces: 1, weightKg: 23.58, arrivedWarehouse: true, goodsDamaged: false, packageDamaged: false, goodsLost: false },
-  { id: '21', jobStation: '海珠区站点    JOB100117', jobNo: 'JOB100117', collNumber: 'AK3', collPieces: 8, trackingNo: '191023000026 01', clearanceStatus: 'CLEARED', salesPerson: 'Smile', description: '其它', pieces: 1, weightKg: 25.12, arrivedWarehouse: true, goodsDamaged: false, packageDamaged: false, goodsLost: false },
-  { id: '22', jobStation: '福田区站点         JOB100118', jobNo: 'JOB100118', collNumber: 'AK2', collPieces: 9, trackingNo: '191023000028 05', clearanceStatus: 'CLEARED', salesPerson: 'Smile', description: '其它', pieces: 1, weightKg: 7.76, arrivedWarehouse: true, goodsDamaged: false, packageDamaged: false, goodsLost: false },
+const { Text } = Typography;
+
+const TEMPLATE_ITEMS: Omit<InboundOperationItem, 'id' | 'jobNo' | 'handled' | 'lastHandledAt'>[] = [
+  { collNumber: 'AK1', collPieces: 5, trackingNo: '191018000005 01', clearanceStatus: 'CLEARED', salesPerson: 'AkinGbolahan', description: '普货', pieces: 1, weightKg: 0.52, deliveryStatus: 'WAREHOUSE', cargoCondition: 'GOOD' },
+  { collNumber: 'AK1', collPieces: 5, trackingNo: '191018000005 14', clearanceStatus: 'CLEARED', salesPerson: 'AkinGbolahan', description: '普货', pieces: 1, weightKg: 0.92, deliveryStatus: 'WAREHOUSE', cargoCondition: 'GOOD' },
+  { collNumber: 'AK1', collPieces: 5, trackingNo: '191018000005 15', clearanceStatus: 'NOT_CLEARED', salesPerson: 'AkinGbolahan', description: '其它', pieces: 1, weightKg: 0.12, deliveryStatus: 'DIRECT_DELIVERY', cargoCondition: 'GOOD' },
+  { collNumber: 'AK2', collPieces: 3, trackingNo: '191018000005 16', clearanceStatus: 'CLEARED', salesPerson: 'AkinGbolahan', description: '普货', pieces: 1, weightKg: 2.2, deliveryStatus: 'WAREHOUSE', cargoCondition: 'GOOD' },
+  { collNumber: 'AK2', collPieces: 3, trackingNo: '191019000025 06', clearanceStatus: 'CLEARED', salesPerson: 'Andi MailMail', description: '普货', pieces: 1, weightKg: 7.1, deliveryStatus: 'DIRECT_DELIVERY', cargoCondition: 'GOOD' },
+  { collNumber: 'AK3', collPieces: 4, trackingNo: '191021000001 01', clearanceStatus: 'CLEARED', salesPerson: 'Smile', description: '普货', pieces: 1, weightKg: 1.1, deliveryStatus: 'WAREHOUSE', cargoCondition: 'GOOD' },
+  { collNumber: 'AK3', collPieces: 4, trackingNo: '191021000003 02', clearanceStatus: 'CLEARED', salesPerson: 'Smile', description: '电子配件', pieces: 1, weightKg: 0.94, deliveryStatus: 'WAREHOUSE', cargoCondition: 'GOOD' },
+  { collNumber: 'AK4', collPieces: 2, trackingNo: '191021000013 03', clearanceStatus: 'CLEARED', salesPerson: 'Smile', description: '服饰箱包', pieces: 1, weightKg: 3.5, deliveryStatus: 'WAREHOUSE', cargoCondition: 'GOOD' },
 ];
 
-export function getInboundItemsByJob(jobNo: string): InboundOperationItem[] {
-  const matched = MOCK_INBOUND_ITEMS.filter((item) => item.jobNo === jobNo);
-  return matched.length > 0 ? matched : MOCK_INBOUND_ITEMS;
-}
+export const buildInboundItemsByJob = (jobNo: string): InboundOperationItem[] => {
+  return TEMPLATE_ITEMS.map((item, index) => ({
+    ...item,
+    id: `${jobNo}-${index + 1}`,
+    jobNo,
+    trackingNo: `${jobNo.slice(-6)} ${String(index + 1).padStart(2, '0')}`,
+    handled: false,
+  }));
+};
 
-function syncInboundMockItem(id: string, patch: Partial<InboundOperationItem>) {
-  const index = MOCK_INBOUND_ITEMS.findIndex((item) => item.id === id);
-  if (index < 0) return;
-  MOCK_INBOUND_ITEMS[index] = { ...MOCK_INBOUND_ITEMS[index], ...patch };
-}
-
-function calcRowSpan(data: InboundOperationItem[]): Map<string, { jobSpan: number; collSpan: number }> {
-  const spanMap = new Map<string, { jobSpan: number; collSpan: number }>();
-  const jobGroups = new Map<string, number>();
+function calcRowSpan(data: InboundOperationItem[]): Map<string, { collSpan: number }> {
+  const spanMap = new Map<string, { collSpan: number }>();
   const collGroups = new Map<string, number>();
 
   data.forEach((item) => {
-    const jobKey = item.jobStation;
-    const collKey = `${item.jobStation}|${item.collNumber}`;
-    jobGroups.set(jobKey, (jobGroups.get(jobKey) || 0) + 1);
+    const collKey = item.collNumber;
     collGroups.set(collKey, (collGroups.get(collKey) || 0) + 1);
   });
 
-  const jobSeen = new Set<string>();
   const collSeen = new Set<string>();
 
   data.forEach((item) => {
-    const jobKey = item.jobStation;
-    const collKey = `${item.jobStation}|${item.collNumber}`;
-
-    let jobSpan = 0;
-    let collSpan = 0;
-
-    if (!jobSeen.has(jobKey)) {
-      jobSpan = jobGroups.get(jobKey) || 1;
-      jobSeen.add(jobKey);
-    }
-
-    if (!collSeen.has(collKey)) {
-      collSpan = collGroups.get(collKey) || 1;
-      collSeen.add(collKey);
-    }
-
-    spanMap.set(item.id, { jobSpan, collSpan });
+    const collKey = item.collNumber;
+    spanMap.set(item.id, {
+      collSpan: collSeen.has(collKey) ? 0 : (collGroups.get(collKey) || 1),
+    });
+    collSeen.add(collKey);
   });
 
   return spanMap;
@@ -100,299 +87,314 @@ function calcRowSpan(data: InboundOperationItem[]): Map<string, { jobSpan: numbe
 interface DestInboundOperationProps {
   jobId: string;
   jobNo: string;
+  initialItems: InboundOperationItem[];
+  onSaveBatch: (nextItems: InboundOperationItem[]) => void;
+  onFinalConfirm: (nextItems: InboundOperationItem[]) => void;
   onBack: () => void;
 }
 
-const { Text } = Typography;
+const DELIVERY_LABEL: Record<TaskDeliveryStatus, string> = {
+  WAREHOUSE: '到达仓库',
+  DIRECT_DELIVERY: '直送客户',
+};
 
-export const DestInboundOperation: React.FC<DestInboundOperationProps> = ({ jobNo, onBack }) => {
+const CONDITION_LABEL: Record<TaskCargoCondition, string> = {
+  GOOD: '完好',
+  DAMAGED: '货损',
+  PACKING_DAMAGED: '包装损',
+  LOST: '遗失',
+};
+
+export const DestInboundOperation: React.FC<DestInboundOperationProps> = ({
+  jobNo,
+  initialItems,
+  onSaveBatch,
+  onFinalConfirm,
+  onBack,
+}) => {
   const { token } = theme.useToken();
 
   const [inboundDate, setInboundDate] = useState(dayjs());
   const [scanMode, setScanMode] = useState(false);
   const [scanKeyword, setScanKeyword] = useState('');
+  const [selectedColl, setSelectedColl] = useState<string>('ALL');
+  const [selectedTrackingNo, setSelectedTrackingNo] = useState<string | null>(null);
   const [lastMatchedId, setLastMatchedId] = useState<string | null>(null);
-  const [items, setItems] = useState<InboundOperationItem[]>(() => getInboundItemsByJob(jobNo));
-
-  const operatorAccount = 'CANSAMPAO';
+  const [items, setItems] = useState<InboundOperationItem[]>(() => initialItems.map((item) => ({ ...item })));
 
   const normalizeCode = (value: string) => value.replace(/[\s-]/g, '').toUpperCase();
 
-  const markArrived = (id: string): boolean => {
-    let changed = false;
-    setItems((prev) => prev.map((item) => {
-      if (item.id !== id || item.arrivedWarehouse) return item;
-      changed = true;
-      syncInboundMockItem(id, { arrivedWarehouse: true });
-      return { ...item, arrivedWarehouse: true };
-    }));
-    return changed;
+  const updateItems = (matcher: (item: InboundOperationItem) => boolean, patch: Partial<InboundOperationItem>) => {
+    setItems((prev) => prev.map((item) => (matcher(item) ? { ...item, ...patch } : item)));
   };
+
+  const collOptions = useMemo(
+    () => Array.from(new Set(items.map((item) => item.collNumber))).map((value) => ({ label: value, value })),
+    [items],
+  );
+
+  const visibleItems = useMemo(() => (
+    items.filter((item) => {
+      if (selectedColl !== 'ALL' && item.collNumber !== selectedColl) return false;
+      if (selectedTrackingNo && item.trackingNo !== selectedTrackingNo) return false;
+      return true;
+    })
+  ), [items, selectedColl, selectedTrackingNo]);
+
+  const summary = useMemo(() => ({
+    totalPieces: items.reduce((sum, item) => sum + item.pieces, 0),
+    totalWeight: items.reduce((sum, item) => sum + item.weightKg, 0),
+    handledCount: items.filter((item) => item.handled).length,
+    warehouseCount: items.filter((item) => item.handled && item.deliveryStatus === 'WAREHOUSE').length,
+    directCount: items.filter((item) => item.handled && item.deliveryStatus === 'DIRECT_DELIVERY').length,
+    abnormalCount: items.filter((item) => item.handled && item.cargoCondition !== 'GOOD').length,
+  }), [items]);
+
+  const currentBatchCount = visibleItems.filter((item) => !item.handled).length;
+  const pendingCount = items.filter((item) => !item.handled).length;
+  const spanMap = useMemo(() => calcRowSpan(visibleItems), [visibleItems]);
 
   const handleScanInbound = (rawValue: string) => {
     const source = String(rawValue || '').trim();
     if (!source) return;
     const code = normalizeCode(source);
 
-    const byTracking = items.find((item) => normalizeCode(item.trackingNo) === code);
-    if (byTracking) {
-      const changed = markArrived(byTracking.id);
-      setLastMatchedId(byTracking.id);
-      if (changed) {
-        message.success(`单号 ${byTracking.trackingNo} 核对成功，已标记到达仓库`);
-      } else {
-        message.info(`单号 ${byTracking.trackingNo} 已核对过`);
-      }
+    const matchedCollItems = items.filter((item) => normalizeCode(item.collNumber) === code);
+    if (matchedCollItems.length > 0) {
+      setSelectedColl(matchedCollItems[0].collNumber);
+      setSelectedTrackingNo(null);
+      setLastMatchedId(matchedCollItems[0].id);
+      message.success(`已定位集装号 ${matchedCollItems[0].collNumber}，请确认本批次需要处理的运单`);
       return;
     }
 
-    const byColl = items.filter((item) => normalizeCode(item.collNumber) === code);
-    if (byColl.length > 0) {
-      const pending = byColl.find((item) => !item.arrivedWarehouse);
-      if (!pending) {
-        message.info(`集装号 ${byColl[0].collNumber} 已全部核对完成`);
-        return;
-      }
-      markArrived(pending.id);
-      setLastMatchedId(pending.id);
-      const checkedCount = byColl.filter((item) => item.arrivedWarehouse).length + 1;
-      message.success(`集装号 ${pending.collNumber} 核对进度 ${checkedCount}/${byColl.length}`);
+    const matchedTracking = items.find((item) => normalizeCode(item.trackingNo) === code);
+    if (!matchedTracking) {
+      message.warning('未匹配到集装号或运单号，请检查后重试');
       return;
     }
-
-    const byJob = items.filter((item) => normalizeCode(item.jobNo) === code);
-    if (byJob.length > 0) {
-      const pending = byJob.find((item) => !item.arrivedWarehouse);
-      if (!pending) {
-        message.info(`JOB ${byJob[0].jobNo} 已全部核对完成`);
-        return;
-      }
-      markArrived(pending.id);
-      setLastMatchedId(pending.id);
-      const checkedCount = byJob.filter((item) => item.arrivedWarehouse).length + 1;
-      message.success(`JOB ${pending.jobNo} 核对进度 ${checkedCount}/${byJob.length}`);
-      return;
-    }
-
-    message.warning('未匹配到可核对记录，请检查集装号/订单号');
+    setSelectedColl(matchedTracking.collNumber);
+    setSelectedTrackingNo(matchedTracking.trackingNo);
+    setLastMatchedId(matchedTracking.id);
+    message.success(`已定位运单 ${matchedTracking.trackingNo}`);
   };
 
-  const handleCheckboxChange = (
-    id: string,
-    field: keyof Pick<InboundOperationItem, 'arrivedWarehouse' | 'goodsDamaged' | 'packageDamaged' | 'goodsLost'>,
-    checked: boolean,
-  ) => {
-    setItems((prev) => prev.map((item) => (
-      item.id === id
-        ? (() => {
-            syncInboundMockItem(id, { [field]: checked } as Partial<InboundOperationItem>);
-            return { ...item, [field]: checked };
-          })()
+  const handleSaveBatch = (finalConfirm: boolean) => {
+    const currentBatchItems = visibleItems.filter((item) => !item.handled);
+    if (!currentBatchItems.length) {
+      message.warning('当前结果没有待入库运单');
+      return;
+    }
+
+    const now = inboundDate.format('YYYY-MM-DD HH:mm:ss');
+    const nextItems = items.map((item) => (
+      currentBatchItems.some((current) => current.id === item.id)
+        ? {
+            ...item,
+            handled: true,
+            lastHandledAt: now,
+          }
         : item
-    )));
+    ));
+
+    if (finalConfirm && nextItems.some((item) => !item.handled)) {
+      message.warning('还有未处理运单，请完成全部批次后再最终确认');
+      return;
+    }
+
+    if (finalConfirm) {
+      onFinalConfirm(nextItems);
+      return;
+    }
+
+    onSaveBatch(nextItems);
+    setItems(nextItems);
+    setSelectedTrackingNo(null);
+    message.success('已保存当前批次入库处理');
   };
 
-  const summary = useMemo(() => ({
-    totalPieces: items.reduce((sum, item) => sum + item.pieces, 0),
-    totalWeight: items.reduce((sum, item) => sum + item.weightKg, 0),
-    arrivedCount: items.filter((item) => item.arrivedWarehouse).length,
-    abnormalCount: items.filter((item) => item.goodsDamaged || item.packageDamaged || item.goodsLost).length,
-  }), [items]);
-
-  const spanMap = useMemo(() => calcRowSpan(items), [items]);
-
-  const abnormalSummary = useMemo(() => ({
-    goodsDamaged: items.filter((item) => item.goodsDamaged).length,
-    packageDamaged: items.filter((item) => item.packageDamaged).length,
-    goodsLost: items.filter((item) => item.goodsLost).length,
-  }), [items]);
-
-  const handleSubmit = () => {
-    const arrivedCount = items.filter((i) => i.arrivedWarehouse).length;
-    const damagedCount = items.filter((i) => i.goodsDamaged || i.packageDamaged || i.goodsLost).length;
-    message.success(`入库提交成功！共 ${arrivedCount} 件到库，${damagedCount} 件异常标记`);
-    onBack();
-  };
-
-  const columns = [
-    {
-      title: 'JOB/站点',
-      dataIndex: 'jobStation',
-      key: 'jobStation',
-      width: 200,
-      onCell: (record: InboundOperationItem) => {
-        const span = spanMap.get(record.id);
-        return { rowSpan: span?.jobSpan ?? 1 };
-      },
-    },
+  const detailColumns: ColumnsType<InboundOperationItem> = [
     {
       title: '集装号',
       dataIndex: 'collNumber',
       key: 'collNumber',
-      width: 90,
-      onCell: (record: InboundOperationItem) => {
-        const span = spanMap.get(record.id);
-        return { rowSpan: span?.collSpan ?? 1 };
-      },
-      render: (value: string, record: InboundOperationItem) => (
+      width: 88,
+      onCell: (record) => ({ rowSpan: spanMap.get(record.id)?.collSpan ?? 1 }),
+      render: (value, record) => (
         <Space direction="vertical" size={0}>
-          <span>{value || '-'}</span>
+          <span>{value}</span>
           <Text type="secondary" style={{ fontSize: 11 }}>{record.collPieces} 件</Text>
         </Space>
       ),
     },
     {
-      title: '单号',
+      title: '运单号',
       dataIndex: 'trackingNo',
       key: 'trackingNo',
-      width: 150,
-      render: (value: string, record: InboundOperationItem) => (
-        <span style={record.id === lastMatchedId ? { color: token.colorSuccess, fontWeight: 600 } : undefined}>
-          {value}
-        </span>
+      width: 126,
+      render: (value, record) => (
+        <span style={record.id === lastMatchedId ? { color: token.colorSuccess, fontWeight: 600 } : undefined}>{value}</span>
       ),
     },
     {
       title: '清关状态',
       dataIndex: 'clearanceStatus',
       key: 'clearanceStatus',
-      width: 100,
-      render: (status: InboundOperationItem['clearanceStatus']) => (
-        <Tag color={status === 'CLEARED' ? 'green' : 'orange'}>
-          {status === 'CLEARED' ? '已放行' : '待放行'}
-        </Tag>
-      ),
+      width: 92,
+      render: (value) => <Tag color={value === 'CLEARED' ? 'green' : 'orange'}>{value === 'CLEARED' ? '已放行' : '待放行'}</Tag>,
     },
-    { title: '业务员', dataIndex: 'salesPerson', key: 'salesPerson', width: 100 },
-    { title: '说明', dataIndex: 'description', key: 'description', width: 120 },
-    { title: '件数', dataIndex: 'pieces', key: 'pieces', width: 60, align: 'right' as const },
+    { title: '业务员', dataIndex: 'salesPerson', key: 'salesPerson', width: 96, ellipsis: true },
+    { title: '说明', dataIndex: 'description', key: 'description', width: 104, ellipsis: true },
+    { title: '件数', dataIndex: 'pieces', key: 'pieces', width: 64, align: 'right' },
+    { title: '重量kg', dataIndex: 'weightKg', key: 'weightKg', width: 86, align: 'right', render: (value) => Number(value || 0).toFixed(2) },
     {
-      title: '重量kg',
-      dataIndex: 'weightKg',
-      key: 'weightKg',
-      width: 90,
-      align: 'right' as const,
-      render: (value: number) => Number(value || 0).toFixed(2),
-    },
-    {
-      title: '到达仓库',
-      key: 'arrivedWarehouse',
-      width: 100,
-      align: 'center' as const,
-      render: (_: unknown, record: InboundOperationItem) => (
-        <Checkbox
-          checked={record.arrivedWarehouse}
-          onChange={(e) => handleCheckboxChange(record.id, 'arrivedWarehouse', e.target.checked)}
+      title: '送货状态',
+      dataIndex: 'deliveryStatus',
+      key: 'deliveryStatus',
+      width: 122,
+      render: (value: TaskDeliveryStatus, record) => (
+        <Select
+          value={value}
+          style={{ width: 110 }}
+          disabled={record.handled}
+          onChange={(next) => updateItems((item) => item.id === record.id, { deliveryStatus: next })}
+          options={[
+            { value: 'WAREHOUSE', label: '到达仓库' },
+            { value: 'DIRECT_DELIVERY', label: '直送客户' },
+          ]}
         />
       ),
     },
     {
-      title: '货损',
-      key: 'goodsDamaged',
-      width: 80,
-      align: 'center' as const,
-      render: (_: unknown, record: InboundOperationItem) => (
-        <Checkbox
-          checked={record.goodsDamaged}
-          onChange={(e) => handleCheckboxChange(record.id, 'goodsDamaged', e.target.checked)}
+      title: '货物完整状态',
+      dataIndex: 'cargoCondition',
+      key: 'cargoCondition',
+      width: 280,
+      render: (value: TaskCargoCondition, record) => (
+        <Radio.Group
+          value={value}
+          size="small"
+          disabled={record.handled}
+          onChange={(event) => updateItems((item) => item.id === record.id, { cargoCondition: event.target.value })}
+          optionType="button"
+          buttonStyle="solid"
+          options={[
+            { value: 'GOOD', label: '完好' },
+            { value: 'DAMAGED', label: '货损' },
+            { value: 'PACKING_DAMAGED', label: '包装损' },
+            { value: 'LOST', label: '遗失' },
+          ]}
         />
       ),
     },
     {
-      title: '包装损',
-      key: 'packageDamaged',
-      width: 90,
-      align: 'center' as const,
-      render: (_: unknown, record: InboundOperationItem) => (
-        <Checkbox
-          checked={record.packageDamaged}
-          onChange={(e) => handleCheckboxChange(record.id, 'packageDamaged', e.target.checked)}
-        />
-      ),
-    },
-    {
-      title: '货物遗失',
-      key: 'goodsLost',
-      width: 90,
-      align: 'center' as const,
-      render: (_: unknown, record: InboundOperationItem) => (
-        <Checkbox
-          checked={record.goodsLost}
-          onChange={(e) => handleCheckboxChange(record.id, 'goodsLost', e.target.checked)}
-        />
+      title: '处理状态',
+      key: 'handled',
+      width: 104,
+      render: (_value, record) => (
+        <Space direction="vertical" size={0}>
+          <Tag color={record.handled ? 'success' : 'default'}>{record.handled ? '已入库' : '待入库'}</Tag>
+          {record.lastHandledAt ? <Text type="secondary" style={{ fontSize: 11 }}>{record.lastHandledAt}</Text> : null}
+        </Space>
       ),
     },
   ];
 
   return (
     <div>
-      <Space style={{ marginBottom: 12, width: '100%', justifyContent: 'space-between' }}>
-        <Space>
-          <Button icon={<ArrowLeftOutlined />} onClick={onBack}>返回</Button>
-          <Tag color="blue">JOB: {jobNo}</Tag>
-          <Tag>件数 {summary.totalPieces}</Tag>
-          <Tag color="processing">重量 {summary.totalWeight.toFixed(2)}kg</Tag>
-          <Tag color="success">已到仓 {summary.arrivedCount}</Tag>
+      <Space style={{ marginBottom: 12, width: '100%', justifyContent: 'space-between' }} wrap>
+        <Space wrap>
+          <Tag color="blue">任务: {jobNo}</Tag>
+          <Tag>总件数 {summary.totalPieces}</Tag>
+          <Tag color="processing">总重量 {summary.totalWeight.toFixed(2)}kg</Tag>
+          <Tag color="success">已处理 {summary.handledCount}</Tag>
+          <Tag color="cyan">已入仓 {summary.warehouseCount}</Tag>
+          <Tag color="gold">直送客户 {summary.directCount}</Tag>
           <Tag color={summary.abnormalCount > 0 ? 'error' : 'default'}>异常 {summary.abnormalCount}</Tag>
         </Space>
-        <Space>
-          <DatePicker value={inboundDate} onChange={(d) => d && setInboundDate(d)} />
-          <Checkbox checked={scanMode} onChange={(e) => setScanMode(e.target.checked)}>
-            <ScanOutlined /> 扫描模式
-          </Checkbox>
-        </Space>
+        <DatePicker value={inboundDate} onChange={(date) => date && setInboundDate(date)} />
       </Space>
 
-      {scanMode && (
-        <div style={{ marginBottom: 12 }}>
-          <Space>
-            <Input
-              value={scanKeyword}
-              onChange={(e) => setScanKeyword(e.target.value)}
-              placeholder="扫描/输入：子单号、集装号、JOB号"
-              style={{ width: 360 }}
-              onPressEnter={() => {
-                handleScanInbound(scanKeyword);
-                setScanKeyword('');
-              }}
-            />
-            <Button
-              type="primary"
-              onClick={() => {
-                handleScanInbound(scanKeyword);
-                setScanKeyword('');
-              }}
-            >
-              核对入库
-            </Button>
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 12 }}
+        message="任务入库按批次执行。先扫描集装号定位本箱运单，再逐票勾选本批次处理；送货状态和货物完整状态分开登记，未处理完的任务可多次打开继续入库，全部处理后再做最终确认。"
+      />
+
+      <Card size="small" bordered={false} style={{ marginBottom: 12, background: token.colorFillAlter }}>
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Space wrap>
+            <Checkbox checked={scanMode} onChange={(event) => setScanMode(event.target.checked)}>
+              <ScanOutlined /> 扫码定位
+            </Checkbox>
+            <Tag color="blue">当前结果 {selectedTrackingNo || (selectedColl === 'ALL' ? '全部集装号' : selectedColl)}</Tag>
+            <Tag>本批次待提交 {currentBatchCount}</Tag>
+            <Tag color="warning">剩余未处理 {pendingCount}</Tag>
           </Space>
-        </div>
-      )}
+
+          {scanMode && (
+            <Space wrap>
+              <Input
+                value={scanKeyword}
+                onChange={(event) => setScanKeyword(event.target.value)}
+                placeholder="扫描/输入集装号或运单号"
+                style={{ width: 320 }}
+                onPressEnter={() => {
+                  handleScanInbound(scanKeyword);
+                  setScanKeyword('');
+                }}
+              />
+              <Button
+                type="primary"
+                onClick={() => {
+                  handleScanInbound(scanKeyword);
+                  setScanKeyword('');
+                }}
+              >
+                定位结果
+              </Button>
+            </Space>
+          )}
+
+          <Space wrap>
+            <span style={{ color: token.colorTextSecondary }}>集装号筛选</span>
+            <Button type={selectedColl === 'ALL' && !selectedTrackingNo ? 'primary' : 'default'} onClick={() => { setSelectedColl('ALL'); setSelectedTrackingNo(null); }}>
+              全部集装号
+            </Button>
+            {collOptions.map((option) => (
+              <Button
+                key={option.value}
+                type={selectedColl === option.value && !selectedTrackingNo ? 'primary' : 'default'}
+                onClick={() => { setSelectedColl(option.value); setSelectedTrackingNo(null); }}
+              >
+                {option.value}
+              </Button>
+            ))}
+          </Space>
+        </Space>
+      </Card>
 
       <Table
         rowKey="id"
-        columns={columns}
-        dataSource={items}
+        columns={detailColumns}
+        dataSource={visibleItems}
         size="small"
         pagination={{ pageSize: 50 }}
-        scroll={{ x: 1600, y: 'calc(100vh - 420px)' }}
-        summary={() => (
-          <Table.Summary>
-            <Table.Summary.Row>
-              <Table.Summary.Cell index={0} colSpan={6}><strong>合计</strong></Table.Summary.Cell>
-              <Table.Summary.Cell index={1} align="right"><strong>{summary.totalPieces}</strong></Table.Summary.Cell>
-              <Table.Summary.Cell index={2} align="right"><strong>{summary.totalWeight.toFixed(2)}</strong></Table.Summary.Cell>
-              <Table.Summary.Cell index={3}><strong>{summary.arrivedCount}</strong></Table.Summary.Cell>
-              <Table.Summary.Cell index={4}><strong>{abnormalSummary.goodsDamaged}</strong></Table.Summary.Cell>
-              <Table.Summary.Cell index={5}><strong>{abnormalSummary.packageDamaged}</strong></Table.Summary.Cell>
-              <Table.Summary.Cell index={6}><strong>{abnormalSummary.goodsLost}</strong></Table.Summary.Cell>
-            </Table.Summary.Row>
-          </Table.Summary>
-        )}
+        scroll={{ y: 'calc(100vh - 560px)' }}
       />
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
-        <Button type="primary" onClick={handleSubmit}>提交</Button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12 }}>
+        <Space wrap>
+          <Tag>已处理 {summary.handledCount} / {items.length}</Tag>
+          <Tag color={pendingCount === 0 ? 'success' : 'warning'}>{pendingCount === 0 ? '可最终确认' : '仍有待处理运单'}</Tag>
+        </Space>
+        <Space>
+          <Button onClick={() => handleSaveBatch(false)}>保存本批次</Button>
+          <Button type="primary" disabled={items.some((item) => !item.handled && !visibleItems.some((visible) => visible.id === item.id))} onClick={() => handleSaveBatch(true)}>
+            最终确认
+          </Button>
+        </Space>
       </div>
     </div>
   );
