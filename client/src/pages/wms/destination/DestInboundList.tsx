@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { toRealContainerNo } from '../../../utils/containerUtils';
 import {
   Alert,
   Button,
@@ -844,7 +845,7 @@ export const DestInboundList: React.FC<DestInboundListProps> = ({ businessMode =
       dataIndex: 'collNumbers',
       key: 'collNumbers',
       width: 180,
-      render: (values: string[]) => values?.length ? <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{values[0]}</span> : '-',
+      render: (values: string[]) => values?.length ? <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{toRealContainerNo(values[0])}</span> : '-',
     },
     { title: '当前站点', dataIndex: 'currentStation', key: 'currentStation', width: 120 },
     {
@@ -966,7 +967,7 @@ export const DestInboundList: React.FC<DestInboundListProps> = ({ businessMode =
 
   const manifestColumns: ColumnsType<InboundDetailRow> = [
     { title: '所属任务', dataIndex: 'relatedJobNo', key: 'relatedJobNo', width: 150 },
-    { title: '集装箱号', dataIndex: 'collNo', key: 'collNo', width: 120 },
+    { title: '集装箱号', dataIndex: 'collNo', key: 'collNo', width: 140, render: (v: string) => v ? <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{toRealContainerNo(v)}</span> : '-' },
     {
       title: '运单号',
       dataIndex: 'subOrderNo',

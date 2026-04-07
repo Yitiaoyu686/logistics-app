@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { toRealContainerNo } from '../../../utils/containerUtils';
 import { Table, Tag, Space, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { DownOutlined } from '@ant-design/icons';
@@ -60,8 +61,8 @@ export const JobDetail: React.FC<JobDetailProps> = ({ jobNo }) => {
       title: '集装箱号',
       dataIndex: 'collNo',
       key: 'collNo',
-      width: 110,
-      render: (value: string) => <Text strong>{value}</Text>,
+      width: 140,
+      render: (value: string) => <Text strong style={{ fontFamily: 'monospace' }}>{toRealContainerNo(value)}</Text>,
     },
     {
       title: '站点',

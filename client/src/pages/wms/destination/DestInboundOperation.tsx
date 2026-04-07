@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { toRealContainerNo } from '../../../utils/containerUtils';
 import {
   Alert,
   Button,
@@ -218,11 +219,11 @@ export const DestInboundOperation: React.FC<DestInboundOperationProps> = ({
       title: '集装箱号',
       dataIndex: 'collNumber',
       key: 'collNumber',
-      width: 88,
+      width: 130,
       onCell: (record) => ({ rowSpan: spanMap.get(record.id)?.collSpan ?? 1 }),
       render: (value, record) => (
         <Space direction="vertical" size={0}>
-          <span>{value}</span>
+          <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{toRealContainerNo(value)}</span>
           <Text type="secondary" style={{ fontSize: 11 }}>{record.collPieces} 件</Text>
         </Space>
       ),
@@ -328,7 +329,7 @@ export const DestInboundOperation: React.FC<DestInboundOperationProps> = ({
             <Checkbox checked={scanMode} onChange={(event) => setScanMode(event.target.checked)}>
               <ScanOutlined /> 扫码定位
             </Checkbox>
-            <Tag color="blue">当前结果 {selectedTrackingNo || (selectedColl === 'ALL' ? '全部集装箱号' : selectedColl)}</Tag>
+            <Tag color="blue">当前结果 {selectedTrackingNo || (selectedColl === 'ALL' ? '全部集装箱号' : toRealContainerNo(selectedColl))}</Tag>
             <Tag>本批次待提交 {currentBatchCount}</Tag>
             <Tag color="warning">剩余未处理 {pendingCount}</Tag>
           </Space>
@@ -368,7 +369,7 @@ export const DestInboundOperation: React.FC<DestInboundOperationProps> = ({
                 type={selectedColl === option.value && !selectedTrackingNo ? 'primary' : 'default'}
                 onClick={() => { setSelectedColl(option.value); setSelectedTrackingNo(null); }}
               >
-                {option.value}
+                {toRealContainerNo(option.value)}
               </Button>
             ))}
           </Space>
