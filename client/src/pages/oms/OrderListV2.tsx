@@ -603,6 +603,41 @@ export default function OrderListV2({ businessMode = 'ALL' }: { businessMode?: '
     });
   };
 
+  // 暂停/恢复订单
+  const [suspendModalOpen, setSuspendModalOpen] = useState(false);
+  const [suspendForm] = Form.useForm();
+  const [suspendTarget, setSuspendTarget] = useState<MasterOrder | null>(null);
+
+  const handleSuspend = (order: MasterOrder) => {
+    setSuspendTarget(order);
+    suspendForm.resetFields();
+    setSuspendModalOpen(true);
+  };
+
+  const handleSuspendConfirm = () => {
+    suspendForm.validateFields().then(async (values) => {
+      if (!suspendTarget) return;
+      // Store original status before suspending
+      const store = JSON.parse(localStorage.getItem('order_suspend_store') || '{}');
+      store[suspendTarget.id] = { originalStatus: suspendTarget.status, reason: values.suspendReason, suspendedAt: new Date().toISOString() };
+      localStorage.setItem('order_suspend_store', JSON.stringify(store));
+      setOrders(prev => prev.map(o => o.id === suspendTarget.id ? { ...o, status: 'SUSPENDED' as any } : o));
+      message.success('订单已暂停');
+      setSuspendModalOpen(false);
+      setSuspendTarget(null);
+    });
+  };
+
+  const handleResume = (order: MasterOrder) => {
+    const store = JSON.parse(localStorage.getItem('order_suspend_store') || '{}');
+    const info = store[order.id];
+    const originalStatus = info?.originalStatus || 'PENDING_INBOUND';
+    delete store[order.id];
+    localStorage.setItem('order_suspend_store', JSON.stringify(store));
+    setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: originalStatus } : o));
+    message.success('订单已恢复');
+  };
+
   // 重置筛选
   const handleReset = () => {
     setSearchText('');
@@ -907,6 +942,16 @@ export default function OrderListV2({ businessMode = 'ALL' }: { businessMode?: '
                 onClick={() => { setReviewOrder(record); setReviewModalOpen(true); }}
               >
                 审核
+              </Button>
+            )}
+            {record.calculatedStatus !== 'SUSPENDED' && record.calculatedStatus !== 'CANCELLED' && record.calculatedStatus !== 'COMPLETED' && (
+              <Button type="link" size="small" style={{ color: '#fa8c16' }} onClick={() => handleSuspend(record)}>
+                暂停
+              </Button>
+            )}
+            {record.calculatedStatus === 'SUSPENDED' && (
+              <Button type="link" size="small" style={{ color: '#52c41a' }} onClick={() => handleResume(record)}>
+                恢复
               </Button>
             )}
           </Space>
@@ -1393,6 +1438,37 @@ export default function OrderListV2({ businessMode = 'ALL' }: { businessMode?: '
               maxLength={200}
               showCount
             />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 暂停订单弹窗 */}
+      <Modal
+        title="暂停订单"
+        open={suspendModalOpen}
+        onCancel={() => { setSuspendModalOpen(false); setSuspendTarget(null); }}
+        onOk={handleSuspendConfirm}
+        okText="确认暂停"
+        okButtonProps={{ style: { background: '#fa8c16', borderColor: '#fa8c16' } }}
+        width={500}
+      >
+        <Form form={suspendForm} layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item label="订单信息">
+            <Text>{'运单号：' + (suspendTarget?.orderNo || '')}</Text>
+          </Form.Item>
+          <Form.Item name="suspendReason" label="暂停原因" rules={[{ required: true, message: '请选择或输入暂停原因' }]}>
+            <Select placeholder="选择暂停原因">
+              <Option value="客户要求暂停">客户要求暂停</Option>
+              <Option value="付款问题">付款问题</Option>
+              <Option value="海关查验">海关查验</Option>
+              <Option value="单证不齐">单证不齐</Option>
+              <Option value="货物问题">货物问题（破损/短缺）</Option>
+              <Option value="内部调度">内部调度调整</Option>
+              <Option value="其他">其他</Option>
+            </Select>
+          </Form.Item>
+          <Form.Item name="suspendRemark" label="备注说明">
+            <TextArea rows={2} placeholder="补充说明（选填）" />
           </Form.Item>
         </Form>
       </Modal>

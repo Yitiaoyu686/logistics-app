@@ -79,6 +79,7 @@ export type MasterOrderStatus =
   | 'COMPLETED'            // 已完成
   | 'EXCEPTION'            // 异常
   | 'RETURN_APPLIED'       // 退单申请中
+  | 'SUSPENDED'            // 已暂停
   | 'CANCELLED';           // 已取消
 
 // ==================== 子订单状态 ====================
@@ -97,6 +98,7 @@ export type SubOrderStatus =
   | 'DELIVERED'            // 已签收
   | 'EXCEPTION'            // 异常
   | 'RETURN_APPLIED'       // 退单申请中
+  | 'SUSPENDED'            // 已暂停
   | 'CANCELLED';           // 已取消
 
 // ==================== 物流轨迹 ====================
@@ -318,6 +320,7 @@ export const MASTER_ORDER_STATUS_CONFIG: Record<MasterOrderStatus, { label: stri
   COMPLETED: { label: '已完成', color: 'success' },
   EXCEPTION: { label: '异常', color: 'error' },
   RETURN_APPLIED: { label: '退单申请中', color: 'volcano' },
+  SUSPENDED: { label: '已暂停', color: 'red' },
   CANCELLED: { label: '已取消', color: 'default' },
 };
 
@@ -335,6 +338,7 @@ export const SUB_ORDER_STATUS_CONFIG: Record<SubOrderStatus, { label: string; co
   DELIVERED: { label: '已签收', color: 'success' },
   EXCEPTION: { label: '异常', color: 'error' },
   RETURN_APPLIED: { label: '退单申请中', color: 'volcano' },
+  SUSPENDED: { label: '已暂停', color: 'red' },
   CANCELLED: { label: '已取消', color: 'default' },
 };
 
