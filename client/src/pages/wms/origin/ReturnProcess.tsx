@@ -441,7 +441,7 @@ export const ReturnProcess = ({ businessMode = 'ALL' }: { warehouseId?: string; 
             <Descriptions.Item label="路线">{detailRecord.route || '-'}</Descriptions.Item>
             <Descriptions.Item label="货物处置">{detailRecord.disposalMethod ? DISPOSAL_LABEL[detailRecord.disposalMethod] : '-'}</Descriptions.Item>
             <Descriptions.Item label="货物">{detailRecord.pieces}件 / {detailRecord.weight}kg</Descriptions.Item>
-            <Descriptions.Item label="集装号">{detailRecord.containerNo || '-'}</Descriptions.Item>
+            <Descriptions.Item label="集装箱号">{detailRecord.containerNo || '-'}</Descriptions.Item>
             <Descriptions.Item label="退运原因" span={2}>{detailRecord.returnReason}</Descriptions.Item>
             <Descriptions.Item label="申请人">{detailRecord.applicant}</Descriptions.Item>
             <Descriptions.Item label="审批人">{detailRecord.approver || '-'}</Descriptions.Item>

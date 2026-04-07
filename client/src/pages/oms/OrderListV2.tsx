@@ -934,7 +934,7 @@ export default function OrderListV2({ businessMode = 'ALL' }: { businessMode?: '
           <ListPageToolbarFilters>
             <ListPageToolbarField flex="1 1 280px" minWidth={240}>
               <Input
-                placeholder="搜索运单/JOB/集装号/快递单/电话"
+                placeholder="搜索运单/JOB/集装箱号/快递单/电话"
                 prefix={<SearchOutlined />}
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}

@@ -57,7 +57,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ jobNo }) => {
 
   const collColumns: ColumnsType<CollRow> = [
     {
-      title: '集装号',
+      title: '集装箱号',
       dataIndex: 'collNo',
       key: 'collNo',
       width: 110,
@@ -164,7 +164,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ jobNo }) => {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <Space size={[8, 8]} wrap>
         <Text strong style={{ fontSize: 16 }}>JOB {jobNo}</Text>
-        <Tag color="blue">集装号 {summary.collCount}</Tag>
+        <Tag color="blue">集装箱 {summary.collCount}</Tag>
         <Text type="secondary">
           运单 {summary.waybillCount} | 已入库 {summary.arrivedWaybillCount}
         </Text>

@@ -840,11 +840,11 @@ export const DestInboundList: React.FC<DestInboundListProps> = ({ businessMode =
     { title: '起运港', dataIndex: 'originPort', key: 'originPort', width: 90, align: 'center' },
     { title: '目的港', dataIndex: 'destPort', key: 'destPort', width: 90, align: 'center' },
     {
-      title: '集装号',
+      title: '集装箱号',
       dataIndex: 'collNumbers',
       key: 'collNumbers',
-      width: 240,
-      render: (values: string[]) => <CollTags values={values} />,
+      width: 180,
+      render: (values: string[]) => values?.length ? <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{values[0]}</span> : '-',
     },
     { title: '当前站点', dataIndex: 'currentStation', key: 'currentStation', width: 120 },
     {
@@ -966,7 +966,7 @@ export const DestInboundList: React.FC<DestInboundListProps> = ({ businessMode =
 
   const manifestColumns: ColumnsType<InboundDetailRow> = [
     { title: '所属任务', dataIndex: 'relatedJobNo', key: 'relatedJobNo', width: 150 },
-    { title: '集装号', dataIndex: 'collNo', key: 'collNo', width: 90 },
+    { title: '集装箱号', dataIndex: 'collNo', key: 'collNo', width: 120 },
     {
       title: '运单号',
       dataIndex: 'subOrderNo',
@@ -1086,7 +1086,7 @@ export const DestInboundList: React.FC<DestInboundListProps> = ({ businessMode =
         type="info"
         showIcon
         style={{ marginBottom: 10 }}
-        message="货物入库已拆分为任务入库和 DPN 入库两个子页签。任务入库通过扫描集装号定位后在运单表里全选或勾选处理，DPN 入库按运单级执行。"
+        message="货物入库已拆分为任务入库和 DPN 入库两个子页签。任务入库通过扫描集装箱号定位后在运单表里全选或勾选处理，DPN 入库按运单级执行。"
       />
 
       <ListPageToolbarCard style={{ marginBottom: 10 }}>
@@ -1144,7 +1144,7 @@ export const DestInboundList: React.FC<DestInboundListProps> = ({ businessMode =
                 onChange={(event) => setKeyword(event.target.value)}
                 allowClear
                 prefix={<SearchOutlined />}
-                placeholder={activeTab === 'JOB' ? '输入任务号、提单号、承运商或集装号查询' : '输入 DPN号、线路、司机或关联任务查询'}
+                placeholder={activeTab === 'JOB' ? '输入任务号、提单号、承运商或集装箱号查询' : '输入 DPN号、线路、司机或关联任务查询'}
               />
             </ListPageToolbarField>
           </ListPageToolbarFilters>

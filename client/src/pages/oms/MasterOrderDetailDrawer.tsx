@@ -1176,7 +1176,7 @@ function OrderStatusBar({
     { title: '路线', dataIndex: 'routeText', key: 'routeText', width: 120, ellipsis: true },
     { title: '航司/船司', dataIndex: 'carrierText', key: 'carrierText', width: 120, ellipsis: true },
     { title: '提单号', dataIndex: 'billText', key: 'billText', width: 180, ellipsis: true },
-    { title: '集装号', dataIndex: 'containerText', key: 'containerText', width: 150, ellipsis: true },
+    { title: '集装箱号', dataIndex: 'containerText', key: 'containerText', width: 150, ellipsis: true },
     {
       title: '状态',
       dataIndex: 'status',
@@ -1481,7 +1481,7 @@ function SubOrdersTable({ order, subOrders, expressPackages: pkgsFromState }: { 
   const columns: ColumnsType<any> = [
     { title: '第三方运单号', dataIndex: 'thirdParty', key: 'thirdParty', width: 210 },
     { title: '运单号', dataIndex: 'orderNo', key: 'orderNo', width: 180 },
-    { title: '集装号', dataIndex: 'containerNo', key: 'containerNo', width: 120 },
+    { title: '集装箱号', dataIndex: 'containerNo', key: 'containerNo', width: 140 },
     {
       title: '状态',
       dataIndex: 'status',

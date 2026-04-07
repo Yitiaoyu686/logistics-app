@@ -164,13 +164,13 @@ export const DestInboundOperation: React.FC<DestInboundOperationProps> = ({
       setSelectedColl(matchedCollItems[0].collNumber);
       setSelectedTrackingNo(null);
       setLastMatchedId(matchedCollItems[0].id);
-      message.success(`已定位集装号 ${matchedCollItems[0].collNumber}，请确认本批次需要处理的运单`);
+      message.success(`已定位集装箱号 ${matchedCollItems[0].collNumber}，请确认本批次需要处理的运单`);
       return;
     }
 
     const matchedTracking = items.find((item) => normalizeCode(item.trackingNo) === code);
     if (!matchedTracking) {
-      message.warning('未匹配到集装号或运单号，请检查后重试');
+      message.warning('未匹配到集装箱号或运单号，请检查后重试');
       return;
     }
     setSelectedColl(matchedTracking.collNumber);
@@ -215,7 +215,7 @@ export const DestInboundOperation: React.FC<DestInboundOperationProps> = ({
 
   const detailColumns: ColumnsType<InboundOperationItem> = [
     {
-      title: '集装号',
+      title: '集装箱号',
       dataIndex: 'collNumber',
       key: 'collNumber',
       width: 88,
@@ -319,7 +319,7 @@ export const DestInboundOperation: React.FC<DestInboundOperationProps> = ({
         type="info"
         showIcon
         style={{ marginBottom: 12 }}
-        message="任务入库按批次执行。先扫描集装号定位本箱运单，再逐票勾选本批次处理；送货状态和货物完整状态分开登记，未处理完的任务可多次打开继续入库，全部处理后再做最终确认。"
+        message="任务入库按批次执行。先扫描集装箱号定位本箱运单，再逐票勾选本批次处理；送货状态和货物完整状态分开登记，未处理完的任务可多次打开继续入库，全部处理后再做最终确认。"
       />
 
       <Card size="small" bordered={false} style={{ marginBottom: 12, background: token.colorFillAlter }}>
@@ -328,7 +328,7 @@ export const DestInboundOperation: React.FC<DestInboundOperationProps> = ({
             <Checkbox checked={scanMode} onChange={(event) => setScanMode(event.target.checked)}>
               <ScanOutlined /> 扫码定位
             </Checkbox>
-            <Tag color="blue">当前结果 {selectedTrackingNo || (selectedColl === 'ALL' ? '全部集装号' : selectedColl)}</Tag>
+            <Tag color="blue">当前结果 {selectedTrackingNo || (selectedColl === 'ALL' ? '全部集装箱号' : selectedColl)}</Tag>
             <Tag>本批次待提交 {currentBatchCount}</Tag>
             <Tag color="warning">剩余未处理 {pendingCount}</Tag>
           </Space>
@@ -338,7 +338,7 @@ export const DestInboundOperation: React.FC<DestInboundOperationProps> = ({
               <Input
                 value={scanKeyword}
                 onChange={(event) => setScanKeyword(event.target.value)}
-                placeholder="扫描/输入集装号或运单号"
+                placeholder="扫描/输入集装箱号或运单号"
                 style={{ width: 320 }}
                 onPressEnter={() => {
                   handleScanInbound(scanKeyword);
@@ -358,9 +358,9 @@ export const DestInboundOperation: React.FC<DestInboundOperationProps> = ({
           )}
 
           <Space wrap>
-            <span style={{ color: token.colorTextSecondary }}>集装号筛选</span>
+            <span style={{ color: token.colorTextSecondary }}>集装箱号筛选</span>
             <Button type={selectedColl === 'ALL' && !selectedTrackingNo ? 'primary' : 'default'} onClick={() => { setSelectedColl('ALL'); setSelectedTrackingNo(null); }}>
-              全部集装号
+              全部集装箱号
             </Button>
             {collOptions.map((option) => (
               <Button
