@@ -371,18 +371,9 @@ const calcAmount = (unitPrice: number, quantity: number) => Number((unitPrice * 
 
 const formatDateTime = (value?: string) => (value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-');
 
-const matchDpnNoByBusinessMode = (dpnNo: string, businessMode: BusinessMode, records?: DpnCostRecord[]) => {
-  if (!dpnNo) return false;
-  if (businessMode === 'ALL') return true;
-  // 优先通过 record 的 businessLine 字段匹配
-  if (records) {
-    const record = records.find(r => r.dpnNo === dpnNo);
-    if (record?.businessLine) return record.businessLine === businessMode;
-  }
-  // 兼容：通过任务列表的 businessLine 匹配
-  const task = MOCK_DPN_TASKS.find(t => t.dpnNo === dpnNo);
-  if (task?.businessLine) return task.businessLine === businessMode;
-  return true;
+// DPN 不区分海运/空运，所有业务模式下展示全部 DPN
+const matchDpnNoByBusinessMode = (dpnNo: string, _businessMode: BusinessMode) => {
+  return !!dpnNo;
 };
 
 const getTaskByDpnNo = (dpnNo: string) => MOCK_DPN_TASKS.find((item) => item.dpnNo === dpnNo);

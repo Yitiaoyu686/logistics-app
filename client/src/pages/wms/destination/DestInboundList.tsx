@@ -192,7 +192,7 @@ const formatWeight = (value: number) => Number(value || 0).toLocaleString();
 const formatTime = (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm:ss');
 
 const buildJobNo = (businessLine: BusinessLine, index: number) => `${businessLine === 'AIR' ? 'A' : 'S'}-JOB2603${String(index).padStart(4, '0')}`;
-const buildDpnNo = (businessLine: BusinessLine, index: number) => `${businessLine === 'AIR' ? 'A' : 'S'}-DPN2603${String(index).padStart(4, '0')}`;
+const buildDpnNo = (_businessLine: BusinessLine, index: number) => `DPN-20260320-${String(9000 + index).padStart(4, '0')}`;
 const buildMasterOrderNo = (businessLine: BusinessLine, index: number) => `${businessLine === 'AIR' ? 'A' : 'S'}-2026032${String(10000 + index).padStart(5, '0')}`;
 const buildSubOrderNo = (masterOrderNo: string, packageIndex: number) => `${masterOrderNo}-${String(packageIndex).padStart(2, '0')}`;
 const buildBillNo = (businessLine: BusinessLine, index: number) => (
