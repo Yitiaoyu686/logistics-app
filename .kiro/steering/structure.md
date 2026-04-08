@@ -27,6 +27,7 @@
 **Location**: `/client/src/components/`
 **Purpose**: 跨页面共享的 UI 组件
 **Pattern**: PascalCase，如 `BusinessModeSwitcher.tsx`（Segmented 切换器）、`ListPageToolbar.tsx`（列表页工具栏组件族）
+**子目录**: 按业务领域分组，如 `warehouse/`（仓储专用共享组件：Modal、Drawer、Panel 等）
 
 ### Styles (`/client/src/styles/`)
 **Location**: `/client/src/styles/`

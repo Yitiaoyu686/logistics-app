@@ -1,0 +1,22 @@
+{
+  "feature_name": "full-system-requirements",
+  "created_at": "2026-04-08T08:30:00Z",
+  "updated_at": "2026-04-08T08:49:00Z",
+  "language": "zh-CN",
+  "phase": "requirements",
+  "approvals": {
+    "requirements": {
+      "generated": true,
+      "approved": false
+    },
+    "design": {
+      "generated": false,
+      "approved": false
+    },
+    "tasks": {
+      "generated": false,
+      "approved": false
+    }
+  },
+  "ready_for_implementation": false
+}
