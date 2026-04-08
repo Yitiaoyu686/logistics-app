@@ -548,6 +548,32 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
   const [attachmentOpen, setAttachmentOpen] = useState(false);
   const [activeNodeKey, setActiveNodeKey] = useState<string | null>(null);
 
+  // ---- 暂停任务 ----
+  const [suspendModalOpen, setSuspendModalOpen] = useState(false);
+  const [suspendForm] = Form.useForm();
+  const [suspendTargetId, setSuspendTargetId] = useState<string | null>(null);
+
+  const openSuspendModal = (row: TaskListRow) => {
+    setSuspendTargetId(row.taskId);
+    suspendForm.resetFields();
+    setSuspendModalOpen(true);
+  };
+
+  const handleSuspendConfirm = () => {
+    suspendForm.validateFields().then(() => {
+      if (!suspendTargetId) return;
+      setTasks(prev => prev.map(t => t.id === suspendTargetId ? { ...t, status: 'SUSPENDED' as const } : t));
+      message.success('Task suspended');
+      setSuspendModalOpen(false);
+      setSuspendTargetId(null);
+    });
+  };
+
+  const handleResume = (row: TaskListRow) => {
+    setTasks(prev => prev.map(t => t.id === row.taskId ? { ...t, status: 'IN_PROGRESS' as const } : t));
+    message.success('Task resumed');
+  };
+
   // ---- 成本录入 Drawer 状态 ----
   const [costRecords, setCostRecords] = useState<CostTaskRecord[]>(() => loadCostRecords());
   const [costEditorOpen, setCostEditorOpen] = useState(false);
@@ -1388,16 +1414,10 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
             </>
           ) : null}
           {row.status !== 'SUSPENDED' && row.status !== 'COMPLETED' && (
-            <Button type="link" size="small" style={{ color: '#fa8c16' }} onClick={() => {
-              const t = tasks.find(t => t.id === row.taskId);
-              if (t) { t.status = 'SUSPENDED'; setTasks([...tasks]); message.success('任务已暂停'); }
-            }}>暂停</Button>
+            <Button type="link" size="small" style={{ color: '#fa8c16' }} onClick={() => openSuspendModal(row)}>暂停</Button>
           )}
           {row.status === 'SUSPENDED' && (
-            <Button type="link" size="small" style={{ color: '#52c41a' }} onClick={() => {
-              const t = tasks.find(t => t.id === row.taskId);
-              if (t) { t.status = 'IN_PROGRESS'; setTasks([...tasks]); message.success('任务已恢复'); }
-            }}>恢复</Button>
+            <Button type="link" size="small" style={{ color: '#52c41a' }} onClick={() => handleResume(row)}>恢复</Button>
           )}
         </Space>
       ),
@@ -2140,6 +2160,35 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
               </Row>
             </div>
           </div>
+        </Form>
+      </Modal>
+
+      <Modal
+        title="暂停任务"
+        open={suspendModalOpen}
+        onCancel={() => { setSuspendModalOpen(false); setSuspendTargetId(null); }}
+        onOk={handleSuspendConfirm}
+        okText="确认暂停"
+        okButtonProps={{ style: { background: '#fa8c16', borderColor: '#fa8c16' } }}
+        width={480}
+        destroyOnClose
+      >
+        <Form form={suspendForm} layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item name="suspendReason" label="暂停原因" rules={[{ required: true, message: '请选择暂停原因' }]}>
+            <Select placeholder="选择暂停原因">
+              <Option value="客户要求暂停">客户要求暂停</Option>
+              <Option value="付款问题">付款问题</Option>
+              <Option value="海关查验">海关查验</Option>
+              <Option value="单证不齐">单证不齐</Option>
+              <Option value="货物问题">货物问题（破损/短缺）</Option>
+              <Option value="船期变更">船期/航班变更</Option>
+              <Option value="内部调度">内部调度调整</Option>
+              <Option value="其他">其他</Option>
+            </Select>
+          </Form.Item>
+          <Form.Item name="suspendRemark" label="备注说明">
+            <Input.TextArea rows={2} placeholder="补充说明（选填）" />
+          </Form.Item>
         </Form>
       </Modal>
 
