@@ -260,6 +260,7 @@ interface TaskListRow {
   taskId: string;
   task: MutableLegacyTask;
   firstJob: MutableLegacyJob;
+  status: TaskStatus;
   routeName: string;
   serviceTypeLabel: string;
   originPort: string;
@@ -432,6 +433,7 @@ function aggregateTaskRow(task: MutableLegacyTask, mode: LegacyTaskMode): TaskLi
     taskId: task.id,
     task,
     firstJob,
+    status: task.status,
     routeName,
     serviceTypeLabel,
     originPort: firstJob.originPort,
@@ -1343,6 +1345,12 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
       align: 'right',
     },
     {
+      title: '状态',
+      key: 'status',
+      width: 90,
+      render: (_value, row) => <Tag color={STATUS_COLOR[row.status]}>{STATUS_LABEL[row.status]}</Tag>,
+    },
+    {
       title: '当前节点',
       key: 'currentNode',
       width: 180,
@@ -1368,12 +1376,12 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
       fixed: 'right',
       render: (_value, row) => (
         <Space size={0} wrap>
-          <Button type="link" size="small" icon={<ApartmentOutlined />} onClick={() => openNodeUpdate(row)}>节点更新</Button>
+          <Button type="link" size="small" icon={<ApartmentOutlined />} onClick={() => openNodeUpdate(row)} disabled={row.status === 'SUSPENDED'}>节点更新</Button>
           {mode === 'ORIGIN' ? (
-            <Button type="link" size="small" icon={<DollarOutlined />} onClick={() => openCostInput(row)}>成本录入</Button>
+            <Button type="link" size="small" icon={<DollarOutlined />} onClick={() => openCostInput(row)} disabled={row.status === 'SUSPENDED'}>成本录入</Button>
           ) : null}
           <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => openDetail(row)}>详情</Button>
-          {mode === 'ORIGIN' ? (
+          {mode === 'ORIGIN' && row.status !== 'SUSPENDED' ? (
             <>
               <Button type="link" size="small" icon={<EditOutlined />} onClick={() => openEdit(row)}>编辑</Button>
               <Button type="link" size="small" danger icon={<DeleteOutlined />} onClick={() => openDelete(row)}>删除</Button>
