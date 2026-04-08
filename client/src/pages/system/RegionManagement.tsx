@@ -53,26 +53,6 @@ interface City {
   remark?: string;
   createdAt: string;
   updatedAt: string;
-  sites?: Site[];
-}
-
-interface Site {
-  id: string;
-  countryId: string;
-  cityId: string;
-  siteCode: string;
-  siteName: string;
-  siteNameEn?: string;
-  district?: string;
-  siteType: 'HQ' | 'DISPATCH_CENTER' | 'SATELLITE';
-  address?: string;
-  contactName?: string;
-  contactPhone?: string;
-  businessHours?: string;
-  status: 'ACTIVE' | 'INACTIVE';
-  remark?: string;
-  createdAt: string;
-  updatedAt: string;
 }
 
 interface Country {
@@ -106,12 +86,6 @@ const CONTINENT_NAMES: Record<Continent, string> = {
   OCEANIA: '大洋洲'
 };
 
-const SITE_TYPE_NAMES: Record<Site['siteType'], string> = {
-  HQ: '总调度中心',
-  DISPATCH_CENTER: '调度中心',
-  SATELLITE: '卫星站点',
-};
-
 // ========== 主组件 ==========
 
 export const RegionManagement: React.FC = () => {
@@ -120,16 +94,12 @@ export const RegionManagement: React.FC = () => {
   const [searchText, setSearchText] = useState('');
   const [countryModalVisible, setCountryModalVisible] = useState(false);
   const [cityModalVisible, setCityModalVisible] = useState(false);
-  const [siteModalVisible, setSiteModalVisible] = useState(false);
   const [editingCountry, setEditingCountry] = useState<Country | null>(null);
   const [editingCity, setEditingCity] = useState<City | null>(null);
-  const [editingSite, setEditingSite] = useState<Site | null>(null);
   const [selectedCountryId, setSelectedCountryId] = useState<string>('');
-  const [selectedCityId, setSelectedCityId] = useState<string>('');
 
   const [countryForm] = Form.useForm();
   const [cityForm] = Form.useForm();
-  const [siteForm] = Form.useForm();
 
   const loadCountries = async () => {
     setLoading(true);
@@ -255,69 +225,6 @@ export const RegionManagement: React.FC = () => {
       await loadCountries();
     } catch (err: any) {
       message.error(err.message || '删除城市失败');
-    }
-  };
-
-  // 打开新建站点弹窗
-  const handleAddSite = (countryId: string, cityId: string) => {
-    setEditingSite(null);
-    setSelectedCountryId(countryId);
-    setSelectedCityId(cityId);
-    siteForm.resetFields();
-    siteForm.setFieldsValue({
-      siteType: 'DISPATCH_CENTER',
-      status: 'ACTIVE',
-    });
-    setSiteModalVisible(true);
-  };
-
-  // 打开编辑站点弹窗
-  const handleEditSite = (site: Site) => {
-    setEditingSite(site);
-    setSelectedCountryId(site.countryId);
-    setSelectedCityId(site.cityId);
-    siteForm.setFieldsValue(site);
-    setSiteModalVisible(true);
-  };
-
-  // 保存站点
-  const handleSaveSite = async () => {
-    try {
-      const values = await siteForm.validateFields();
-      if (!selectedCountryId || !selectedCityId) {
-        message.error('站点归属城市未设置');
-        return;
-      }
-
-      const payload = {
-        ...values,
-        countryId: selectedCountryId,
-        cityId: selectedCityId,
-      };
-
-      if (editingSite) {
-        await systemApi.updateSite(editingSite.id, payload);
-        message.success('站点信息已更新');
-      } else {
-        await systemApi.createSite(payload);
-        message.success('站点已添加');
-      }
-
-      setSiteModalVisible(false);
-      await loadCountries();
-    } catch (error: any) {
-      message.error(error.message || '保存站点失败');
-    }
-  };
-
-  // 删除站点
-  const handleDeleteSite = async (siteId: string) => {
-    try {
-      await systemApi.deleteSite(siteId);
-      message.success('站点已删除');
-      await loadCountries();
-    } catch (err: any) {
-      message.error(err.message || '删除站点失败');
     }
   };
 
@@ -471,105 +378,6 @@ export const RegionManagement: React.FC = () => {
     }
   ];
 
-  // 站点表格列定义（城市下级）
-  const siteColumns: ColumnsType<Site> = [
-    {
-      title: '序号',
-      width: 60,
-      render: (_, __, index) => index + 1
-    },
-    {
-      title: '站点名称',
-      dataIndex: 'siteName',
-      width: 180,
-      render: (text: string, record: Site) => (
-        <Space>
-          <Text strong>{text}</Text>
-          <Text type="secondary" style={{ fontSize: 12 }}>({record.siteCode})</Text>
-        </Space>
-      )
-    },
-    {
-      title: '英文名',
-      dataIndex: 'siteNameEn',
-      width: 140,
-      render: (text?: string) => text || '-'
-    },
-    {
-      title: '功能',
-      dataIndex: 'siteType',
-      width: 120,
-      render: (type: Site['siteType']) => <Tag color={type === 'HQ' ? 'gold' : type === 'SATELLITE' ? 'purple' : 'blue'}>{SITE_TYPE_NAMES[type]}</Tag>
-    },
-    {
-      title: '区',
-      dataIndex: 'district',
-      width: 100,
-      render: (text?: string) => text || '-'
-    },
-    {
-      title: '联系人',
-      width: 180,
-      render: (_, record: Site) => (
-        <span>{record.contactName || '-'}{record.contactPhone ? ` / ${record.contactPhone}` : ''}</span>
-      )
-    },
-    {
-      title: '营业时间',
-      dataIndex: 'businessHours',
-      width: 180,
-      render: (text?: string) => text || '-'
-    },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      width: 90,
-      render: (status: Site['status']) => (
-        <Tag color={status === 'ACTIVE' ? 'green' : 'default'}>
-          {status === 'ACTIVE' ? '启用' : '停用'}
-        </Tag>
-      )
-    },
-    {
-      title: '更新时间',
-      dataIndex: 'updatedAt',
-      width: 160
-    },
-    {
-      title: '操作',
-      key: 'action',
-      width: 150,
-      render: (_, record) => (
-        <Space size="small">
-          <Button
-            type="link"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => handleEditSite(record)}
-          >
-            编辑
-          </Button>
-          <Popconfirm
-            title="确认删除"
-            description={`确定要删除站点「${record.siteName}」吗？`}
-            onConfirm={() => handleDeleteSite(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button
-              type="link"
-              size="small"
-              danger
-              icon={<DeleteOutlined />}
-            >
-              删除
-            </Button>
-          </Popconfirm>
-        </Space>
-      )
-    }
-  ];
-
   // 城市表格列定义（嵌套表格）
   const cityColumns: ColumnsType<City> = [
     {
@@ -668,14 +476,6 @@ export const RegionManagement: React.FC = () => {
               删除
             </Button>
           </Popconfirm>
-          <Button
-            type="link"
-            size="small"
-            icon={<PlusOutlined />}
-            onClick={() => handleAddSite(record.countryId, record.id)}
-          >
-            添加站点
-          </Button>
         </Space>
       )
     }
@@ -736,32 +536,6 @@ export const RegionManagement: React.FC = () => {
                   rowKey="id"
                   pagination={false}
                   size="small"
-                  expandable={{
-                    expandedRowRender: (city) => (
-                      <div style={{ padding: '0 12px' }}>
-                        <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <Text strong>站点列表</Text>
-                          <Button
-                            type="primary"
-                            size="small"
-                            icon={<PlusOutlined />}
-                            onClick={() => handleAddSite(city.countryId, city.id)}
-                          >
-                            添加站点
-                          </Button>
-                        </div>
-                        <Table
-                          columns={siteColumns}
-                          dataSource={city.sites || []}
-                          rowKey="id"
-                          pagination={false}
-                          size="small"
-                          locale={{ emptyText: '暂无站点，请点击右上角添加' }}
-                        />
-                      </div>
-                    ),
-                    rowExpandable: () => true,
-                  }}
                 />
               </div>
             ),
@@ -999,110 +773,6 @@ export const RegionManagement: React.FC = () => {
         </Form>
       </Modal>
 
-      {/* 新建/编辑站点弹窗 */}
-      <Modal
-        title={editingSite ? '编辑站点' : '添加站点'}
-        open={siteModalVisible}
-        onOk={handleSaveSite}
-        onCancel={() => setSiteModalVisible(false)}
-        width={760}
-        okText="保存"
-        cancelText="取消"
-      >
-        <Form form={siteForm} layout="vertical">
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item
-                name="siteName"
-                label="站点名称"
-                rules={[{ required: true, message: '请输入站点名称' }]}
-              >
-                <Input placeholder="如：伊科贾站点" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="siteNameEn" label="英文名称">
-                <Input placeholder="如：IKEJA STATION" />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item
-                name="siteCode"
-                label="站点代码"
-                rules={[{ required: true, message: '请输入站点代码' }]}
-              >
-                <Input placeholder="如：LOS_IKEJA" />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item
-                name="district"
-                label="区/片区"
-              >
-                <Input placeholder="如：IKEJA" />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item
-                name="siteType"
-                label="功能类型"
-                rules={[{ required: true, message: '请选择站点功能' }]}
-              >
-                <Select>
-                  <Option value="HQ">总调度中心</Option>
-                  <Option value="DISPATCH_CENTER">调度中心</Option>
-                  <Option value="SATELLITE">卫星站点</Option>
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row gutter={16}>
-            <Col span={24}>
-              <Form.Item name="address" label="详细地址">
-                <Input placeholder="请输入详细地址" />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item name="contactName" label="联系人">
-                <Input placeholder="联系人姓名" />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="contactPhone" label="联系电话">
-                <Input placeholder="联系电话" />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="businessHours" label="营业时间">
-                <Input placeholder="如：Week1-6 09:00-18:00" />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item name="status" label="状态" initialValue="ACTIVE">
-                <Select>
-                  <Option value="ACTIVE">启用</Option>
-                  <Option value="INACTIVE">停用</Option>
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col span={16}>
-              <Form.Item name="remark" label="备注">
-                <Input placeholder="输入站点备注..." />
-              </Form.Item>
-            </Col>
-          </Row>
-        </Form>
-      </Modal>
     </div>
   );
 };
