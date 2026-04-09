@@ -30,7 +30,7 @@ import {
   SendOutlined,
 } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
-import { v2PodApi } from '../../../api';
+import { supplierApi, v2PodApi } from '../../../api';
 import {
   ListPageToolbar,
   ListPageToolbarActions,
@@ -140,8 +140,18 @@ interface DpnRemarkMeta {
   driverName?: string;
   driverPhone?: string;
   plateNo?: string;
+  actualDepartureTime?: string;   // 实际发车时间（执行发车时填写）
   note?: string;
 }
+
+// 拖车公司 Mock 后备（供应商管理中没有 TRUCKING 数据时使用）
+const FALLBACK_DPN_TRUCKING_SUPPLIERS = [
+  'Lagos Inland Trucking',
+  'Abuja Express Logistics',
+  'Kano Transport Co.',
+  'Port Harcourt Truck Svc',
+  'Ibadan Cargo Lines',
+];
 
 interface DpnHoverDetail {
   loading: boolean;
@@ -206,6 +216,7 @@ const parseRemarkMeta = (remark: unknown): DpnRemarkMeta => {
     if (key === '司机名称') meta.driverName = value;
     if (key === '司机电话') meta.driverPhone = value;
     if (key === '车牌') meta.plateNo = value;
+    if (key === '实际发车时间') meta.actualDepartureTime = value;
     if (key === '备注') meta.note = value;
   });
   return meta;
@@ -652,6 +663,26 @@ export const DPNManageList: React.FC<DPNManageListProps> = ({ businessMode = 'AL
   const [assignTarget, setAssignTarget] = useState<DpnListRow | null>(null);
   const [assignForm] = Form.useForm();
 
+  // 拖车公司列表（从供应商管理加载 TRUCKING 类型）
+  const [truckingSuppliers, setTruckingSuppliers] = useState<string[]>(FALLBACK_DPN_TRUCKING_SUPPLIERS);
+
+  useEffect(() => {
+    const loadTruckingSuppliers = async () => {
+      try {
+        const res: any = await supplierApi.list({ supplierType: 'TRUCKING', status: 'ACTIVE' });
+        const list = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+        const names = list
+          .filter((s: any) => s.supplierType === 'TRUCKING' && s.status !== 'INACTIVE')
+          .map((s: any) => s.supplierName)
+          .filter(Boolean);
+        if (names.length > 0) setTruckingSuppliers(names);
+      } catch (_) {
+        /* keep fallback */
+      }
+    };
+    loadTruckingSuppliers();
+  }, []);
+
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailData, setDetailData] = useState<DpnDetailData | null>(null);
@@ -877,14 +908,11 @@ export const DPNManageList: React.FC<DPNManageListProps> = ({ businessMode = 'AL
     try {
       const values = await createForm.validateFields();
       setCreateSubmitting(true);
+      // 创建 DPN 时只保留规划阶段的信息；物流公司/车牌/司机/发车时间等
+      // 将在"执行发车"时由操作员填写并回写 remark
       const remarkParts = [
         values.toStation ? `发往站点:${String(values.toStation).trim()}` : '',
         values.executeDate ? `执行日期:${dayjs(values.executeDate).format('YYYY-MM-DD')}` : '',
-        values.logisticsCompany ? `物流公司:${String(values.logisticsCompany).trim()}` : '',
-        values.queryPhone ? `查询电话:${String(values.queryPhone).trim()}` : '',
-        values.driverName ? `司机名称:${String(values.driverName).trim()}` : '',
-        values.driverPhone ? `司机电话:${String(values.driverPhone).trim()}` : '',
-        values.plateNo ? `车牌:${String(values.plateNo).trim()}` : '',
         values.remark ? `备注:${String(values.remark).trim()}` : '',
       ].filter(Boolean);
 
@@ -927,9 +955,13 @@ export const DPNManageList: React.FC<DPNManageListProps> = ({ businessMode = 'AL
     setAssignTarget(row);
     const meta = parseRemarkMeta(row.remark);
     assignForm.setFieldsValue({
+      logisticsCompany: meta.logisticsCompany || '',
+      queryPhone: meta.queryPhone || '',
       driverName: meta.driverName || '',
       driverPhone: meta.driverPhone || '',
-      driverUserId: 'U-OPS-US-01',
+      plateNo: meta.plateNo || '',
+      actualDepartureTime: meta.actualDepartureTime ? dayjs(meta.actualDepartureTime) : dayjs(),
+      dispatchRemark: meta.note && meta.note !== '' ? meta.note : undefined,
     });
     setAssignOpen(true);
   };
@@ -939,14 +971,36 @@ export const DPNManageList: React.FC<DPNManageListProps> = ({ businessMode = 'AL
     try {
       const values = await assignForm.validateFields();
       setAssignLoading(true);
+
+      // 合并执行发车填写的所有字段到 remark，并回写到本地 DPN 行（保留规划阶段的发往站点/执行日期/备注）
+      const existingMeta = parseRemarkMeta(assignTarget.remark);
+      const mergedRemarkParts = [
+        existingMeta.toStation ? `发往站点:${existingMeta.toStation}` : '',
+        existingMeta.executeDate ? `执行日期:${existingMeta.executeDate}` : '',
+        values.logisticsCompany ? `物流公司:${String(values.logisticsCompany).trim()}` : '',
+        values.queryPhone ? `查询电话:${String(values.queryPhone).trim()}` : '',
+        values.driverName ? `司机名称:${String(values.driverName).trim()}` : '',
+        values.driverPhone ? `司机电话:${String(values.driverPhone).trim()}` : '',
+        values.plateNo ? `车牌:${String(values.plateNo).trim()}` : '',
+        values.actualDepartureTime ? `实际发车时间:${dayjs(values.actualDepartureTime).format('YYYY-MM-DD HH:mm')}` : '',
+        values.dispatchRemark
+          ? `备注:${String(values.dispatchRemark).trim()}`
+          : (existingMeta.note ? `备注:${existingMeta.note}` : ''),
+      ].filter(Boolean);
+      const mergedRemark = mergedRemarkParts.join(' | ');
+
       await v2PodApi.createDeliveryTask({
         dpnId: assignTarget.id,
-        driverUserId: values.driverUserId || null,
+        driverUserId: 'U-OPS-US-01',
         driverName: values.driverName || null,
         driverPhone: values.driverPhone || null,
-        remark: 'DPN页面执行派单',
+        remark: mergedRemark || 'DPN页面执行派单',
       });
-      messageApi.success(`${assignTarget.dpnNo} 执行成功`);
+
+      // 本地更新 DPN 行的 remark，保证列表/详情立即显示新填写的发车信息
+      setRows((prev) => prev.map((row) => row.id === assignTarget.id ? { ...row, remark: mergedRemark } : row));
+
+      messageApi.success(`${assignTarget.dpnNo} 执行发车成功`);
       setAssignOpen(false);
       setAssignTarget(null);
       assignForm.resetFields();
@@ -1456,7 +1510,7 @@ export const DPNManageList: React.FC<DPNManageListProps> = ({ businessMode = 'AL
 
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item name="deliveryMethod" label="运输方式" rules={[{ required: true, message: '请选择运输方式' }]}> 
+              <Form.Item name="deliveryMethod" label="运输方式" rules={[{ required: true, message: '请选择运输方式' }]}>
                 <Radio.Group
                   options={DELIVERY_METHOD_OPTIONS}
                   optionType="default"
@@ -1464,43 +1518,15 @@ export const DPNManageList: React.FC<DPNManageListProps> = ({ businessMode = 'AL
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="logisticsCompany" label="物流公司">
-                <Input placeholder="选择" />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row gutter={16}>
-            <Col span={12}>
               <Form.Item name="remark" label="备注">
                 <Input.TextArea rows={2} placeholder="录入" />
               </Form.Item>
             </Col>
-            <Col span={12}>
-              <Row gutter={12}>
-                <Col span={24}>
-                  <Form.Item name="queryPhone" label="查询电话">
-                    <Input placeholder="录入" />
-                  </Form.Item>
-                </Col>
-                <Col span={8}>
-                  <Form.Item name="driverName" label="司机名称">
-                    <Input placeholder="录入" />
-                  </Form.Item>
-                </Col>
-                <Col span={8}>
-                  <Form.Item name="driverPhone" label="司机电话">
-                    <Input placeholder="录入" />
-                  </Form.Item>
-                </Col>
-                <Col span={8}>
-                  <Form.Item name="plateNo" label="车牌">
-                    <Input placeholder="录入" />
-                  </Form.Item>
-                </Col>
-              </Row>
-            </Col>
           </Row>
+
+          <div style={{ marginTop: 8, padding: '10px 12px', background: '#e6f4ff', border: '1px solid #91caff', borderRadius: 6, fontSize: 12, color: '#0958d9' }}>
+            ℹ️ 物流公司、车牌、司机姓名电话、实际发车时间等信息在点击"执行发车"时填写，本表单无需重复录入。
+          </div>
         </Form>
       </Modal>
 
@@ -1589,8 +1615,9 @@ export const DPNManageList: React.FC<DPNManageListProps> = ({ businessMode = 'AL
       </Drawer>
 
       <Modal
-        title={assignTarget ? `执行 - ${assignTarget.dpnNo}` : '执行'}
+        title={assignTarget ? `执行发车 - ${assignTarget.dpnNo}` : '执行发车'}
         open={assignOpen}
+        width={720}
         onCancel={() => {
           setAssignOpen(false);
           setAssignTarget(null);
@@ -1603,14 +1630,72 @@ export const DPNManageList: React.FC<DPNManageListProps> = ({ businessMode = 'AL
         destroyOnClose
       >
         <Form layout="vertical" form={assignForm}>
-          <Form.Item name="driverName" label="司机名称" rules={[{ required: true, message: '请输入司机名称' }]}> 
-            <Input placeholder="录入" />
-          </Form.Item>
-          <Form.Item name="driverPhone" label="司机电话" rules={[{ required: true, message: '请输入司机电话' }]}> 
-            <Input placeholder="录入" />
-          </Form.Item>
-          <Form.Item name="driverUserId" label="司机账号ID">
-            <Input placeholder="默认 U-OPS-US-01" />
+          {/* 物流公司信息 */}
+          <div style={{ marginBottom: 8, color: '#595959', fontWeight: 500, fontSize: 13, borderLeft: '3px solid #1677ff', paddingLeft: 8 }}>
+            物流公司信息
+          </div>
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item
+                name="logisticsCompany"
+                label="物流公司"
+                tooltip="数据来源：基础设置 → 供应商管理（供应商类型 = 拖车公司）"
+                rules={[{ required: true, message: '请选择物流公司' }]}
+              >
+                <Select
+                  placeholder="请选择物流公司"
+                  showSearch
+                  allowClear
+                  optionFilterProp="label"
+                  options={truckingSuppliers.map((name) => ({ label: name, value: name }))}
+                  notFoundContent={<span style={{ color: '#8c8c8c' }}>暂无拖车公司，请到基础设置 → 供应商管理新增</span>}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="queryPhone" label="查询电话">
+                <Input placeholder="物流公司客服/查询电话（选填）" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          {/* 司机与车辆 */}
+          <div style={{ marginBottom: 8, color: '#595959', fontWeight: 500, fontSize: 13, borderLeft: '3px solid #1677ff', paddingLeft: 8 }}>
+            司机与车辆
+          </div>
+          <Row gutter={12}>
+            <Col span={8}>
+              <Form.Item name="driverName" label="司机名称" rules={[{ required: true, message: '请输入司机名称' }]}>
+                <Input placeholder="请输入司机名称" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="driverPhone" label="司机电话" rules={[{ required: true, message: '请输入司机电话' }]}>
+                <Input placeholder="请输入司机电话" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="plateNo" label="车牌号" rules={[{ required: true, message: '请输入车牌号' }]}>
+                <Input placeholder="请输入车牌号" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          {/* 发车时间和备注 */}
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item name="actualDepartureTime" label="实际发车时间">
+                <DatePicker
+                  showTime
+                  format="YYYY-MM-DD HH:mm"
+                  style={{ width: '100%' }}
+                  placeholder="选择实际发车时间"
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item name="dispatchRemark" label="发车备注">
+            <Input.TextArea rows={2} placeholder="发车备注（选填）" maxLength={200} showCount />
           </Form.Item>
         </Form>
       </Modal>
@@ -1660,9 +1745,27 @@ export const DPNManageList: React.FC<DPNManageListProps> = ({ businessMode = 'AL
           <Space size={24} wrap>
             <span>DPN: {detailData?.dpn?.dpn_no || detailRow?.dpnNo || '-'}</span>
             <span>发往站点: {detailMeta.toStation || buildRouteDisplay(detailRow || { routeNames: [], warehouseName: '-', remark: '' })}</span>
-            <span>物流公司: {detailMeta.logisticsCompany || '-'}</span>
-            <span>司机: {detailMeta.driverName || '-'}</span>
-            <span>司机电话: {detailMeta.driverPhone || '-'}</span>
+            <span>执行日期: {detailMeta.executeDate || '-'}</span>
+          </Space>
+        </div>
+        <div style={{
+          marginBottom: 12,
+          padding: '8px 12px',
+          background: '#fafafa',
+          border: '1px solid #f0f0f0',
+          borderRadius: 6,
+        }}>
+          <div style={{ fontSize: 12, color: token.colorTextSecondary, marginBottom: 4 }}>
+            发车信息 <span style={{ fontSize: 11 }}>（由"执行发车"时填写）</span>
+          </div>
+          <Space size={24} wrap style={{ fontSize: 13 }}>
+            <span>物流公司: <strong>{detailMeta.logisticsCompany || '-'}</strong></span>
+            <span>车牌: <strong>{detailMeta.plateNo || '-'}</strong></span>
+            <span>司机: <strong>{detailMeta.driverName || '-'}</strong></span>
+            <span>司机电话: <strong>{detailMeta.driverPhone || '-'}</strong></span>
+            <span>查询电话: <strong>{detailMeta.queryPhone || '-'}</strong></span>
+            <span>实际发车时间: <strong>{detailMeta.actualDepartureTime || '-'}</strong></span>
+            {detailMeta.note && <span>备注: <strong>{detailMeta.note}</strong></span>}
           </Space>
         </div>
 
