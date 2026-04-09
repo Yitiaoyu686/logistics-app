@@ -1379,6 +1379,44 @@ function ItemsTable({ order, expressPackages: pkgsFromState }: { order: MasterOr
       render: (v: number, record) => record.status === 'DELETED' ? '已删除' : Number(v || 0),
     },
     {
+      title: '尺寸(cm)',
+      key: 'dimension',
+      width: 140,
+      render: (_, record) => {
+        if (record.status === 'DELETED') return '已删除';
+        const l = Number(record.length || 0);
+        const w = Number(record.width || 0);
+        const h = Number(record.height || 0);
+        if (!l && !w && !h) return <span style={{ color: '#bfbfbf' }}>未申报</span>;
+        return (
+          <span style={{ fontFamily: 'monospace', fontSize: 12 }}>
+            {l || '-'}×{w || '-'}×{h || '-'}
+          </span>
+        );
+      },
+    },
+    {
+      title: '体积重Kg',
+      key: 'volumetricWeight',
+      width: 100,
+      align: 'right',
+      render: (_, record) => {
+        if (record.status === 'DELETED') return '-';
+        const l = Number(record.length || 0);
+        const w = Number(record.width || 0);
+        const h = Number(record.height || 0);
+        if (!l || !w || !h) return <span style={{ color: '#bfbfbf' }}>-</span>;
+        const volumetric = (l * w * h) / 6000;
+        const actual = Number(record.weight || 0);
+        const isVolumetricHigher = volumetric > actual;
+        return (
+          <span style={{ color: isVolumetricHigher ? '#fa8c16' : undefined, fontWeight: isVolumetricHigher ? 600 : 400 }}>
+            {volumetric.toFixed(2)}
+          </span>
+        );
+      },
+    },
+    {
       title: '货值USD',
       dataIndex: 'declaredValue',
       key: 'declaredValue',
@@ -1401,7 +1439,7 @@ function ItemsTable({ order, expressPackages: pkgsFromState }: { order: MasterOr
       rowKey="id"
       pagination={false}
       size="small"
-      scroll={{ x: 1350 }}
+      scroll={{ x: 1600 }}
       summary={() => (
         <Table.Summary fixed>
           <Table.Summary.Row>
@@ -1414,10 +1452,19 @@ function ItemsTable({ order, expressPackages: pkgsFromState }: { order: MasterOr
             <Table.Summary.Cell index={7} align="right">
               <Text strong>{totalPieces}</Text>
             </Table.Summary.Cell>
-            <Table.Summary.Cell index={8} align="right">
+            <Table.Summary.Cell index={8} />
+            <Table.Summary.Cell index={9} align="right">
+              <Text strong>{activeRows.reduce((sum: number, pkg: any) => {
+                const l = Number(pkg.length || 0);
+                const w = Number(pkg.width || 0);
+                const h = Number(pkg.height || 0);
+                return sum + (l && w && h ? (l * w * h) / 6000 : 0);
+              }, 0).toFixed(2)}</Text>
+            </Table.Summary.Cell>
+            <Table.Summary.Cell index={10} align="right">
               <Text strong>{totalValue.toFixed(2)}</Text>
             </Table.Summary.Cell>
-            <Table.Summary.Cell index={9} />
+            <Table.Summary.Cell index={11} />
           </Table.Summary.Row>
         </Table.Summary>
       )}

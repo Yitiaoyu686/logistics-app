@@ -392,6 +392,9 @@ export const OrderCreate: React.FC<OrderCreateProps> = ({ onCancel, onSubmit, bu
           cargoType: normalizeCargoType(p.cargoType),
           pieces: p.pieces || 1,
           weight: p.weight || 0,
+          length: p.length || undefined,
+          width: p.width || undefined,
+          height: p.height || undefined,
           declaredValue: p.declaredValue || 0,
           remark: p.remark,
         })),
@@ -831,12 +834,13 @@ export const OrderCreate: React.FC<OrderCreateProps> = ({ onCancel, onSubmit, bu
                   }}
                 >
                   <Col span={3}>物流公司</Col>
-                  <Col span={5}>第三方运单</Col>
-                  <Col span={4}>品名</Col>
-                  <Col span={3}>货物属性</Col>
-                  <Col span={3}>重量Kg</Col>
+                  <Col span={4}>第三方运单</Col>
+                  <Col span={3}>品名</Col>
+                  <Col span={2}>货物属性</Col>
+                  <Col span={2}>重量Kg</Col>
                   <Col span={2}>件数</Col>
-                  <Col span={3}>货值USD</Col>
+                  <Col span={5}>尺寸(长×宽×高 cm)</Col>
+                  <Col span={2}>货值USD</Col>
                   <Col span={1}></Col>
                 </Row>
                 {fields.map(({ key, name, ...restField }) => (
@@ -858,17 +862,17 @@ export const OrderCreate: React.FC<OrderCreateProps> = ({ onCancel, onSubmit, bu
                         </Select>
                       </Form.Item>
                     </Col>
-                    <Col span={5}>
+                    <Col span={4}>
                       <Form.Item {...restField} name={[name, 'trackingNo']} noStyle>
                         <Input placeholder="输入单号" />
                       </Form.Item>
                     </Col>
-                    <Col span={4}>
+                    <Col span={3}>
                       <Form.Item {...restField} name={[name, 'itemName']} noStyle>
-                        <Input placeholder="输入品名" />
+                        <Input placeholder="品名" />
                       </Form.Item>
                     </Col>
-                    <Col span={3}>
+                    <Col span={2}>
                       <Form.Item {...restField} name={[name, 'cargoType']} noStyle>
                         <Select placeholder="普/非普">
                           {cargoTypeOptions.map((item) => (
@@ -877,19 +881,38 @@ export const OrderCreate: React.FC<OrderCreateProps> = ({ onCancel, onSubmit, bu
                         </Select>
                       </Form.Item>
                     </Col>
-                    <Col span={3}>
+                    <Col span={2}>
                       <Form.Item {...restField} name={[name, 'weight']} noStyle>
-                        <InputNumber min={0} step={0.1} style={{ width: '100%' }} placeholder="0" />
+                        <InputNumber min={0} step={0.1} style={{ width: '100%' }} placeholder="Kg" />
                       </Form.Item>
                     </Col>
                     <Col span={2}>
                       <Form.Item {...restField} name={[name, 'pieces']} noStyle>
-                        <InputNumber min={1} style={{ width: '100%' }} placeholder="1" />
+                        <InputNumber min={1} style={{ width: '100%' }} placeholder="件" />
                       </Form.Item>
                     </Col>
-                    <Col span={3}>
+                    <Col span={5}>
+                      <Row gutter={4}>
+                        <Col span={8}>
+                          <Form.Item {...restField} name={[name, 'length']} noStyle>
+                            <InputNumber min={0} precision={1} style={{ width: '100%' }} placeholder="长" />
+                          </Form.Item>
+                        </Col>
+                        <Col span={8}>
+                          <Form.Item {...restField} name={[name, 'width']} noStyle>
+                            <InputNumber min={0} precision={1} style={{ width: '100%' }} placeholder="宽" />
+                          </Form.Item>
+                        </Col>
+                        <Col span={8}>
+                          <Form.Item {...restField} name={[name, 'height']} noStyle>
+                            <InputNumber min={0} precision={1} style={{ width: '100%' }} placeholder="高" />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                    </Col>
+                    <Col span={2}>
                       <Form.Item {...restField} name={[name, 'declaredValue']} noStyle>
-                        <InputNumber min={0} style={{ width: '100%' }} placeholder="0" />
+                        <InputNumber min={0} style={{ width: '100%' }} placeholder="USD" />
                       </Form.Item>
                     </Col>
                     <Col span={1}>
