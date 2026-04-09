@@ -1674,12 +1674,40 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
       ),
     },
     {
+      title: '录入汇率',
+      key: 'exchangeRate',
+      width: 110,
+      render: (_: unknown, row: CostInputItem) => {
+        if (row.currency === 'CNY') return <span style={{ color: '#bfbfbf' }}>-</span>;
+        return isCostItemEditable(costEditorRows, row) ? (
+          <InputNumber
+            min={0}
+            precision={4}
+            value={row.exchangeRate}
+            placeholder="兑CNY汇率"
+            style={{ width: '100%' }}
+            onChange={(v) => updateCostEditorRow(row.id, { exchangeRate: Number(v || 0) })}
+          />
+        ) : (row.exchangeRate || '-');
+      },
+    },
+    {
       title: '小计',
       dataIndex: 'amount',
       key: 'amount',
       width: 110,
       align: 'right' as const,
       render: (value: number) => value.toFixed(2),
+    },
+    {
+      title: '折合CNY',
+      key: 'amountCNY',
+      width: 110,
+      align: 'right' as const,
+      render: (_: unknown, row: CostInputItem) => {
+        const rate = row.currency === 'CNY' ? 1 : (row.exchangeRate || 0);
+        return <span style={{ color: '#8c8c8c' }}>¥{(row.amount * rate).toFixed(2)}</span>;
+      },
     },
     {
       title: '备注',
