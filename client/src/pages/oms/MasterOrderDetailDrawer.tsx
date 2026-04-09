@@ -231,11 +231,11 @@ export default function MasterOrderDetailDrawer({ open, order, onClose, onOrderU
         if (apiFees.length === 0) {
           const now = dayjs().format('YYYY-MM-DD HH:mm');
           apiFees.push(
-            { id: 'FEE-MOCK-01', feeType: '海运运费', feeDirection: 'RECEIVABLE', currency: 'USD', unitPrice: 12, quantity: 44, exchangeRate: 1, amount: 528, amountUsd: 528, createdBy: '仓管A', createdAt: now, remark: '计费重44kg' },
-            { id: 'FEE-MOCK-02', feeType: '报关费', feeDirection: 'RECEIVABLE', currency: 'USD', unitPrice: 50, quantity: 1, exchangeRate: 1, amount: 50, amountUsd: 50, createdBy: '仓管A', createdAt: now, remark: '' },
-            { id: 'FEE-MOCK-03', feeType: '包装费', feeDirection: 'RECEIVABLE', currency: 'CNY', unitPrice: 30, quantity: 4, exchangeRate: 7.25, amount: 120, amountUsd: 16.55, createdBy: '仓管A', createdAt: now, remark: '4件木架加固' },
-            { id: 'FEE-MOCK-04', feeType: '保险费', feeDirection: 'RECEIVABLE', currency: 'CNY', unitPrice: 80, quantity: 1, exchangeRate: 7.25, amount: 80, amountUsd: 11.03, createdBy: '仓管A', createdAt: now, remark: '' },
-            { id: 'FEE-MOCK-05', feeType: '到门费', feeDirection: 'RECEIVABLE', currency: 'NGN', unitPrice: 15000, quantity: 1, exchangeRate: 1650, amount: 15000, amountUsd: 9.09, createdBy: '操作B', createdAt: now, remark: '拉各斯市区配送' },
+            { id: 'F-S-20260408-0001', feeType: '海运运费', feeDirection: 'RECEIVABLE', currency: 'USD', unitPrice: 12, quantity: 44, exchangeRate: 1, amount: 528, amountUsd: 528, createdBy: '仓管A', createdAt: now, remark: '计费重44kg' },
+            { id: 'F-S-20260408-0002', feeType: '报关费', feeDirection: 'RECEIVABLE', currency: 'USD', unitPrice: 50, quantity: 1, exchangeRate: 1, amount: 50, amountUsd: 50, createdBy: '仓管A', createdAt: now, remark: '' },
+            { id: 'F-S-20260408-0003', feeType: '包装费', feeDirection: 'RECEIVABLE', currency: 'CNY', unitPrice: 30, quantity: 4, exchangeRate: 7.25, amount: 120, amountUsd: 16.55, createdBy: '仓管A', createdAt: now, remark: '4件木架加固' },
+            { id: 'F-S-20260408-0004', feeType: '保险费', feeDirection: 'RECEIVABLE', currency: 'CNY', unitPrice: 80, quantity: 1, exchangeRate: 7.25, amount: 80, amountUsd: 11.03, createdBy: '仓管A', createdAt: now, remark: '' },
+            { id: 'F-S-20260408-0005', feeType: '到门费', feeDirection: 'RECEIVABLE', currency: 'NGN', unitPrice: 15000, quantity: 1, exchangeRate: 1650, amount: 15000, amountUsd: 9.09, createdBy: '操作B', createdAt: now, remark: '拉各斯市区配送' },
           );
         }
         setFees(apiFees);

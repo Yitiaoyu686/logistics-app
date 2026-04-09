@@ -392,7 +392,7 @@ router.post('/sub', (req, res) => {
     return;
   }
 
-  const id = generateSubOrderId(transportType);
+  const id = generateSubOrderId(transportType, masterOrderId);
 
   const tx = db.transaction(() => {
     db.prepare(`

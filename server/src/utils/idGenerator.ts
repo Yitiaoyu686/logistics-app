@@ -12,7 +12,7 @@ const counters: Record<string, number> = {};
  * - Return: R-YYYYMMDD-NNNN
  * - Pickup: P-YYYYMMDD-NNNN
  * - Transfer: S-T-YYYYMMDD-NNNN / A-T-YYYYMMDD-NNNN
- * - Fee: F-YYYYMMDD-NNNN
+ * - Fee: F-S-YYYYMMDD-NNNN (sea) / F-A-YYYYMMDD-NNNN (air)
  * - Petty cash: P-YYYYMMDD-NNNN
  */
 
@@ -109,17 +109,28 @@ export function generateMasterOrderId(transportType: string): string {
 }
 
 /**
- * Generate sub-order ID: S-YYYYMMDDNNNNN-NN or A-YYYYMMDDNNNNN-NN
+ * Generate sub-order ID: {masterOrderId}-NN
+ * e.g. S-2026040800001-01, S-2026040800001-02
+ * If masterOrderId not provided, falls back to standalone sequence.
  */
-export function generateSubOrderId(transportType: string): string {
+export function generateSubOrderId(transportType: string, masterOrderId?: string): string {
   const db = getDb();
+  if (masterOrderId) {
+    // Count existing sub-orders under this master to determine next sequence
+    const row = db.prepare(`
+      SELECT COUNT(*) AS cnt FROM sub_orders WHERE masterOrderId = ?
+    `).get(masterOrderId) as any;
+    const nextSeq = Number(row?.cnt || 0) + 1;
+    return `${masterOrderId}-${String(nextSeq).padStart(2, '0')}`;
+  }
+  // Fallback: standalone sequence
   const prefix = String(transportType || '').toUpperCase() === 'AIR' ? 'A' : 'S';
   const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const likePattern = `${prefix}-${day}%`;
   const row = db.prepare(`
     SELECT MAX(CAST(SUBSTR(id, ${prefix.length + 1 + day.length + 1}, 5) AS INTEGER)) AS maxSeq
     FROM sub_orders
-    WHERE id LIKE ?
+    WHERE id LIKE ? AND id NOT LIKE '%-__'
   `).get(likePattern) as any;
   const nextSeq = Number(row?.maxSeq || 0) + 1;
   return `${prefix}-${day}${String(nextSeq).padStart(5, '0')}`;
@@ -161,10 +172,11 @@ export function generateTransferNo(transportType: string): string {
 }
 
 /**
- * Generate fee number: F-YYYYMMDD-NNNN
+ * Generate fee number: F-S-YYYYMMDD-NNNN (sea) / F-A-YYYYMMDD-NNNN (air)
  */
-export function generateFeeNo(): string {
-  return generateId('F');
+export function generateFeeNo(transportType?: string): string {
+  const bizPrefix = String(transportType || '').toUpperCase() === 'AIR' ? 'A' : 'S';
+  return generateId(`F-${bizPrefix}`);
 }
 
 /**

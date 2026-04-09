@@ -7,9 +7,9 @@ const router = Router();
 
 const CLIENT_SHORT_CODE_SCOPE = 'CLIENT_SHORT_CODE';
 const CLIENT_SHORT_CODE_PREFIX = '';
-const CLIENT_SHORT_CODE_LENGTH = 4;
+const CLIENT_SHORT_CODE_LENGTH = 3;
 const SHORT_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const CLIENT_SHORT_CODE_REGEX = /^(?=.*[A-Z])(?=.*\d)[A-Z0-9]{4}$/;
+const CLIENT_SHORT_CODE_REGEX = /^(?=.*[A-Z])(?=.*\d)[A-Z0-9]{3,}$/;
 const CLIENT_STATUSES = new Set(['ACTIVE', 'DORMANT', 'FROZEN']);
 const CLIENT_POOLS = new Set(['PRIVATE', 'PUBLIC']);
 const EDITABLE_FIELDS = new Set([

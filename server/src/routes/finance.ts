@@ -16,8 +16,9 @@ const COMMISSION_OFFICES = new Set(['GUANGZHOU', 'NIGERIA']);
 const COMMISSION_BIZ_TYPES = new Set(['AIR', 'SEA', 'BOTH']);
 const COMMISSION_STATUSES = new Set(['ACTIVE', 'INACTIVE']);
 
-function generateFeeNo() {
-  return `F-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0')}`;
+function generateFeeNo(transportType?: string) {
+  const bizPrefix = String(transportType || '').toUpperCase() === 'AIR' ? 'A' : 'S';
+  return `F-${bizPrefix}-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(Math.floor(Math.random() * 9999) + 1).padStart(4, '0')}`;
 }
 
 function normalizeRelatedType(raw: any): string {
