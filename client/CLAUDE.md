@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Cross-border logistics management system (TMS/ERP) web client with role-based access control. Modules: CRM, OMS (Orders), TMS (Transport), WMS (Warehouse), Finance, System Settings.
 
-**Current State**: All data is in-memory mock data (`/src/data/mock.ts`). Backend Express server at `/server` exists but is not connected.
+**Current State**: All data is in-memory mock data distributed across module-specific files (see "Data Flow" below). Backend Express server at `/server` exists but is not connected.
 
 ## Tech Stack
 
@@ -68,9 +68,15 @@ Many pages also define types locally. When adding types, decide: global/shared �
 
 ### Data Flow
 
-Mock data exports: `MOCK_CLIENTS`, `MOCK_ORDERS`, `MOCK_JOBS`, `MOCK_FEES` from `/src/data/mock.ts`. Additional mock data in `orderMock.ts`, `mockOrders.ts`, `mockStock.ts`.
+**Mock data is NOT centralized.** It is distributed across module-specific files and inline within page components. Key mock data locations:
 
-To connect backend: replace mock imports with `axios.get('/api/...')` calls with async/await + try/catch. Backend runs on port 3000.
+- `/src/pages/tms/taskManagerLegacyData.ts` — TMS 任务/JOB/集装箱数据（`LEGACY_TASKS`，核心数据源，~194KB）
+- `/src/pages/wms/origin/derivedWarehouseData.ts` — 起运国仓储派生数据
+- `/src/pages/wms/destination/podUiMockStore.ts` — 目的国 POD 派送数据
+- `/src/data/destinations.ts` — 目的地/地区基础数据
+- Inline mock data inside individual `.tsx` pages (CRM, 财务, 仪表盘等模块直接在组件内定义)
+
+To connect backend: locate the relevant mock file/inline data for the feature, then replace with `axios.get('/api/...')` calls with async/await + try/catch. Backend runs on port 3000.
 
 ### Page Organization
 
@@ -102,7 +108,8 @@ Pages in `/src/pages/` organized by business module:
 
 - `/src/App.tsx` - Main shell, `MENU_CONFIG`, `ContentRenderer`, role switching (~619 lines)
 - `/src/types/core.ts` - Core shared type definitions
-- `/src/data/mock.ts` - Primary mock data
+- `/src/pages/tms/taskManagerLegacyData.ts` - Primary TMS mock data (LEGACY_TASKS)
+- `/src/pages/tms/LegacyTaskManager.tsx` - 起运国办/到达国办任务管理主组件 (~2500 lines)
 - `/src/utils/orderUtils.ts` - Order utility functions
 - `/src/utils/jobUtils.ts` - Job utility functions
 - `/src/utils/dataQuery.ts` - Data query utilities
