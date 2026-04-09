@@ -35,7 +35,7 @@ import {
   SwapOutlined,
 } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
-import { warehouseApi } from '../../../api';
+import { supplierApi, warehouseApi } from '../../../api';
 import {
   ListPageToolbar,
   ListPageToolbarActions,
@@ -63,11 +63,22 @@ interface TransferMeta {
   driverAccountId?: string;
   plateNo?: string;
   shippingMethod?: ShippingMethod;
+  actualDispatchTime?: string;       // 实际发运时间（执行时填写）
+  dispatchRemark?: string;           // 发运备注（执行时填写）
   departureConfirmedAt?: string;
   arrivalConfirmedAt?: string;
   receiveConfirmedAt?: string;
   note?: string;
 }
+
+// 拖车公司 Mock 后备（供应商管理中没有 TRUCKING 数据时使用）
+const FALLBACK_TRANSFER_TRUCKING_SUPPLIERS = [
+  '广东广运拖车有限公司',
+  '深圳华洋拖车服务',
+  '佛山安达物流运输',
+  '广州顺风拖车',
+  '东莞快运拖车',
+];
 
 interface FlowRecord {
   time: string;
@@ -601,6 +612,26 @@ export const TransferList = ({
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailRecord, setDetailRecord] = useState<TransferRecord | null>(null);
 
+  // 拖车公司列表（从基础设置 → 供应商管理加载 TRUCKING 类型）
+  const [truckingSuppliers, setTruckingSuppliers] = useState<string[]>(FALLBACK_TRANSFER_TRUCKING_SUPPLIERS);
+
+  useEffect(() => {
+    const loadTruckingSuppliers = async () => {
+      try {
+        const res: any = await supplierApi.list({ supplierType: 'TRUCKING', status: 'ACTIVE' });
+        const list = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+        const names = list
+          .filter((s: any) => s.supplierType === 'TRUCKING' && s.status !== 'INACTIVE')
+          .map((s: any) => s.supplierName)
+          .filter(Boolean);
+        if (names.length > 0) setTruckingSuppliers(names);
+      } catch (_) {
+        /* keep fallback */
+      }
+    };
+    loadTruckingSuppliers();
+  }, []);
+
   const businessLine = businessMode === 'SEA' || businessMode === 'AIR' ? businessMode : undefined;
 
   useEffect(() => {
@@ -609,17 +640,13 @@ export const TransferList = ({
 
   useEffect(() => {
     if (!createOpen) return;
+    // 创建调拨单仅录入规划阶段信息，物流/司机/车牌/发运时间迁移到"执行"环节
     createForm.setFieldsValue({
       sourceWarehouse: '深圳集货区',
       targetWarehouse: '广州总仓',
       routeName: businessMode === 'AIR' ? '深圳集货区→广州总仓→拉各斯到达站' : '深圳集货区→广州总仓→拉各斯主仓',
-      executeDate: dayjs(),
+      plannedDate: dayjs(),
       shippingMethod: 'VIA_MAIN',
-      logisticsCompany: '',
-      queryPhone: '',
-      driverName: '',
-      driverPhone: '',
-      plateNo: '',
       reason: '集中发货',
       remark: '',
       shippingUnitNo: '',
@@ -957,14 +984,10 @@ export const TransferList = ({
       const values = await createForm.validateFields();
       setCreateSubmitting(true);
 
+      // 创建调拨单只写入规划阶段字段，物流/司机/车牌由执行环节填写
       const meta: TransferMeta = {
         routeName: values.routeName,
-        executeDate: values.executeDate ? dayjs(values.executeDate).format('YYYY-MM-DD') : undefined,
-        logisticsCompany: values.logisticsCompany,
-        queryPhone: values.queryPhone,
-        driverName: values.driverName,
-        driverPhone: values.driverPhone,
-        plateNo: values.plateNo,
+        executeDate: values.plannedDate ? dayjs(values.plannedDate).format('YYYY-MM-DD') : undefined,
         shippingMethod: values.shippingMethod,
         note: values.remark,
       };
@@ -999,13 +1022,13 @@ export const TransferList = ({
   const openExecuteModal = (record: TransferRecord) => {
     setExecuteTarget(record);
     executeForm.setFieldsValue({
-      executeDate: record.meta.executeDate ? dayjs(record.meta.executeDate) : dayjs(),
-      logisticsCompany: record.meta.logisticsCompany || '',
+      logisticsCompany: record.meta.logisticsCompany || undefined,
       queryPhone: record.meta.queryPhone || '',
       driverName: record.meta.driverName || '',
       driverPhone: record.meta.driverPhone || '',
-      driverAccountId: record.meta.driverAccountId || 'U-WMS-ORIGIN-01',
       plateNo: record.meta.plateNo || '',
+      actualDispatchTime: record.meta.actualDispatchTime ? dayjs(record.meta.actualDispatchTime) : dayjs(),
+      dispatchRemark: record.meta.dispatchRemark || '',
     });
     setExecuteOpen(true);
   };
@@ -1016,15 +1039,19 @@ export const TransferList = ({
       const values = await executeForm.validateFields();
       setExecuteSubmitting(true);
       const now = new Date().toISOString();
+      const actualDispatch = values.actualDispatchTime
+        ? dayjs(values.actualDispatchTime).format('YYYY-MM-DD HH:mm')
+        : dayjs().format('YYYY-MM-DD HH:mm');
       const nextMeta: TransferMeta = {
         ...executeTarget.meta,
-        executeDate: values.executeDate ? dayjs(values.executeDate).format('YYYY-MM-DD') : executeTarget.meta.executeDate,
         logisticsCompany: values.logisticsCompany,
-        queryPhone: values.queryPhone,
+        queryPhone: values.queryPhone || '',
         driverName: values.driverName,
         driverPhone: values.driverPhone,
-        driverAccountId: values.driverAccountId,
+        driverAccountId: 'U-WMS-ORIGIN-01',
         plateNo: values.plateNo,
+        actualDispatchTime: actualDispatch,
+        dispatchRemark: values.dispatchRemark || '',
         departureConfirmedAt: now,
       };
 
@@ -1421,7 +1448,7 @@ export const TransferList = ({
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item label="执行日期" name="executeDate">
+              <Form.Item label="计划执行日期" name="plannedDate" tooltip="仅作规划日期，实际发运时间在执行环节填写">
                 <DatePicker style={{ width: '100%' }} />
               </Form.Item>
             </Col>
@@ -1443,37 +1470,6 @@ export const TransferList = ({
             </Col>
           </Row>
 
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item label="物流公司" name="logisticsCompany">
-                <Input placeholder="录入承运商 / 车队名称" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item label="查询电话" name="queryPhone">
-                <Input placeholder="录入查询电话" />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item label="司机名称" name="driverName">
-                <Input placeholder="录入司机姓名" />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item label="司机电话" name="driverPhone">
-                <Input placeholder="录入司机电话" />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item label="车牌" name="plateNo">
-                <Input placeholder="录入车牌号" />
-              </Form.Item>
-            </Col>
-          </Row>
-
           <Form.Item label="调拨原因" name="reason" rules={[{ required: true, message: '请选择调拨原因' }]}>
             <Select options={REASON_OPTIONS.map((item) => ({ value: item, label: item }))} />
           </Form.Item>
@@ -1482,11 +1478,9 @@ export const TransferList = ({
             <TextArea rows={3} placeholder="补充这次调拨的说明" maxLength={300} showCount />
           </Form.Item>
 
-          <Card size="small" style={{ borderRadius: 14, background: '#fafafa' }}>
-            <div style={{ color: token.colorTextSecondary }}>
-              创建成功后将自动进入“绑定运单”，流程与 DPN 管理保持一致。
-            </div>
-          </Card>
+          <div style={{ marginTop: 8, padding: '10px 12px', background: '#e6f4ff', border: '1px solid #91caff', borderRadius: 6, fontSize: 12, color: '#0958d9' }}>
+            ℹ️ 物流公司、车牌、司机姓名电话、实际发运时间等信息在点击"执行"时填写，本表单无需重复录入。创建成功后自动进入"绑定运单"环节。
+          </div>
         </Form>
       </Modal>
 
@@ -1605,44 +1599,75 @@ export const TransferList = ({
         width={760}
       >
         <Form form={executeForm} layout="vertical" style={{ marginTop: 20 }}>
+          {/* 物流公司信息 */}
+          <div style={{ marginBottom: 8, color: '#595959', fontWeight: 500, fontSize: 13, borderLeft: '3px solid #1677ff', paddingLeft: 8 }}>
+            物流公司信息
+          </div>
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item label="执行日期" name="executeDate">
-                <DatePicker style={{ width: '100%' }} />
+              <Form.Item
+                label="物流公司"
+                name="logisticsCompany"
+                tooltip="数据来源：基础设置 → 供应商管理（供应商类型 = 拖车公司）"
+                rules={[{ required: true, message: '请选择物流公司' }]}
+              >
+                <Select
+                  placeholder="请选择物流公司"
+                  showSearch
+                  allowClear
+                  optionFilterProp="label"
+                  options={truckingSuppliers.map((name) => ({ label: name, value: name }))}
+                  notFoundContent={<span style={{ color: '#8c8c8c' }}>暂无拖车公司，请到基础设置 → 供应商管理新增</span>}
+                />
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item label="物流公司" name="logisticsCompany">
-                <Input placeholder="录入承运商 / 车队名称" />
+              <Form.Item label="查询电话" name="queryPhone">
+                <Input placeholder="物流公司客服/查询电话（选填）" />
               </Form.Item>
             </Col>
           </Row>
+
+          {/* 司机与车辆 */}
+          <div style={{ marginBottom: 8, color: '#595959', fontWeight: 500, fontSize: 13, borderLeft: '3px solid #1677ff', paddingLeft: 8 }}>
+            司机与车辆
+          </div>
           <Row gutter={16}>
-            <Col span={12}>
+            <Col span={8}>
               <Form.Item label="司机名称" name="driverName" rules={[{ required: true, message: '请输入司机名称' }]}>
-                <Input placeholder="录入司机姓名" />
+                <Input placeholder="请输入司机名称" />
               </Form.Item>
             </Col>
-            <Col span={12}>
+            <Col span={8}>
               <Form.Item label="司机电话" name="driverPhone" rules={[{ required: true, message: '请输入司机电话' }]}>
-                <Input placeholder="录入司机电话" />
+                <Input placeholder="请输入司机电话" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="车牌号" name="plateNo" rules={[{ required: true, message: '请输入车牌号' }]}>
+                <Input placeholder="请输入车牌号" />
               </Form.Item>
             </Col>
           </Row>
+
+          {/* 发运时间和备注 */}
+          <div style={{ marginBottom: 8, color: '#595959', fontWeight: 500, fontSize: 13, borderLeft: '3px solid #1677ff', paddingLeft: 8 }}>
+            发运时间和备注
+          </div>
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item label="司机账号ID" name="driverAccountId">
-                <Input placeholder="默认 U-WMS-ORIGIN-01" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item label="车牌" name="plateNo">
-                <Input placeholder="录入车牌号" />
+              <Form.Item label="实际发运时间" name="actualDispatchTime" rules={[{ required: true, message: '请选择实际发运时间' }]}>
+                <DatePicker
+                  showTime
+                  format="YYYY-MM-DD HH:mm"
+                  style={{ width: '100%' }}
+                  placeholder="选择实际发运时间"
+                />
               </Form.Item>
             </Col>
           </Row>
-          <Form.Item label="查询电话" name="queryPhone">
-            <Input placeholder="录入查询电话" />
+          <Form.Item label="发运备注" name="dispatchRemark">
+            <TextArea rows={2} placeholder="发运备注（选填）" maxLength={200} showCount />
           </Form.Item>
         </Form>
       </Modal>
@@ -1698,19 +1723,20 @@ export const TransferList = ({
               </Descriptions>
             </Card>
 
-            <Card size="small" title="执行信息" style={{ borderRadius: 16 }}>
+            <Card size="small" title="执行信息" style={{ borderRadius: 16 }} extra={<Tag>由执行环节填写</Tag>}>
               <Descriptions column={2}>
-                <Descriptions.Item label="执行日期">{detailRecord.meta.executeDate || '-'}</Descriptions.Item>
+                <Descriptions.Item label="计划执行日期">{detailRecord.meta.executeDate || '-'}</Descriptions.Item>
+                <Descriptions.Item label="实际发运时间">{detailRecord.meta.actualDispatchTime || '-'}</Descriptions.Item>
                 <Descriptions.Item label="物流公司">{detailRecord.meta.logisticsCompany || '-'}</Descriptions.Item>
+                <Descriptions.Item label="查询电话">{detailRecord.meta.queryPhone || '-'}</Descriptions.Item>
                 <Descriptions.Item label="司机名称">{detailRecord.meta.driverName || '-'}</Descriptions.Item>
                 <Descriptions.Item label="司机电话">{detailRecord.meta.driverPhone || '-'}</Descriptions.Item>
-                <Descriptions.Item label="司机账号ID">{detailRecord.meta.driverAccountId || '-'}</Descriptions.Item>
                 <Descriptions.Item label="车牌">{detailRecord.meta.plateNo || '-'}</Descriptions.Item>
-                <Descriptions.Item label="查询电话">{detailRecord.meta.queryPhone || '-'}</Descriptions.Item>
                 <Descriptions.Item label="运输方式">
                   {detailRecord.shippingMethod === 'DIRECT' ? '直接发运' : detailRecord.shippingMethod === 'VIA_MAIN' ? '先送总仓' : '-'}
                 </Descriptions.Item>
-                <Descriptions.Item label="备注" span={2}>{detailRecord.meta.note || '-'}</Descriptions.Item>
+                <Descriptions.Item label="规划备注" span={2}>{detailRecord.meta.note || '-'}</Descriptions.Item>
+                <Descriptions.Item label="发运备注" span={2}>{detailRecord.meta.dispatchRemark || '-'}</Descriptions.Item>
               </Descriptions>
             </Card>
 
