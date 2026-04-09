@@ -23,6 +23,7 @@ import {
   Upload,
   Popconfirm,
   Typography,
+  Steps,
   theme,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -35,6 +36,9 @@ import {
   DollarOutlined,
   EyeOutlined,
   UploadOutlined,
+  CheckCircleFilled,
+  ClockCircleFilled,
+  ExclamationCircleFilled,
 } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
 import type { LegacyContainer, LegacyTask, LegacyJob, LegacyOrderItem } from './taskManagerLegacyData';
@@ -540,6 +544,7 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
 
   const [nodeUpdateOpen, setNodeUpdateOpen] = useState(false);
   const [nodeUpdateTaskId, setNodeUpdateTaskId] = useState<string | null>(null);
+  const [nodeUpdateContainerNo, setNodeUpdateContainerNo] = useState<string | null>(null);
   const [nodeUpdateForm] = Form.useForm();
 
   const [containerDetailOpen, setContainerDetailOpen] = useState(false);
@@ -1137,45 +1142,22 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
   };
 
   const openNodeUpdate = (row: TaskListRow) => {
-    const flow = nodeFlowByMode(mode);
-    const flowSet = new Set(flow.map((item) => item.nodeCode));
-
-    let defaultContainer: MutableLegacyContainer | null = null;
-    let defaultNodeCode = flow[0]?.nodeCode || '';
-
-    for (const container of row.allContainers) {
-      const completedSet = new Set((container.nodeProgress?.completedNodes || [])
-        .filter((node) => flowSet.has(node.nodeCode))
-        .map((node) => node.nodeCode));
-      const nextNode = flow.find((item) => !completedSet.has(item.nodeCode));
-      if (nextNode) {
-        defaultContainer = container;
-        defaultNodeCode = nextNode.nodeCode;
-        break;
-      }
-    }
-
-    if (!defaultContainer) {
-      message.info('该任务当前环节节点已全部更新完成');
+    const firstContainer = row.allContainers[0];
+    if (!firstContainer) {
+      message.info('该任务没有集装箱信息');
       return;
     }
-
     setNodeUpdateTaskId(row.taskId);
-    nodeUpdateForm.setFieldsValue({
-      containerNo: defaultContainer.containerNo,
-      nodeCode: defaultNodeCode,
-      date: dayjs(),
-      isAbnormal: false,
-      remark: '',
-    });
+    setNodeUpdateContainerNo(firstContainer.containerNo);
+    nodeUpdateForm.resetFields();
     setNodeUpdateOpen(true);
   };
 
-  const submitNodeUpdate = async () => {
-    if (!nodeUpdateTaskId) return;
+  const submitNodeUpdate = async (nodeCode: string) => {
+    if (!nodeUpdateTaskId || !nodeUpdateContainerNo) return;
     const values = await nodeUpdateForm.validateFields();
     const flow = nodeFlowByMode(mode);
-    const nodeMeta = flow.find((item) => item.nodeCode === values.nodeCode);
+    const nodeMeta = flow.find((item) => item.nodeCode === nodeCode);
     const now = dayjs().format('YYYY-MM-DD HH:mm:ss');
 
     setTasks((prev) => prev.map((task) => {
@@ -1187,7 +1169,7 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
         jobs: task.jobs.map((job) => ({
           ...job,
           containers: job.containers.map((container) => {
-            if (container.containerNo !== values.containerNo) return container;
+            if (container.containerNo !== nodeUpdateContainerNo) return container;
             return {
               ...container,
               nodeProgress: {
@@ -1195,10 +1177,10 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
                 completedNodes: [
                   ...(container.nodeProgress?.completedNodes || []),
                   {
-                    nodeCode: values.nodeCode,
-                    nodeName: nodeMeta?.nodeName || values.nodeCode,
+                    nodeCode,
+                    nodeName: nodeMeta?.nodeName || nodeCode,
                     isAbnormal: Boolean(values.isAbnormal),
-                    date: values.date.format('YYYY-MM-DD'),
+                    date: values.date ? values.date.format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
                     remark: values.remark || '',
                     operator: 'CANSAMPAO',
                     updatedAt: now,
@@ -1211,9 +1193,8 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
       };
     }));
 
-    message.success(`${values.containerNo} 节点已更新`);
-    setNodeUpdateOpen(false);
-    setNodeUpdateTaskId(null);
+    message.success(`${nodeUpdateContainerNo} - ${nodeMeta?.nodeName || nodeCode} 已完成`);
+    nodeUpdateForm.resetFields();
   };
 
   const resetFilters = () => {
@@ -2192,42 +2173,165 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
         </Form>
       </Modal>
 
-      <Modal
-        title="节点更新"
+      <Drawer
+        title="节点跟踪"
         open={nodeUpdateOpen}
-        onCancel={() => setNodeUpdateOpen(false)}
-        onOk={submitNodeUpdate}
-        okText="提交"
-        width={520}
+        onClose={() => { setNodeUpdateOpen(false); setNodeUpdateTaskId(null); setNodeUpdateContainerNo(null); }}
+        width={500}
+        destroyOnClose
       >
-        <Form form={nodeUpdateForm} layout="vertical" initialValues={{ isAbnormal: false }}>
-          <Form.Item name="containerNo" label={businessMode === 'AIR' ? '集装号' : '集装箱'} rules={[{ required: true, message: '请选择' }]}>
-            <Select placeholder={businessMode === 'AIR' ? '选择集装号' : '选择集装箱'}>
-              {(tasks.find((task) => task.id === nodeUpdateTaskId)?.jobs || [])
-                .flatMap((job) => job.containers)
-                .map((container) => (
-                  <Option key={container.containerNo} value={container.containerNo}>{container.containerNo}</Option>
-                ))}
-            </Select>
-          </Form.Item>
-          <Form.Item name="nodeCode" label="物流节点" rules={[{ required: true, message: '请选择节点' }]}>
-            <Select placeholder="选择节点">
-              {nodeOptions.map((item) => (
-                <Option key={item.nodeCode} value={item.nodeCode}>{item.nodeName}</Option>
-              ))}
-            </Select>
-          </Form.Item>
-          <Form.Item name="date" label="日期" rules={[{ required: true, message: '请选择日期' }]}>
-            <DatePicker style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item name="isAbnormal" valuePropName="checked">
-            <Checkbox>该节点存在异常情况</Checkbox>
-          </Form.Item>
-          <Form.Item name="remark" label="备注">
-            <Input.TextArea rows={3} placeholder="选填备注" />
-          </Form.Item>
-        </Form>
-      </Modal>
+        {(() => {
+          const currentTask = tasks.find((t) => t.id === nodeUpdateTaskId);
+          if (!currentTask) return null;
+          const allContainers = currentTask.jobs.flatMap((j) => j.containers);
+          const currentContainer = allContainers.find((c) => c.containerNo === nodeUpdateContainerNo);
+          const flow = nodeFlowByMode(mode);
+          const flowSet = new Set(flow.map((item) => item.nodeCode));
+          const completedNodes = (currentContainer?.nodeProgress?.completedNodes || []).filter((n) => flowSet.has(n.nodeCode));
+          const completedMap = new Map(completedNodes.map((n) => [n.nodeCode, n]));
+          const completedCount = flow.filter((item) => completedMap.has(item.nodeCode)).length;
+          const nextNodeIndex = flow.findIndex((item) => !completedMap.has(item.nodeCode));
+          const firstJob = currentTask.jobs[0];
+
+          return (
+            <div>
+              {/* 头部信息 */}
+              <div style={{ marginBottom: 20, padding: '12px 16px', background: '#f5f5f5', borderRadius: 8 }}>
+                <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>{currentTask.id}</div>
+                <Space size={12} style={{ color: '#8c8c8c', fontSize: 13 }}>
+                  <span>{firstJob?.routeName}</span>
+                  <span>{firstJob?.originPort} → {firstJob?.destPort}</span>
+                </Space>
+              </div>
+
+              {/* 集装箱切换 */}
+              {allContainers.length > 1 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 13, color: '#8c8c8c', marginBottom: 6 }}>{businessMode === 'AIR' ? '集装号' : '集装箱'}</div>
+                  <Select
+                    value={nodeUpdateContainerNo}
+                    onChange={(val) => { setNodeUpdateContainerNo(val); nodeUpdateForm.resetFields(); }}
+                    style={{ width: '100%' }}
+                  >
+                    {allContainers.map((c) => (
+                      <Option key={c.containerNo} value={c.containerNo}>{c.containerNo}</Option>
+                    ))}
+                  </Select>
+                </div>
+              )}
+              {allContainers.length === 1 && (
+                <div style={{ marginBottom: 16 }}>
+                  <Tag color="blue" style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: 13 }}>{nodeUpdateContainerNo}</Tag>
+                </div>
+              )}
+
+              {/* 进度概览 */}
+              <div style={{ marginBottom: 20, padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
+                <Text type="secondary" style={{ fontSize: 13 }}>
+                  进度：{completedCount} / {flow.length} 个节点已完成
+                  {completedCount === flow.length && <Tag color="success" style={{ marginLeft: 8 }}>全部完成</Tag>}
+                </Text>
+              </div>
+
+              {/* 纵向时间轴 */}
+              <div style={{ padding: '0 4px' }}>
+                {flow.map((node, index) => {
+                  const completed = completedMap.get(node.nodeCode);
+                  const isCurrent = index === nextNodeIndex;
+                  const isFuture = !completed && !isCurrent;
+
+                  return (
+                    <div key={node.nodeCode} style={{ display: 'flex', gap: 12, minHeight: isCurrent ? 'auto' : 56 }}>
+                      {/* 左侧时间轴线 */}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 24 }}>
+                        {completed ? (
+                          completed.isAbnormal ? (
+                            <ExclamationCircleFilled style={{ fontSize: 20, color: '#fa8c16' }} />
+                          ) : (
+                            <CheckCircleFilled style={{ fontSize: 20, color: '#52c41a' }} />
+                          )
+                        ) : isCurrent ? (
+                          <div style={{
+                            width: 20, height: 20, borderRadius: '50%',
+                            background: '#1677ff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            boxShadow: '0 0 0 3px rgba(22, 119, 255, 0.2)',
+                          }}>
+                            <ClockCircleFilled style={{ fontSize: 12, color: '#fff' }} />
+                          </div>
+                        ) : (
+                          <div style={{
+                            width: 20, height: 20, borderRadius: '50%',
+                            border: '2px solid #d9d9d9', background: '#fff',
+                          }} />
+                        )}
+                        {index < flow.length - 1 && (
+                          <div style={{
+                            flex: 1, width: 2, minHeight: 16,
+                            background: completed ? '#52c41a' : '#d9d9d9',
+                          }} />
+                        )}
+                      </div>
+
+                      {/* 右侧内容 */}
+                      <div style={{ flex: 1, paddingBottom: isCurrent ? 16 : 8 }}>
+                        <div style={{
+                          fontWeight: isCurrent ? 600 : completed ? 500 : 400,
+                          fontSize: 14,
+                          color: isFuture ? '#bfbfbf' : '#262626',
+                          lineHeight: '20px',
+                        }}>
+                          {node.nodeName}
+                          {completed?.isAbnormal && (
+                            <Tag color="warning" style={{ marginLeft: 8, fontSize: 11 }}>异常</Tag>
+                          )}
+                        </div>
+
+                        {/* 已完成节点：显示时间和操作人 */}
+                        {completed && (
+                          <div style={{ marginTop: 4, fontSize: 12, color: '#8c8c8c' }}>
+                            <Space size={8}>
+                              <span>{completed.date}</span>
+                              {completed.operator && <span>操作人: {completed.operator}</span>}
+                            </Space>
+                            {completed.remark && (
+                              <div style={{ marginTop: 2, color: '#8c8c8c', fontStyle: 'italic' }}>
+                                备注: {completed.remark}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* 当前待执行节点：内联表单 */}
+                        {isCurrent && (
+                          <div style={{
+                            marginTop: 8, padding: 12, background: '#f0f5ff',
+                            borderRadius: 6, border: '1px solid #d6e4ff',
+                          }}>
+                            <Form form={nodeUpdateForm} layout="vertical" initialValues={{ isAbnormal: false, date: dayjs() }} size="small">
+                              <Form.Item name="date" label="完成日期" rules={[{ required: true, message: '请选择日期' }]} style={{ marginBottom: 8 }}>
+                                <DatePicker style={{ width: '100%' }} />
+                              </Form.Item>
+                              <Form.Item name="isAbnormal" valuePropName="checked" style={{ marginBottom: 8 }}>
+                                <Checkbox>该节点存在异常</Checkbox>
+                              </Form.Item>
+                              <Form.Item name="remark" label="备注" style={{ marginBottom: 8 }}>
+                                <Input.TextArea rows={2} placeholder="选填备注" />
+                              </Form.Item>
+                              <Button type="primary" size="small" onClick={() => submitNodeUpdate(node.nodeCode)}>
+                                确认完成
+                              </Button>
+                            </Form>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+      </Drawer>
 
       <Modal
         title="删除任务"
