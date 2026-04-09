@@ -2315,7 +2315,7 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
                 items={[
                   { key: 'basic', href: '#task-basic-info', title: '基本信息' },
                   { key: 'shipping', href: '#task-basic-info', title: businessMode === 'AIR' ? '航班信息' : '船务信息' },
-                  { key: 'supplier', href: '#task-supplier-info', title: '供应商 / 送货' },
+                  { key: 'supplier', href: '#task-supplier-info', title: '发往 / 拖车信息' },
                   { key: 'node', href: '#task-node-change', title: '节点变更记录' },
                   { key: 'container', href: '#task-container-list', title: businessMode === 'AIR' ? '集装号列表' : '集装箱列表' },
                   { key: 'cost', href: '#task-cost-detail', title: '成本明细' },
@@ -2380,18 +2380,45 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
                 </div>
 
                 <div id="task-supplier-info" style={{ marginTop: 20 }}>
-                  <Text strong style={{ fontSize: 15, display: 'block', marginBottom: 8 }}>供应商 / 送货信息</Text>
-                  <Descriptions column={2} size="small" bordered>
-                    <Descriptions.Item label="供应商">{selectedTask.supplier?.supplierName || '-'}</Descriptions.Item>
-                    <Descriptions.Item label="电话">{selectedTask.supplier?.phone || '-'}</Descriptions.Item>
-                    <Descriptions.Item label="地址" span={2}>{selectedTask.supplier?.address || '-'}</Descriptions.Item>
-                    <Descriptions.Item label="送货公司">{selectedTask.deliveryCompany?.companyName || '-'}</Descriptions.Item>
-                    <Descriptions.Item label="运单号">{selectedTask.deliveryCompany?.trackingNo || '-'}</Descriptions.Item>
-                    <Descriptions.Item label="司机">
-                      {(selectedTask.deliveryCompany?.driverName || '-')}{' / '}{(selectedTask.deliveryCompany?.driverPhone || '-')}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="车牌">{selectedTask.deliveryCompany?.plateNo || '-'}</Descriptions.Item>
-                  </Descriptions>
+                  <Text strong style={{ fontSize: 15, display: 'block', marginBottom: 8 }}>
+                    发往 / 拖车信息
+                    <Text type="secondary" style={{ fontSize: 12, fontWeight: 400, marginLeft: 8 }}>
+                      （由「起运国仓储 → 任务执行」环节填写）
+                    </Text>
+                  </Text>
+                  {(() => {
+                    const hasAnyDeliveryInfo = Boolean(
+                      selectedTask.supplier?.supplierName ||
+                      selectedTask.deliveryCompany?.companyName ||
+                      selectedTask.deliveryCompany?.driverName
+                    );
+                    if (!hasAnyDeliveryInfo) {
+                      return (
+                        <Alert
+                          type="warning"
+                          showIcon
+                          message="尚未执行任务"
+                          description="发往地址、拖车公司、司机车牌等信息将在仓管员执行任务时回写，可前往 起运国仓储 → 任务执行 操作。"
+                        />
+                      );
+                    }
+                    return (
+                      <Descriptions column={2} size="small" bordered>
+                        <Descriptions.Item label="发往姓名">{selectedTask.supplier?.supplierName || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="发往电话">{selectedTask.supplier?.phone || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="发往地址" span={2}>{selectedTask.supplier?.address || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="拖车公司">{selectedTask.deliveryCompany?.companyName || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="送货单号">{selectedTask.deliveryCompany?.trackingNo || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="查询电话">{selectedTask.deliveryCompany?.queryPhone || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="司机">
+                          {(selectedTask.deliveryCompany?.driverName || '-')} / {(selectedTask.deliveryCompany?.driverPhone || '-')}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="车牌">{selectedTask.deliveryCompany?.plateNo || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="预计发货时间">{selectedTask.deliveryCompany?.plannedDepartureTime || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="发货备注" span={2}>{selectedTask.deliveryCompany?.remark || '-'}</Descriptions.Item>
+                      </Descriptions>
+                    );
+                  })()}
                 </div>
 
                 <div id="task-node-change" style={{ marginTop: 20 }}>

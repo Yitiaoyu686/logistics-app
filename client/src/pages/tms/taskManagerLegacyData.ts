@@ -95,6 +95,8 @@ export interface LegacyTask {
     driverName?: string;
     driverPhone?: string;
     plateNo?: string;
+    plannedDepartureTime?: string;  // 预计发货时间（由任务执行环节回写）
+    remark?: string;                 // 发货备注（由任务执行环节回写）
   };
 }
 
@@ -1096,12 +1098,14 @@ export const LEGACY_TASKS: LegacyTask[] = [
       "address": "广东省广州市白云区黄石路江夏北二路3号云商易城B栋110"
     },
     "deliveryCompany": {
-      "companyName": "顺丰速运",
-      "trackingNo": "SF1012605193752",
-      "queryPhone": "95338",
+      "companyName": "广东广运拖车有限公司",
+      "trackingNo": "GY2026030100182",
+      "queryPhone": "020-83366666",
       "driverName": "李先生",
       "driverPhone": "+86 13570217212",
-      "plateNo": "粤A0T86A"
+      "plateNo": "粤A0T86A",
+      "plannedDepartureTime": "2026-03-01 14:30",
+      "remark": "请联系发往地址刘先生确认到货时间"
     },
     "status": "IN_PROGRESS",
     "createdBy": "CANSAMPAO",
@@ -1652,12 +1656,14 @@ export const LEGACY_TASKS: LegacyTask[] = [
       "address": "广东省广州市白云区黄石路江夏北二路3号云商易城B栋110"
     },
     "deliveryCompany": {
-      "companyName": "德邦物流",
-      "trackingNo": "DB202510200001",
-      "queryPhone": "95353",
+      "companyName": "深圳华洋拖车服务",
+      "trackingNo": "HY202510200001",
+      "queryPhone": "0755-88888888",
       "driverName": "张师傅",
       "driverPhone": "+86 13600136001",
-      "plateNo": "粤B12345"
+      "plateNo": "粤B12345",
+      "plannedDepartureTime": "2025-10-20 08:30",
+      "remark": "客户要求上午送达，需提前预约进港"
     },
     "status": "COMPLETED",
     "createdBy": "CANSAMPAO",
@@ -4128,12 +4134,14 @@ export const LEGACY_TASKS: LegacyTask[] = [
       "address": "广东省深圳市福田区深南大道1001号"
     },
     "deliveryCompany": {
-      "companyName": "申通快递",
-      "trackingNo": "STO202510280001",
-      "queryPhone": "95543",
+      "companyName": "佛山安达物流运输",
+      "trackingNo": "AD202510280001",
+      "queryPhone": "0757-66666666",
       "driverName": "赵师傅",
       "driverPhone": "+86 13500135001",
-      "plateNo": "粤B55555"
+      "plateNo": "粤B55555",
+      "plannedDepartureTime": "2025-10-28 15:00",
+      "remark": "非普货注意轻拿轻放"
     },
     "status": "IN_PROGRESS",
     "createdBy": "CANANDI",
