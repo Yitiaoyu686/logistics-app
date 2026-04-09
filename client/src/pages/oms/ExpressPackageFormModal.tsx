@@ -3,7 +3,7 @@
  * 用于添加或编辑单个快递包裹
  */
 
-import { Modal, Form, Input, Select, InputNumber, Radio, message } from 'antd';
+import { Modal, Form, Input, Select, InputNumber, Radio, Row, Col, message } from 'antd';
 import { useEffect } from 'react';
 import type { ExpressPackage } from '../../types/order';
 
@@ -67,6 +67,9 @@ export default function ExpressPackageFormModal({
         description: values.description,
         weight: values.weight,
         pieces: values.pieces,
+        length: values.length,
+        width: values.width,
+        height: values.height,
         declaredValue: values.declaredValue,
         remark: values.remark,
         receivedAt: pkg?.receivedAt,
@@ -206,6 +209,26 @@ export default function ExpressPackageFormModal({
             min={1}
             step={1}
           />
+        </Form.Item>
+
+        <Form.Item label="外箱尺寸 (cm)" tooltip="用于体积重计算：体积重(kg) = 长×宽×高÷6000（空运）">
+          <Row gutter={8}>
+            <Col span={8}>
+              <Form.Item name="length" noStyle rules={[{ type: 'number', min: 0, message: '长度不能为负' }]}>
+                <InputNumber placeholder="长" style={{ width: '100%' }} min={0} precision={1} addonAfter="cm" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="width" noStyle rules={[{ type: 'number', min: 0, message: '宽度不能为负' }]}>
+                <InputNumber placeholder="宽" style={{ width: '100%' }} min={0} precision={1} addonAfter="cm" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="height" noStyle rules={[{ type: 'number', min: 0, message: '高度不能为负' }]}>
+                <InputNumber placeholder="高" style={{ width: '100%' }} min={0} precision={1} addonAfter="cm" />
+              </Form.Item>
+            </Col>
+          </Row>
         </Form.Item>
 
         <Form.Item

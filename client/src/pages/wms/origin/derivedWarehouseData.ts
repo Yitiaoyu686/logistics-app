@@ -194,6 +194,9 @@ export function buildOriginInboundFallbackData(orders: FallbackOrder[]): Array<I
   orderNo?: string;
   updatedAt?: string;
   containerNos?: string[];
+  length?: number;
+  width?: number;
+  height?: number;
 }> {
   return orders.flatMap((order, orderIndex) => {
     const pattern = getInboundPattern(order);
@@ -205,6 +208,16 @@ export function buildOriginInboundFallbackData(orders: FallbackOrder[]): Array<I
       const trackingMeta = buildTrackingNo(order.orderNo, orderIndex, packageIndex);
       const inboundTime = buildInboundTime(order, packageIndex);
       const actualWeight = weights[packageIndex] || Number((order.totalWeight || 0).toFixed(2));
+      // 根据订单和包裹 index 生成稳定的长宽高示例（仅 Demo 展示用）
+      const dimSeed = (orderIndex * 7 + packageIndex * 11) % 5;
+      const dimPresets = [
+        { length: 30, width: 20, height: 15 },
+        { length: 45, width: 35, height: 25 },
+        { length: 60, width: 40, height: 30 },
+        { length: 25, width: 20, height: 18 },
+        { length: 50, width: 38, height: 28 },
+      ];
+      const dim = dimPresets[dimSeed];
 
       return {
         id: `derived-inb-${order.orderNo}-${packageIndex + 1}`,
@@ -217,6 +230,9 @@ export function buildOriginInboundFallbackData(orders: FallbackOrder[]): Array<I
         pieces: 1,
         actualWeight,
         actualVolume: toVolume(actualWeight, packageIndex),
+        length: dim.length,
+        width: dim.width,
+        height: dim.height,
         packageCondition: 'GOOD',
         status,
         inboundTime,

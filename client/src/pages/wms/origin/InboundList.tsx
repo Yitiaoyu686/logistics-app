@@ -92,6 +92,10 @@ interface InboundListRow extends InboundRecord {
   paymentStatus?: string;
   orderDate?: string;
   updatedAt?: string;
+  // 外箱尺寸（客户下单时申报，可选）
+  length?: number;   // 长(cm)
+  width?: number;    // 宽(cm)
+  height?: number;   // 高(cm)
 }
 
 interface TransferInboundMeta {
@@ -1691,15 +1695,51 @@ export const InboundList = ({
         title: '件数',
         dataIndex: 'pieces',
         key: 'pieces',
-        width: 70,
+        width: 60,
         align: 'center' as const,
       },
       {
         title: '重量Kg',
         key: 'actualWeight',
-        width: 90,
+        width: 80,
         align: 'right' as const,
         render: (_: unknown, record: InboundListRow) => Number(record.actualWeight || 0).toFixed(2),
+      },
+      {
+        title: '尺寸(cm)',
+        key: 'dimension',
+        width: 130,
+        render: (_: unknown, record: InboundListRow) => {
+          if (!record.length && !record.width && !record.height) {
+            return <span style={{ color: '#bfbfbf' }}>未申报</span>;
+          }
+          return (
+            <span style={{ fontFamily: 'monospace', fontSize: 12 }}>
+              {record.length || '-'}×{record.width || '-'}×{record.height || '-'}
+            </span>
+          );
+        },
+      },
+      {
+        title: '体积重Kg',
+        key: 'volumetricWeight',
+        width: 90,
+        align: 'right' as const,
+        render: (_: unknown, record: InboundListRow) => {
+          const l = Number(record.length || 0);
+          const w = Number(record.width || 0);
+          const h = Number(record.height || 0);
+          if (!l || !w || !h) return <span style={{ color: '#bfbfbf' }}>-</span>;
+          // 空运体积重 = L × W × H / 6000
+          const volumetric = (l * w * h) / 6000;
+          const actual = Number(record.actualWeight || 0);
+          const isVolumetricHigher = volumetric > actual;
+          return (
+            <span style={{ color: isVolumetricHigher ? '#fa8c16' : '#595959', fontWeight: isVolumetricHigher ? 600 : 400 }}>
+              {volumetric.toFixed(2)}
+            </span>
+          );
+        },
       },
       {
         title: '子运单号',
