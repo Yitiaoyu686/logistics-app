@@ -274,6 +274,192 @@ const getUnitUtilization = (unit: ShippingUnit) => {
 
 const isDepartedUnit = (unit: ShippingUnit) => ['SHIPPED', 'ARRIVED'].includes(String(unit.status));
 
+// ==================== Mock 数据 ====================
+// 前端 Demo 数据，不依赖后端接口
+const buildMockTaskExecutionData = (transportMode: 'SEA' | 'AIR') => {
+  const now = new Date().toISOString();
+  const today = now.slice(0, 10);
+  const prefix = transportMode === 'AIR' ? 'A' : 'S';
+
+  // Mock Routes
+  const mockRoutes: RouteConfigRow[] = [
+    {
+      id: 'ROUTE-MOCK-001',
+      originCountry: 'CHN',
+      originCity: 'CAN',
+      destCountry: 'NGN',
+      destCity: 'LOS',
+      transportType: transportMode,
+      arrivalStation: 'IKEJ STA',
+      status: 'ACTIVE',
+      remark: JSON.stringify({ serviceType: '特快', cargoType: '普货', creator: '张运营' }),
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'ROUTE-MOCK-002',
+      originCountry: 'CHN',
+      originCity: 'SZX',
+      destCountry: 'NGN',
+      destCity: 'LOS',
+      transportType: transportMode,
+      arrivalStation: 'IKEJ STA',
+      status: 'ACTIVE',
+      remark: JSON.stringify({ serviceType: '特快', cargoType: '普货', creator: '李运营' }),
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'ROUTE-MOCK-003',
+      originCountry: 'CHN',
+      originCity: 'HKG',
+      destCountry: 'GHA',
+      destCity: 'ACC',
+      transportType: transportMode,
+      arrivalStation: 'ACC STA',
+      status: 'ACTIVE',
+      remark: JSON.stringify({ serviceType: '普快', cargoType: '普货', creator: 'SYSTEM' }),
+      createdAt: now,
+      updatedAt: now,
+    },
+  ];
+
+  // Mock ShippingUnits (2 条待执行 + 绑定集装号 + 绑定任务号)
+  const mockUnits: ShippingUnit[] = [
+    {
+      id: 'UNIT-MOCK-001',
+      unitNo: 'CSLU1234567',
+      unitType: '40HQ',
+      transportMode,
+      route: 'CAN.CHN→LOS.NGN',
+      maxWeight: 26000,
+      maxVolume: 76,
+      currentWeight: 12800,
+      currentVolume: 38.5,
+      orderIds: ['SUB-001', 'SUB-002', 'SUB-003'],
+      loadedPieces: 156,
+      loadedOrders: 3,
+      status: 'LOADING',
+      jobNo: `${prefix}-JOB26040001`,
+      loadingStartTime: now,
+      remark: JSON.stringify({
+        routeId: 'ROUTE-MOCK-001',
+        serviceType: '特快',
+        cargoType: '普货',
+        creator: '张运营',
+        station: 'IKEJ STA',
+      }),
+      createdAt: now,
+      updatedAt: now,
+    } as ShippingUnit,
+    {
+      id: 'UNIT-MOCK-002',
+      unitNo: 'MSKU7654321',
+      unitType: '40HQ',
+      transportMode,
+      route: 'SZX.CHN→LOS.NGN',
+      maxWeight: 26000,
+      maxVolume: 76,
+      currentWeight: 9600,
+      currentVolume: 28.2,
+      orderIds: ['SUB-004', 'SUB-005'],
+      loadedPieces: 92,
+      loadedOrders: 2,
+      status: 'LOADING',
+      jobNo: `${prefix}-JOB26040002`,
+      loadingStartTime: now,
+      remark: JSON.stringify({
+        routeId: 'ROUTE-MOCK-002',
+        serviceType: '特快',
+        cargoType: '普货',
+        creator: '李运营',
+        station: 'IKEJ STA',
+      }),
+      createdAt: now,
+      updatedAt: now,
+    } as ShippingUnit,
+  ];
+
+  // Mock Stock (装载在这两个集装箱里的库存)
+  const mockStocks: StockRow[] = [
+    {
+      id: 'STOCK-MOCK-001',
+      subOrderNo: `${prefix}-2026040800001-01`,
+      displayOrderNo: `${prefix}-2026040800001`,
+      displaySubOrderNo: `${prefix}-2026040800001-01`,
+      trackingNo: 'SF1234567890',
+      clientName: '广州跨境客户A',
+      salesPerson: '销售A',
+      goodsDescription: '日用百货',
+      serviceType: '特快',
+      route: 'CAN.CHN→LOS.NGN',
+      pieces: 80,
+      weight: 6500,
+      volume: 19.2,
+      status: 'PACKED',
+      shippingUnitId: 'UNIT-MOCK-001',
+    },
+    {
+      id: 'STOCK-MOCK-002',
+      subOrderNo: `${prefix}-2026040800002-01`,
+      displayOrderNo: `${prefix}-2026040800002`,
+      displaySubOrderNo: `${prefix}-2026040800002-01`,
+      trackingNo: 'YT2099000888',
+      clientName: '广州跨境客户B',
+      salesPerson: '销售B',
+      goodsDescription: '服装鞋包',
+      serviceType: '特快',
+      route: 'CAN.CHN→LOS.NGN',
+      pieces: 76,
+      weight: 6300,
+      volume: 19.3,
+      status: 'PACKED',
+      shippingUnitId: 'UNIT-MOCK-001',
+    },
+    {
+      id: 'STOCK-MOCK-003',
+      subOrderNo: `${prefix}-2026040800003-01`,
+      displayOrderNo: `${prefix}-2026040800003`,
+      displaySubOrderNo: `${prefix}-2026040800003-01`,
+      trackingNo: 'ZT2603270999',
+      clientName: '深圳客户C',
+      salesPerson: '销售C',
+      goodsDescription: '电子配件',
+      serviceType: '特快',
+      route: 'SZX.CHN→LOS.NGN',
+      pieces: 92,
+      weight: 9600,
+      volume: 28.2,
+      status: 'PACKED',
+      shippingUnitId: 'UNIT-MOCK-002',
+    },
+  ];
+
+  // Mock Jobs (对应集装箱绑定的 jobNo)
+  const mockJobs = [
+    {
+      id: 'JOB-MOCK-001',
+      jobNo: `${prefix}-JOB26040001`,
+      route: 'CAN.CHN→LOS.NGN',
+      transportType: transportMode,
+      status: 'PENDING',
+      createdAt: now,
+      createdDate: today,
+    },
+    {
+      id: 'JOB-MOCK-002',
+      jobNo: `${prefix}-JOB26040002`,
+      route: 'SZX.CHN→LOS.NGN',
+      transportType: transportMode,
+      status: 'PENDING',
+      createdAt: now,
+      createdDate: today,
+    },
+  ];
+
+  return { mockRoutes, mockUnits, mockStocks, mockJobs };
+};
+
 const isRouteDeparted = (route?: GroupRow | null) => Boolean(route?.units.some((unit) => isDepartedUnit(unit)));
 
 const getGroupJobNos = (row: GroupRow) => {
@@ -337,28 +523,14 @@ export const ContainerMgt = ({
 
   const fetchData = async () => {
     setLoading(true);
-    try {
-      const [routeRes, unitRes, stockRes, jobRes]: any[] = await Promise.all([
-        systemApi.routes({ transportType: 'SEA', status: 'ACTIVE' }),
-        warehouseApi.listUnits({ transportMode: 'SEA', warehouseId }),
-        warehouseApi.listStock({ warehouse: 'CN', warehouseId, businessLine: 'SEA' }),
-        jobApi.list({ transportType: 'SEA' }),
-      ]);
-      setRoutes(Array.isArray(routeRes?.data) ? routeRes.data : routeRes || []);
-      const allUnits = Array.isArray(unitRes?.data) ? unitRes.data : [];
-      // 空运 Demo：只保留前5个集装号
-      setUnits(!isSea ? allUnits.slice(0, 5) : allUnits);
-      setStockItems(Array.isArray(stockRes?.data) ? stockRes.data : []);
-      setJobs(Array.isArray(jobRes?.data) ? jobRes.data : []);
-    } catch (error: any) {
-      message.error(error?.message || '加载集中装箱数据失败');
-      setRoutes([]);
-      setUnits([]);
-      setStockItems([]);
-      setJobs([]);
-    } finally {
-      setLoading(false);
-    }
+    // 使用本地 Mock 数据（不依赖后端接口）
+    const transportMode = isSea ? 'SEA' : 'AIR';
+    const { mockRoutes, mockUnits, mockStocks, mockJobs } = buildMockTaskExecutionData(transportMode);
+    setRoutes(mockRoutes);
+    setUnits(mockUnits);
+    setStockItems(mockStocks);
+    setJobs(mockJobs);
+    setLoading(false);
   };
 
   useEffect(() => {
