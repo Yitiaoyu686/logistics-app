@@ -461,11 +461,11 @@ const buildTransferInboundFallbackData = (businessMode: BusinessMode): TransferI
 };
 
 const buildReturnInboundFallbackData = (businessMode: BusinessMode): ReturnInboundTaskRow[] => {
-  const prefix = businessMode === 'AIR' ? 'AIR' : 'SEA';
+  const prefix = businessMode === 'AIR' ? 'A' : 'S';
   return [
     recalculateReturnInboundTask({
       id: `RET-IN-${prefix}-001`,
-      taskNo: `${prefix}-RET-TASK-20260327-001`,
+      taskNo: `${prefix}-JOB26030061`,
       sourceTaskNo: `${prefix}-JOB26030061`,
       returnType: '客户退单',
       returnReason: '客户拒收后回仓',
@@ -504,7 +504,7 @@ const buildReturnInboundFallbackData = (businessMode: BusinessMode): ReturnInbou
     }),
     recalculateReturnInboundTask({
       id: `RET-IN-${prefix}-002`,
-      taskNo: `${prefix}-RET-TASK-20260327-002`,
+      taskNo: `${prefix}-JOB26030062`,
       sourceTaskNo: `${prefix}-JOB26030062`,
       returnType: '海关退运',
       returnReason: '查验退回后重新回仓',
