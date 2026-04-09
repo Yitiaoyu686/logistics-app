@@ -999,15 +999,7 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
       pieces: job.pieces,
       executeDate: dayjs(job.executeDate),
       remark: job.remark || '',
-      supplierName: task.supplier?.supplierName || '',
-      supplierPhone: task.supplier?.phone || '',
-      supplierAddress: task.supplier?.address || '',
-      deliveryCompany: task.deliveryCompany?.companyName || '',
-      trackingNo: task.deliveryCompany?.trackingNo || '',
-      queryPhone: task.deliveryCompany?.queryPhone || '',
-      driverName: task.deliveryCompany?.driverName || '',
-      driverPhone: task.deliveryCompany?.driverPhone || '',
-      plateNo: task.deliveryCompany?.plateNo || '',
+      // 发往/送货公司信息由"任务执行"环节填写，这里不再重复录入
     });
     setEditOpen(true);
   };
@@ -1035,22 +1027,10 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
           executeDate: values.executeDate.format('YYYY-MM-DD'),
           remark: values.remark || '',
         };
+        // 发往/送货公司信息由任务执行环节维护，此处保持原值不变
         return {
           ...task,
           updatedAt: now,
-          supplier: {
-            supplierName: values.supplierName || '',
-            phone: values.supplierPhone || '',
-            address: values.supplierAddress || '',
-          },
-          deliveryCompany: {
-            companyName: values.deliveryCompany || '',
-            trackingNo: values.trackingNo || '',
-            queryPhone: values.queryPhone || '',
-            driverName: values.driverName || '',
-            driverPhone: values.driverPhone || '',
-            plateNo: values.plateNo || '',
-          },
           jobs: [updatedJob, ...task.jobs.slice(1)],
         };
       }));
@@ -1067,18 +1047,19 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
         createdBy: 'CANSAMPAO',
         createdAt: now,
         updatedAt: now,
+        // 发往/送货公司信息由任务执行环节填写，创建时为空占位
         supplier: {
-          supplierName: values.supplierName || '',
-          phone: values.supplierPhone || '',
-          address: values.supplierAddress || '',
+          supplierName: '',
+          phone: '',
+          address: '',
         },
         deliveryCompany: {
-          companyName: values.deliveryCompany || '',
-          trackingNo: values.trackingNo || '',
-          queryPhone: values.queryPhone || '',
-          driverName: values.driverName || '',
-          driverPhone: values.driverPhone || '',
-          plateNo: values.plateNo || '',
+          companyName: '',
+          trackingNo: '',
+          queryPhone: '',
+          driverName: '',
+          driverPhone: '',
+          plateNo: '',
         },
         jobs: [{
           id: jobId,
@@ -2103,81 +2084,12 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
               <Alert style={{ marginBottom: 16 }} type="info" showIcon message={businessMode === 'AIR' ? `关联集装号：${editContainerCount} 个` : `关联集装箱：${editContainerCount} 个`} />
             ) : null}
 
-            <div style={createSectionStyle}>
-              <div style={createSectionTitleStyle}>发往信息</div>
-              <Row gutter={20}>
-                <Col span={12}>
-                  <Form.Item
-                    {...createFormItemLayout}
-                    name="supplierName"
-                    label="供应商"
-                    rules={[{ required: true, message: '请输入供应商' }]}
-                    style={createFormItemStyle}
-                  >
-                    <Input />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item {...createFormItemLayout} name="supplierPhone" label="电话" style={createFormItemStyle}>
-                    <Input />
-                  </Form.Item>
-                </Col>
-              </Row>
-              <Row gutter={20}>
-                <Col span={24}>
-                  <Form.Item
-                    {...createFormItemLayout}
-                    name="supplierAddress"
-                    label="地址"
-                    style={{ ...createFormItemStyle, marginBottom: 0 }}
-                  >
-                    <Input.TextArea rows={2} />
-                  </Form.Item>
-                </Col>
-              </Row>
-            </div>
-
-            <div style={{ marginBottom: 8 }}>
-              <div style={createSectionTitleStyle}>送货公司信息</div>
-              <Row gutter={20}>
-                <Col span={12}>
-                  <Form.Item {...createFormItemLayout} name="deliveryCompany" label="公司名称" style={createFormItemStyle}>
-                    <Select allowClear>
-                      {DELIVERY_COMPANIES.map((item) => <Option key={item} value={item}>{item}</Option>)}
-                    </Select>
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item {...createFormItemLayout} name="trackingNo" label="运单号/订单号" style={createFormItemStyle}>
-                    <Input />
-                  </Form.Item>
-                </Col>
-              </Row>
-              <Row gutter={20}>
-                <Col span={12}>
-                  <Form.Item {...createFormItemLayout} name="driverName" label="司机名称" style={createFormItemStyle}>
-                    <Input />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item {...createFormItemLayout} name="driverPhone" label="司机电话" style={createFormItemStyle}>
-                    <Input />
-                  </Form.Item>
-                </Col>
-              </Row>
-              <Row gutter={20}>
-                <Col span={12}>
-                  <Form.Item {...createFormItemLayout} name="queryPhone" label="查询电话" style={{ ...createFormItemStyle, marginBottom: 0 }}>
-                    <Input />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item {...createFormItemLayout} name="plateNo" label="车牌号码" style={{ ...createFormItemStyle, marginBottom: 0 }}>
-                    <Input />
-                  </Form.Item>
-                </Col>
-              </Row>
-            </div>
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginTop: 8 }}
+              message="发往地址、拖车公司、司机与车牌等信息在「起运国仓储 → 任务执行」环节由仓管员填写，本表单不再重复录入。"
+            />
           </div>
         </Form>
       </Modal>
