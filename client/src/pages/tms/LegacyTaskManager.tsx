@@ -544,7 +544,6 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
 
   const [nodeUpdateOpen, setNodeUpdateOpen] = useState(false);
   const [nodeUpdateTaskId, setNodeUpdateTaskId] = useState<string | null>(null);
-  const [nodeUpdateContainerNo, setNodeUpdateContainerNo] = useState<string | null>(null);
   const [nodeUpdateForm] = Form.useForm();
 
   const [containerDetailOpen, setContainerDetailOpen] = useState(false);
@@ -1142,23 +1141,26 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
   };
 
   const openNodeUpdate = (row: TaskListRow) => {
-    const firstContainer = row.allContainers[0];
-    if (!firstContainer) {
-      message.info('该任务没有集装箱信息');
-      return;
-    }
     setNodeUpdateTaskId(row.taskId);
-    setNodeUpdateContainerNo(firstContainer.containerNo);
     nodeUpdateForm.resetFields();
     setNodeUpdateOpen(true);
   };
 
   const submitNodeUpdate = async (nodeCode: string) => {
-    if (!nodeUpdateTaskId || !nodeUpdateContainerNo) return;
+    if (!nodeUpdateTaskId) return;
     const values = await nodeUpdateForm.validateFields();
     const flow = nodeFlowByMode(mode);
     const nodeMeta = flow.find((item) => item.nodeCode === nodeCode);
     const now = dayjs().format('YYYY-MM-DD HH:mm:ss');
+    const nodeRecord = {
+      nodeCode,
+      nodeName: nodeMeta?.nodeName || nodeCode,
+      isAbnormal: Boolean(values.isAbnormal),
+      date: values.date ? values.date.format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
+      remark: values.remark || '',
+      operator: 'CANSAMPAO',
+      updatedAt: now,
+    };
 
     setTasks((prev) => prev.map((task) => {
       if (task.id !== nodeUpdateTaskId) return task;
@@ -1168,32 +1170,21 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
         status: task.status === 'PENDING' ? 'IN_PROGRESS' : task.status,
         jobs: task.jobs.map((job) => ({
           ...job,
-          containers: job.containers.map((container) => {
-            if (container.containerNo !== nodeUpdateContainerNo) return container;
-            return {
-              ...container,
-              nodeProgress: {
-                ...container.nodeProgress,
-                completedNodes: [
-                  ...(container.nodeProgress?.completedNodes || []),
-                  {
-                    nodeCode,
-                    nodeName: nodeMeta?.nodeName || nodeCode,
-                    isAbnormal: Boolean(values.isAbnormal),
-                    date: values.date ? values.date.format('YYYY-MM-DD') : dayjs().format('YYYY-MM-DD'),
-                    remark: values.remark || '',
-                    operator: 'CANSAMPAO',
-                    updatedAt: now,
-                  },
-                ],
-              },
-            };
-          }),
+          containers: job.containers.map((container) => ({
+            ...container,
+            nodeProgress: {
+              ...container.nodeProgress,
+              completedNodes: [
+                ...(container.nodeProgress?.completedNodes || []),
+                nodeRecord,
+              ],
+            },
+          })),
         })),
       };
     }));
 
-    message.success(`${nodeUpdateContainerNo} - ${nodeMeta?.nodeName || nodeCode} 已完成`);
+    message.success(`${nodeMeta?.nodeName || nodeCode} 已完成`);
     nodeUpdateForm.resetFields();
   };
 
@@ -2176,22 +2167,22 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
       <Drawer
         title="节点跟踪"
         open={nodeUpdateOpen}
-        onClose={() => { setNodeUpdateOpen(false); setNodeUpdateTaskId(null); setNodeUpdateContainerNo(null); }}
+        onClose={() => { setNodeUpdateOpen(false); setNodeUpdateTaskId(null); }}
         width={500}
         destroyOnClose
       >
         {(() => {
           const currentTask = tasks.find((t) => t.id === nodeUpdateTaskId);
           if (!currentTask) return null;
-          const allContainers = currentTask.jobs.flatMap((j) => j.containers);
-          const currentContainer = allContainers.find((c) => c.containerNo === nodeUpdateContainerNo);
+          const firstContainer = currentTask.jobs.flatMap((j) => j.containers)[0];
           const flow = nodeFlowByMode(mode);
           const flowSet = new Set(flow.map((item) => item.nodeCode));
-          const completedNodes = (currentContainer?.nodeProgress?.completedNodes || []).filter((n) => flowSet.has(n.nodeCode));
+          const completedNodes = (firstContainer?.nodeProgress?.completedNodes || []).filter((n) => flowSet.has(n.nodeCode));
           const completedMap = new Map(completedNodes.map((n) => [n.nodeCode, n]));
           const completedCount = flow.filter((item) => completedMap.has(item.nodeCode)).length;
           const nextNodeIndex = flow.findIndex((item) => !completedMap.has(item.nodeCode));
           const firstJob = currentTask.jobs[0];
+          const containerNos = currentTask.jobs.flatMap((j) => j.containers).map((c) => c.containerNo);
 
           return (
             <div>
@@ -2204,24 +2195,14 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
                 </Space>
               </div>
 
-              {/* 集装箱切换 */}
-              {allContainers.length > 1 && (
+              {/* 关联集装箱 */}
+              {containerNos.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 13, color: '#8c8c8c', marginBottom: 6 }}>{businessMode === 'AIR' ? '集装号' : '集装箱'}</div>
-                  <Select
-                    value={nodeUpdateContainerNo}
-                    onChange={(val) => { setNodeUpdateContainerNo(val); nodeUpdateForm.resetFields(); }}
-                    style={{ width: '100%' }}
-                  >
-                    {allContainers.map((c) => (
-                      <Option key={c.containerNo} value={c.containerNo}>{c.containerNo}</Option>
+                  <Space size={4} wrap>
+                    {containerNos.map((no) => (
+                      <Tag key={no} color="blue" style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: 12 }}>{no}</Tag>
                     ))}
-                  </Select>
-                </div>
-              )}
-              {allContainers.length === 1 && (
-                <div style={{ marginBottom: 16 }}>
-                  <Tag color="blue" style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: 13 }}>{nodeUpdateContainerNo}</Tag>
+                  </Space>
                 </div>
               )}
 
