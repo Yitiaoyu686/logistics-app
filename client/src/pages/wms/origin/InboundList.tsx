@@ -1842,9 +1842,6 @@ export const InboundList = ({
                 <Button icon={<ReloadOutlined />} onClick={handleReset}>
                   重置
                 </Button>
-                <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalVisible(true)}>
-                  新增入库
-                </Button>
               </div>
             </div>
           </Card>
