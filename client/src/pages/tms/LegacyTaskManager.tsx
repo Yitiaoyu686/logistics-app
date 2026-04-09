@@ -379,8 +379,21 @@ function formatAttachmentSize(size: number) {
   return `${size} B`;
 }
 
-function cloneTasks(): MutableLegacyTask[] {
-  return JSON.parse(JSON.stringify(LEGACY_TASKS)) as MutableLegacyTask[];
+function cloneTasks(businessMode: LegacyBusinessMode = 'ALL'): MutableLegacyTask[] {
+  const prefix = businessMode === 'AIR' ? 'A' : 'S';
+  const cloned = JSON.parse(JSON.stringify(LEGACY_TASKS)) as MutableLegacyTask[];
+  // 按编号规则为任务编号添加业务前缀（S- 海运 / A- 空运）
+  return cloned.map((task) => {
+    const prefixedId = /^[AS]-/.test(task.id) ? task.id : `${prefix}-${task.id}`;
+    return {
+      ...task,
+      id: prefixedId,
+      jobs: task.jobs.map((job) => ({
+        ...job,
+        jobNo: /^[AS]-/.test(job.jobNo) ? job.jobNo : `${prefix}-${job.jobNo}`,
+      })),
+    };
+  });
 }
 
 function nodeFlowByMode(mode: LegacyTaskMode) {
@@ -513,7 +526,12 @@ interface LegacyTaskManagerProps {
 }
 
 export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'ORIGIN', businessMode = 'ALL' }) => {
-  const [tasks, setTasks] = useState<MutableLegacyTask[]>(() => cloneTasks());
+  const [tasks, setTasks] = useState<MutableLegacyTask[]>(() => cloneTasks(businessMode));
+
+  // 当 businessMode 切换时（如海运↔空运），重新加载数据并应用对应前缀
+  useEffect(() => {
+    setTasks(cloneTasks(businessMode));
+  }, [businessMode]);
   const detailScrollRef = useRef<HTMLDivElement | null>(null);
 
   const [keyword, setKeyword] = useState('');
@@ -1038,7 +1056,8 @@ export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'OR
       }));
       message.success('任务已更新');
     } else {
-      const taskId = `JOB${dayjs().format('YYMMDDHHmmss')}${Math.floor(Math.random() * 90 + 10)}`;
+      const bizPrefix = businessMode === 'AIR' ? 'A' : 'S';
+      const taskId = `${bizPrefix}-JOB${dayjs().format('YYMM')}${String(Math.floor(Math.random() * 9000 + 1000)).padStart(4, '0')}`;
       const jobId = `J${Math.floor(Math.random() * 900 + 100)}`;
       const prefix = makeContainerPrefix(values.originPort, values.destPort);
       const containers = genContainers(prefix, values.routeName, values.serviceType === 'EXPRESS' ? '特快' : '普快', 5);
