@@ -139,3 +139,16 @@
   - 更新时同步推进该任务下所有关联集装箱的节点状态
   - 关联集装箱列表以 Tag 形式仅作展示
   - _Requirements: 4.8_
+
+- [x] 10. 任务编号格式统一
+- [x] 10.1 统一起运国办/到达国办任务编号为 S-/A- 前缀格式
+  - `cloneTasks(businessMode)` 加载 Mock 时为 task.id 和 jobNo 添加 `S-` 或 `A-` 前缀
+  - businessMode 切换时（海运↔空运）自动重新加载数据
+  - 新建任务 taskId 遵循 `{prefix}-JOBYYMM+4位流水` 格式
+  - 符合 00-系统总体编号规则汇总表 JOB 任务号规范
+
+- [x] 11. JOB 成本录入补齐汇率列
+- [x] 11.1 成本录入 Drawer 增加"录入汇率" + "折合CNY"列
+  - 非 CNY 币种时汇率可编辑（InputNumber precision=4）
+  - CNY 时显示 `-` 占位
+  - 自动计算 `amount × exchangeRate` 为折合 CNY，灰色只读

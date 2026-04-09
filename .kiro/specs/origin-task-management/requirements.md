@@ -8,6 +8,7 @@
 - `OriginTaskManager.tsx` → 以 `mode="ORIGIN"` 实例化 LegacyTaskManager
 - `DestJobManager.tsx` → 以 `mode="DEST"` 实例化 LegacyTaskManager
 - 两端共用同一份 Mock 数据（`taskManagerLegacyData.ts`），业务规则与节点流按 mode 动态切换
+- 任务编号格式：`{S/A}-JOBYYMMNNNN`（海运 `S-`、空运 `A-`），cloneTasks 按 businessMode 动态添加前缀
 
 ## 需求
 
