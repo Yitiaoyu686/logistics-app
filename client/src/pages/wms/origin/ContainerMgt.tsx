@@ -4,6 +4,7 @@ import {
   Button,
   Card,
   Col,
+  DatePicker,
   Descriptions,
   Drawer,
   Form,
@@ -59,10 +60,28 @@ interface TaskExecutionMeta {
   recipientName?: string;
   recipientPhone?: string;
   recipientAddress?: string;
+  // 拖车公司信息
+  deliveryCompany?: string;
+  trackingNo?: string;          // 送货单号（拖车公司给的单号）
+  queryPhone?: string;          // 拖车公司客服/查询电话
+  // 司机与车辆
   driverName?: string;
   driverPhone?: string;
   plateNo?: string;
+  // 发货时间和备注
+  plannedDepartureTime?: string;
+  remark?: string;
 }
+
+// 拖车公司选项
+const DELIVERY_COMPANY_OPTIONS = [
+  '广东广运拖车',
+  '深圳华洋拖车',
+  '佛山安达物流',
+  '广州顺风拖车',
+  '东莞快运拖车',
+  '其他',
+];
 
 interface RouteConfigRow {
   id: string;
@@ -1068,9 +1087,16 @@ export const ContainerMgt = ({
         recipientName: values.recipientName.trim(),
         recipientPhone: values.recipientPhone.trim(),
         recipientAddress: values.recipientAddress.trim(),
+        deliveryCompany: values.deliveryCompany || '',
+        trackingNo: (values.trackingNo || '').trim(),
+        queryPhone: (values.queryPhone || '').trim(),
         driverName: values.driverName.trim(),
         driverPhone: values.driverPhone.trim(),
         plateNo: values.plateNo.trim(),
+        plannedDepartureTime: values.plannedDepartureTime
+          ? dayjs(values.plannedDepartureTime).format('YYYY-MM-DD HH:mm')
+          : '',
+        remark: (values.remark || '').trim(),
       };
 
       if (!selectedRoute.id.startsWith('orphan:')) {
@@ -2072,8 +2098,47 @@ export const ContainerMgt = ({
             label="发往详细地址"
             rules={[{ required: true, message: '请输入发往详细地址' }]}
           >
-            <Input placeholder="请输入详细地址" />
+            <Input placeholder="请输入详细地址（港口/承运人仓库）" />
           </Form.Item>
+
+          {/* 拖车公司信息 */}
+          <div style={{ marginBottom: 8, color: '#595959', fontWeight: 500, fontSize: 13, borderLeft: '3px solid #1677ff', paddingLeft: 8 }}>
+            拖车公司信息
+          </div>
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item
+                name="deliveryCompany"
+                label="拖车公司"
+                rules={[{ required: true, message: '请选择拖车公司' }]}
+              >
+                <Select
+                  placeholder="请选择拖车公司"
+                  allowClear
+                  options={DELIVERY_COMPANY_OPTIONS.map((name) => ({ label: name, value: name }))}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="trackingNo"
+                label="送货单号"
+              >
+                <Input placeholder="拖车公司提供的送货单号（选填）" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item
+            name="queryPhone"
+            label="查询电话"
+          >
+            <Input placeholder="拖车公司客服/查询电话（选填）" />
+          </Form.Item>
+
+          {/* 司机与车辆信息 */}
+          <div style={{ marginBottom: 8, color: '#595959', fontWeight: 500, fontSize: 13, borderLeft: '3px solid #1677ff', paddingLeft: 8 }}>
+            司机与车辆
+          </div>
           <Row gutter={12}>
             <Col span={8}>
               <Form.Item
@@ -2103,6 +2168,26 @@ export const ContainerMgt = ({
               </Form.Item>
             </Col>
           </Row>
+
+          {/* 发货时间与备注 */}
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item
+                name="plannedDepartureTime"
+                label="预计发货时间"
+              >
+                <DatePicker
+                  showTime
+                  format="YYYY-MM-DD HH:mm"
+                  style={{ width: '100%' }}
+                  placeholder="选择预计发货时间"
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item name="remark" label="备注">
+            <Input.TextArea rows={2} placeholder="发货备注（选填）" maxLength={200} showCount />
+          </Form.Item>
         </Form>
       </Modal>
     </div>
