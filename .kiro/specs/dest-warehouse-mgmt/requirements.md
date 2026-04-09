@@ -88,13 +88,14 @@
 4. The DPN 管理页面 shall 在「运单数 / 件数 / 重量Kg」列上鼠标悬浮时弹出 Popover 展示该 DPN 内的运单明细（DPN明细子表，含 JOB/站点 rowSpan、单号、业务员、用户、线路、件数、尺寸CM、体积CBM、体积重Kg、重量Kg）。
 5. The DPN 管理页面 shall 提供筛选条件：关键词（DPN号/任务号/运单号/站点）、线路下拉、物流状态下拉、执行状态下拉。
 6. The DPN 管理页面 shall 提供「查询」「刷新」「创建DPN任务」三个工具栏按钮。
-7. When 用户点击「创建DPN任务」按钮时, the DPN 管理页面 shall 弹出创建 Modal 表单，包含字段：发往站点（toStation）、执行日期（executeDate）、运输方式（DELIVERY 空运口 / SATELLITE_STATION 陆运口 Radio）、收件人姓名、电话、地址、物流公司、查询电话、司机姓名、司机电话、车牌、备注。提交后调用 `v2PodApi.createDpnDraft` 创建草稿并自动打开「绑定运单」抽屉。
+7. When 用户点击「创建DPN任务」按钮时, the DPN 管理页面 shall 弹出**精简版**创建 Modal（2026-04 设计调整），仅录入规划阶段信息：DPN号（自动生成只读）、收件人姓名/电话/地址、发往站点（toStation）、执行日期（executeDate）、运输方式（DELIVERY 空运口 / SATELLITE_STATION 陆运口 Radio）、备注。**不再包含**物流公司、查询电话、司机姓名、司机电话、车牌字段（迁移到执行发车环节）。Modal 底部显示蓝色 Alert 提示此迁移规则。提交后调用 `v2PodApi.createDpnDraft` 创建草稿并自动打开「绑定运单」抽屉。
 8. While DPN 处于 SENDER 角色视图且状态为「待绑定」时, the 操作列 shall 显示「绑定运单」按钮；点击后打开绑定抽屉，提供「手动选择 / 扫码」两种模式从可绑定运单候选列表中勾选并调用 `v2PodApi.bindSubOrders` 提交。
-9. While DPN 处于 SENDER 角色视图且状态为「待发运」（itemCount > 0）时, the 操作列 shall 显示「执行发车」按钮；点击后弹出派单 Modal（司机姓名、电话、driverUserId），提交后调用 `v2PodApi.createDeliveryTask`。
+9. While DPN 处于 SENDER 角色视图且状态为「待发运」（itemCount > 0）时, the 操作列 shall 显示「执行发车」按钮；点击后弹出**增强版**执行发车 Modal（2026-04 重构，宽度 720px），分三组字段：① 物流公司信息：物流公司 Select（数据源：基础设置 → 供应商管理 `supplierType=TRUCKING`，失败时回退到 `FALLBACK_DPN_TRUCKING_SUPPLIERS` 5 家预设）、查询电话；② 司机与车辆：司机名称、司机电话、车牌号（均必填）；③ 发车时间与备注：实际发车时间（DatePicker showTime，默认当前时间）、发车备注。提交后调用 `v2PodApi.createDeliveryTask`，并将所有新字段合并进 DPN.remark 后 `setRows` 本地即时刷新。已移除原 `driverUserId` 字段，改为内部默认 `U-OPS-US-01`。
 10. While DPN 处于 RECEIVER 角色视图且状态为「待入库」时, the 操作列 shall 显示「入库」按钮，点击提示用户前往「DPN 入库」Tab 处理。
 11. The 操作列 shall 始终显示「查看」（打开详情抽屉）和「打印」按钮。
 12. When 用户点击 DPN 号或「查看」按钮时, the DPN 管理页面 shall 打开详情抽屉，展示 DPN 元数据 + 运单明细表（含 DPN 列 rowSpan 合并、JOB/站点 列 rowSpan 合并、汇总行：件数/体积/体积重/重量）。
-13. The DPN 管理页面 shall 通过解析 `remark` 字段提取 routeName/toStation/executeDate/logisticsCompany/queryPhone/driverName/driverPhone/plateNo/note 等元数据用于展示。
+13. The DPN 管理页面 shall 通过解析 `remark` 字段提取 routeName/toStation/executeDate/logisticsCompany/queryPhone/driverName/driverPhone/plateNo/**actualDepartureTime**/note 等元数据用于展示（2026-04 新增 actualDepartureTime 字段）。
+14. The DPN 详情抽屉顶部 shall 分两行展示信息：① 第一行规划信息（DPN/发往站点/执行日期）；② 第二行灰底卡片"发车信息"区块（物流公司/车牌/司机/司机电话/查询电话/实际发车时间/备注），副标题注明"由执行发车时填写"。执行发车成功后发车信息区块立即刷新。
 
 ### Requirement 6: 配送列表（DeliveryList）
 
