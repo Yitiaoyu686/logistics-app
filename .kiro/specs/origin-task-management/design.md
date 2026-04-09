@@ -2,16 +2,23 @@
 
 ## 概述
 
-**目标**: 将起运国办的「创建任务」和「出口跟踪」整合为统一的任务管理模块，引入「任务（Task）」作为 JOB 的上层聚合概念，实现多JOB聚合视图、按集装号粒度的动态运输节点跟踪。
+**目标**: 将起运国办/到达国办的任务管理整合为统一模块，引入「任务（Task）」作为 JOB 的上层聚合概念，实现多JOB聚合视图和运输节点跟踪。
 
-**用户**: 起运国运营人员，用于创建运输任务、管理JOB集装号、跟踪出口全流程。
+**用户**: 起运国运营人员（OPS_CN）、到达国运营人员（OPS_US），用于管理运输任务、跟踪物流节点全流程。
 
-**影响**: 替换现有 `JobManager`/`ExportTracking` 的菜单入口，新建独立组件集。现有 `JobCostInputPOL`/`ReceivablePOL` 等独立模块不受影响。
+**影响**: 替换了原有 `JobManager`/`ExportTracking` 的菜单入口，由单一 `LegacyTaskManager` 组件服务起运/到达两端。
+
+### 实际实现方式
+当前实现采用**单文件大组件**方式：
+- `LegacyTaskManager.tsx`（约 2500 行）承载全部列表、表单、详情、节点更新、成本录入入口等逻辑
+- 通过 `mode: 'ORIGIN' | 'DEST'` 参数区分起运国/到达国两端，节点流与操作按钮按 mode 动态切换
+- `OriginTaskManager.tsx`（起运国办入口）和 `DestJobManager.tsx`（到达国办入口）只是薄封装层
+- Mock 数据集中在 `taskManagerLegacyData.ts`（约 194KB）
 
 ### 目标
 - 多JOB聚合任务管理，一个任务可包含多个站点/JOB
-- 动态运输节点跟踪，节点序列从基础设置按线路读取
-- 按集装号粒度推进节点状态，统一采集日期+异常标记+备注+附件
+- 运输节点跟踪，按 mode 使用预定义节点流（起运国 5 节点、到达国 7 节点）
+- **任务维度**统一推进节点，而非按集装箱独立推进
 - 汇总状态取最落后节点（木桶效应）
 
 ### 非目标
@@ -22,14 +29,20 @@
 
 ## 架构
 
-### 现有架构分析
+### 当前实现架构
 
-现有 TMS 模块组件结构：
-- `JobManager` → `JobList` / `JobDetail` / `TaskDetail`：以单个 JOB 为维度
-- `ExportTracking`：独立的出口跟踪页面，4个固定阶段
-- `NodeUpdateModal`：8个硬编码节点，不支持异常标记和附件
+实际组件结构（见 `/client/src/pages/tms/`）：
+- `LegacyTaskManager.tsx`（核心，~2500 行）：列表/表单/详情/节点更新/成本联动入口全包含
+- `OriginTaskManager.tsx` / `DestJobManager.tsx`：薄封装，传入 `mode` 参数
+- `taskManagerLegacyData.ts`：Mock 数据（任务/JOB/集装箱/订单/节点进度）
+- `JobCostInputPOL.tsx` / `JobCostInputPOD.tsx`：成本录入独立页面（从任务列表跳入）
+- `DPNCost.tsx`：DPN 成本页
+- 节点更新：**Drawer 抽屉** + 纵向时间轴 + 内联表单（不再是 Modal）
 
-**限制**: 现有组件不支持「任务聚合多JOB」和「按集装号的动态节点跟踪」，需新建组件集。
+**历史设计 vs 当前实现差异**：
+- 原设计拟拆分 `OriginTaskList`/`OriginTaskForm`/`OriginTaskDetail`/`NodeUpdateModal V2` 等多组件 → 实际全部聚合在 `LegacyTaskManager` 单文件内
+- 原设计拟从「基础设置物流节点配置」按线路动态读取节点序列 → 实际使用 `ORIGIN_NODE_FLOW` / `DEST_NODE_FLOW` 两个硬编码常量
+- 原设计节点更新按**集装箱维度**推进 → 实际改为**任务维度**统一推进
 
 ### 架构模式与边界
 
@@ -97,33 +110,28 @@ graph TB
 
 ## 系统流程
 
-### 运输节点更新流程
+### 运输节点更新流程（当前实现）
 
 ```mermaid
 sequenceDiagram
     participant U as 运营人员
-    participant OTD as OriginTaskDetail
-    participant NUM as NodeUpdateModal V2
-    participant Mock as Mock Data
+    participant List as LegacyTaskManager 列表
+    participant Drawer as 节点跟踪 Drawer
+    participant Store as Mock 数据 (useState)
 
-    U->>OTD: 打开JOB详情
-    OTD->>Mock: 读取线路对应节点配置
-    Mock-->>OTD: 节点序列
-    OTD->>Mock: 读取各集装号节点进度
-    Mock-->>OTD: 集装号节点状态列表
-    OTD-->>U: 展示时间线面板（按集装号分组）
+    U->>List: 点击某行"节点更新"按钮
+    List->>Drawer: openNodeUpdate(row), 传入 taskId
+    Drawer->>Store: 读取任务及节点进度
+    Store-->>Drawer: 任务 + 集装箱列表 + 已完成节点记录
+    Drawer-->>U: 从右侧滑出面板, 展示完整纵向时间轴
 
-    U->>OTD: 点击集装号的待更新节点
-    OTD->>NUM: 打开节点更新弹窗
-    NUM->>Mock: 读取集装号货物明细
-    Mock-->>NUM: 货物列表
-    NUM-->>U: 展示表单 + 货物列表
-
-    U->>NUM: 填写日期、异常标记、备注、附件
-    U->>NUM: 点击提交
-    NUM->>Mock: 更新节点记录
-    NUM-->>OTD: 关闭弹窗、刷新
-    OTD-->>U: 时间线更新
+    Note over Drawer: 当前待执行节点自动展开<br/>内联表单 (日期/异常/备注)
+    U->>Drawer: 填写完成日期 + 可选异常 + 备注
+    U->>Drawer: 点击"确认完成"
+    Drawer->>Store: submitNodeUpdate(nodeCode)
+    Note over Store: 任务维度: 该任务下所有集装箱<br/>同步追加一条 NodeRecord
+    Store-->>Drawer: 状态更新后的 tasks
+    Drawer-->>U: 时间轴刷新:<br/>- 刚完成节点显示绿勾+日期+操作人<br/>- 下一节点自动变为当前待执行<br/>- 进度概览 x/n 自增
 ```
 
 ### 任务创建流程
