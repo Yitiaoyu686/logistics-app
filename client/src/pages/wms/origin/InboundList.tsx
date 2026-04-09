@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Button,
@@ -49,6 +49,29 @@ type TransferInboundStatus = 'PENDING' | 'IN_TRANSIT' | 'ARRIVED' | 'RECEIVED' |
 type TransferInboundMode = 'SCAN' | 'MANUAL';
 type TransferInboundItemStatus = 'PENDING' | 'RECEIVED';
 type ReturnInboundTaskStatus = 'PENDING' | 'PARTIAL' | 'COMPLETED';
+
+/** 主单维度的入库分组状态 */
+type MasterOrderInboundStatus = 'PENDING' | 'PARTIAL' | 'COMPLETED';
+
+/** 快递入库按主单号聚合的分组 */
+interface MasterOrderInboundGroup {
+  masterOrderNo: string;           // 主单号（来自 OMS 订单管理）
+  clientName: string;              // 客户名称
+  route: string;                   // 线路
+  serviceType: string;             // 服务类型
+  salesPerson: string;             // 业务员
+  paymentMethod?: string;
+  paymentStatus?: string;
+  waybills: InboundListRow[];      // 该主单下的所有三方快递运单
+  totalCount: number;              // 三方运单总数
+  receivedCount: number;           // 已入库数
+  pendingCount: number;            // 待入库数
+  totalPieces: number;             // 总件数
+  totalWeight: number;             // 总重量
+  masterStatus: MasterOrderInboundStatus;  // 主单聚合状态
+  isClosed: boolean;               // 是否已点击"完成入库"
+  lastUpdatedAt?: string;
+}
 
 interface InboundListRow extends InboundRecord {
   subOrderNo?: string;
@@ -637,6 +660,16 @@ export const InboundList = ({
 
   const [supplementDrawerVisible, setSupplementDrawerVisible] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<InboundListRow | null>(null);
+
+  // 打印面单 Modal
+  const [printLabelOpen, setPrintLabelOpen] = useState(false);
+  const [printLabelRecord, setPrintLabelRecord] = useState<InboundListRow | null>(null);
+  // 主单完成入库的关闭集合（记录哪些主单号已被显式标记完成）
+  const [closedMasterOrders, setClosedMasterOrders] = useState<Set<string>>(new Set());
+  // 添加三方快递 Modal
+  const [addWaybillOpen, setAddWaybillOpen] = useState(false);
+  const [addWaybillMasterNo, setAddWaybillMasterNo] = useState<string>('');
+  const [addWaybillForm] = Form.useForm();
   const [detailVisible, setDetailVisible] = useState(false);
   const [detailRecord, setDetailRecord] = useState<InboundListRow | null>(null);
   const [transferDrawerVisible, setTransferDrawerVisible] = useState(false);
@@ -793,6 +826,112 @@ export const InboundList = ({
   const handleSupplement = (record: InboundListRow) => {
     setSelectedRecord(record);
     setSupplementDrawerVisible(true);
+  };
+
+  /** 获取主单号 - 去掉子单后缀（-01, -02 等） */
+  const extractMasterOrderNo = (record: InboundListRow): string => {
+    const raw = record.orderNo || record.displayOrderNo || record.subOrderNo || record.displaySubOrderNo || '';
+    // 去除末尾的 -NN 子单后缀
+    return raw.replace(/-\d{2}$/, '') || record.id;
+  };
+
+  /** 将扁平的 records 按主单号聚合 */
+  const masterOrderGroups = useMemo<MasterOrderInboundGroup[]>(() => {
+    const map = new Map<string, MasterOrderInboundGroup>();
+    records.forEach((record) => {
+      const masterOrderNo = extractMasterOrderNo(record);
+      if (!map.has(masterOrderNo)) {
+        map.set(masterOrderNo, {
+          masterOrderNo,
+          clientName: record.clientName || '-',
+          route: record.route || '-',
+          serviceType: record.serviceType || '-',
+          salesPerson: record.salesPerson || '-',
+          paymentMethod: record.paymentMethod,
+          paymentStatus: record.paymentStatus,
+          waybills: [],
+          totalCount: 0,
+          receivedCount: 0,
+          pendingCount: 0,
+          totalPieces: 0,
+          totalWeight: 0,
+          masterStatus: 'PENDING',
+          isClosed: closedMasterOrders.has(masterOrderNo),
+          lastUpdatedAt: undefined,
+        });
+      }
+      const group = map.get(masterOrderNo)!;
+      group.waybills.push(record);
+      group.totalCount += 1;
+      if (record.status === 'COMPLETED') {
+        group.receivedCount += 1;
+      } else {
+        group.pendingCount += 1;
+      }
+      group.totalPieces += Number(record.pieces || 0);
+      group.totalWeight += Number(record.actualWeight || 0);
+      const recordTime = record.updatedAt || record.createdAt;
+      if (recordTime && (!group.lastUpdatedAt || recordTime > group.lastUpdatedAt)) {
+        group.lastUpdatedAt = recordTime;
+      }
+    });
+
+    // 计算主单聚合状态
+    return Array.from(map.values()).map((group) => {
+      let masterStatus: MasterOrderInboundStatus;
+      if (group.isClosed || (group.totalCount > 0 && group.receivedCount === group.totalCount)) {
+        masterStatus = 'COMPLETED';
+      } else if (group.receivedCount > 0) {
+        masterStatus = 'PARTIAL';
+      } else {
+        masterStatus = 'PENDING';
+      }
+      return { ...group, masterStatus };
+    });
+  }, [records, closedMasterOrders]);
+
+  /** 打开打印面单 Modal */
+  const handlePrintLabel = (record: InboundListRow) => {
+    setPrintLabelRecord(record);
+    setPrintLabelOpen(true);
+  };
+
+  /** 标记整个主单入库完成 */
+  const handleMarkMasterComplete = (masterOrderNo: string) => {
+    Modal.confirm({
+      title: '确认完成入库？',
+      content: `主单号 ${masterOrderNo} 将被关闭，后续不能再新增三方快递运单。`,
+      okText: '确认完成',
+      cancelText: '取消',
+      onOk: () => {
+        setClosedMasterOrders((prev) => {
+          const next = new Set(prev);
+          next.add(masterOrderNo);
+          return next;
+        });
+        message.success(`${masterOrderNo} 已标记为入库完成`);
+      },
+    });
+  };
+
+  /** 打开添加三方快递 Modal */
+  const handleOpenAddWaybill = (masterOrderNo: string) => {
+    setAddWaybillMasterNo(masterOrderNo);
+    addWaybillForm.resetFields();
+    setAddWaybillOpen(true);
+  };
+
+  /** 提交添加三方快递 */
+  const handleSubmitAddWaybill = async () => {
+    try {
+      const values = await addWaybillForm.validateFields();
+      message.success(`已为 ${addWaybillMasterNo} 添加三方运单 ${values.trackingNo}（Demo 数据仅展示，未持久化）`);
+      setAddWaybillOpen(false);
+      setAddWaybillMasterNo('');
+      addWaybillForm.resetFields();
+    } catch (_) {
+      /* validation failed */
+    }
   };
 
   const handleViewDetail = async (record: InboundListRow) => {
@@ -1385,6 +1524,254 @@ export const InboundList = ({
     return spans;
   }, [currentReturnItems]);
 
+  /** 主单聚合视图的列定义 */
+  const masterOrderColumns = [
+    {
+      title: '序号',
+      key: 'index',
+      width: 60,
+      align: 'center' as const,
+      render: (_: unknown, __: MasterOrderInboundGroup, index: number) => index + 1,
+    },
+    {
+      title: '主单号',
+      dataIndex: 'masterOrderNo',
+      key: 'masterOrderNo',
+      width: 200,
+      render: (value: string) => <span style={{ fontWeight: 600, fontFamily: 'monospace' }}>{value}</span>,
+    },
+    {
+      title: '客户',
+      dataIndex: 'clientName',
+      key: 'clientName',
+      width: 160,
+      ellipsis: true,
+    },
+    {
+      title: '线路',
+      dataIndex: 'route',
+      key: 'route',
+      width: 180,
+      ellipsis: true,
+    },
+    {
+      title: '业务员',
+      dataIndex: 'salesPerson',
+      key: 'salesPerson',
+      width: 100,
+    },
+    {
+      title: '三方运单',
+      key: 'totalCount',
+      width: 100,
+      align: 'center' as const,
+      render: (_: unknown, group: MasterOrderInboundGroup) => (
+        <Tag color="blue">{group.totalCount} 个</Tag>
+      ),
+    },
+    {
+      title: '收货进度',
+      key: 'progress',
+      width: 180,
+      render: (_: unknown, group: MasterOrderInboundGroup) => {
+        const percent = group.totalCount > 0 ? Math.round((group.receivedCount / group.totalCount) * 100) : 0;
+        return (
+          <Space direction="vertical" size={0} style={{ width: '100%' }}>
+            <div style={{ fontSize: 12 }}>
+              已入库 <span style={{ fontWeight: 600, color: '#52c41a' }}>{group.receivedCount}</span>
+              {' / '}
+              <span>{group.totalCount}</span>
+            </div>
+            <div style={{ height: 6, background: '#f0f0f0', borderRadius: 3, overflow: 'hidden' }}>
+              <div style={{
+                width: `${percent}%`,
+                height: '100%',
+                background: group.masterStatus === 'COMPLETED' ? '#52c41a' : '#1677ff',
+                transition: 'width 0.3s',
+              }} />
+            </div>
+          </Space>
+        );
+      },
+    },
+    {
+      title: '状态',
+      key: 'masterStatus',
+      width: 110,
+      render: (_: unknown, group: MasterOrderInboundGroup) => {
+        if (group.masterStatus === 'COMPLETED') return <Tag color="success">已完成入库</Tag>;
+        if (group.masterStatus === 'PARTIAL') return <Tag color="processing">部分入库</Tag>;
+        return <Tag color="warning">待入库</Tag>;
+      },
+    },
+    {
+      title: '总件数',
+      dataIndex: 'totalPieces',
+      key: 'totalPieces',
+      width: 90,
+      align: 'center' as const,
+    },
+    {
+      title: '总重量Kg',
+      key: 'totalWeight',
+      width: 100,
+      align: 'right' as const,
+      render: (_: unknown, group: MasterOrderInboundGroup) => group.totalWeight.toFixed(2),
+    },
+    {
+      title: '更新时间',
+      key: 'lastUpdatedAt',
+      width: 150,
+      render: (_: unknown, group: MasterOrderInboundGroup) =>
+        group.lastUpdatedAt ? dayjs(group.lastUpdatedAt).format('YYYY-MM-DD HH:mm') : '-',
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 220,
+      fixed: 'right' as const,
+      render: (_: unknown, group: MasterOrderInboundGroup) => (
+        <Space size={4} wrap>
+          <Button
+            type="link"
+            size="small"
+            disabled={group.isClosed}
+            onClick={() => handleOpenAddWaybill(group.masterOrderNo)}
+          >
+            添加三方快递
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            disabled={group.receivedCount === 0 || group.isClosed}
+            style={{ color: group.isClosed ? '#bfbfbf' : '#52c41a' }}
+            onClick={() => handleMarkMasterComplete(group.masterOrderNo)}
+          >
+            {group.isClosed ? '已完成' : '完成入库'}
+          </Button>
+        </Space>
+      ),
+    },
+  ];
+
+  /** 展开行：该主单下所有三方快递运单的子表 */
+  const renderExpandedWaybills = (group: MasterOrderInboundGroup) => {
+    const subColumns = [
+      {
+        title: '三方运单号',
+        key: 'trackingNo',
+        width: 160,
+        render: (_: unknown, record: InboundListRow) => (
+          <span style={{ fontWeight: 500 }}>{record.trackingNo || '-'}</span>
+        ),
+      },
+      {
+        title: '快递公司',
+        dataIndex: 'expressCompany',
+        key: 'expressCompany',
+        width: 120,
+        render: (value: string) => value || '-',
+      },
+      {
+        title: '三方状态',
+        key: 'thirdPartyStatus',
+        width: 110,
+        render: (_: unknown, record: InboundListRow) => {
+          const statusText = record.thirdPartyStatus || record.logisticsStatus || '-';
+          return <Tag color={TRACKING_STATUS_COLOR[statusText] || 'default'}>{statusText}</Tag>;
+        },
+      },
+      {
+        title: '品名',
+        key: 'goodsDescription',
+        width: 120,
+        render: (_: unknown, record: InboundListRow) => record.goodsDescription || record.remark || '-',
+      },
+      {
+        title: '件数',
+        dataIndex: 'pieces',
+        key: 'pieces',
+        width: 70,
+        align: 'center' as const,
+      },
+      {
+        title: '重量Kg',
+        key: 'actualWeight',
+        width: 90,
+        align: 'right' as const,
+        render: (_: unknown, record: InboundListRow) => Number(record.actualWeight || 0).toFixed(2),
+      },
+      {
+        title: '子运单号',
+        key: 'subOrderNo',
+        width: 180,
+        render: (_: unknown, record: InboundListRow) => {
+          // 只有入库完成后才显示子运单号
+          if (record.status === 'COMPLETED') {
+            return (
+              <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#1677ff' }}>
+                {record.subWaybillNo || record.displaySubOrderNo || record.subOrderNo || '-'}
+              </span>
+            );
+          }
+          return <span style={{ color: '#bfbfbf' }}>入库后生成</span>;
+        },
+      },
+      {
+        title: '入库状态',
+        key: 'inboundStatus',
+        width: 110,
+        render: (_: unknown, record: InboundListRow) => {
+          const view = getInboundStatusView(record);
+          return <span>{view.text}</span>;
+        },
+      },
+      {
+        title: '操作',
+        key: 'action',
+        width: 160,
+        render: (_: unknown, record: InboundListRow) => (
+          <Space size={4} wrap>
+            {record.status !== 'COMPLETED' ? (
+              <Button
+                type="link"
+                size="small"
+                disabled={group.isClosed}
+                onClick={() => handleSupplement(record)}
+              >
+                入库
+              </Button>
+            ) : (
+              <Button
+                type="link"
+                size="small"
+                onClick={() => handlePrintLabel(record)}
+              >
+                🖨 打印面单
+              </Button>
+            )}
+            <Button
+              type="link"
+              size="small"
+              onClick={() => handleViewDetail(record)}
+            >
+              详情
+            </Button>
+          </Space>
+        ),
+      },
+    ];
+    return (
+      <Table
+        rowKey="id"
+        columns={subColumns}
+        dataSource={group.waybills}
+        pagination={false}
+        size="small"
+      />
+    );
+  };
+
   const expressColumns = [
     {
       title: '序号',
@@ -1848,15 +2235,20 @@ export const InboundList = ({
 
           <div ref={tableContainerRef} style={{ minHeight: 0 }}>
             <Table
-              rowKey="id"
-              columns={expressColumns}
-              dataSource={records}
+              rowKey="masterOrderNo"
+              columns={masterOrderColumns}
+              dataSource={masterOrderGroups}
               loading={loading}
-              scroll={{ x: 1800, y: tableScrollY }}
+              scroll={{ x: 1600, y: tableScrollY }}
+              expandable={{
+                expandedRowRender: (group) => renderExpandedWaybills(group),
+                rowExpandable: (group) => group.waybills.length > 0,
+                defaultExpandAllRows: false,
+              }}
               pagination={{
                 pageSize: 20,
                 showSizeChanger: true,
-                showTotal: (total) => `共 ${total} 条记录`,
+                showTotal: (total) => `共 ${total} 条主单`,
               }}
               size="small"
             />
@@ -2697,6 +3089,107 @@ export const InboundList = ({
             </Text>
           </div>
         )}
+      </Modal>
+
+      {/* 打印面单 Modal */}
+      <Modal
+        title="打印面单（Demo 预览）"
+        open={printLabelOpen}
+        onCancel={() => { setPrintLabelOpen(false); setPrintLabelRecord(null); }}
+        width={420}
+        footer={[
+          <Button key="close" onClick={() => { setPrintLabelOpen(false); setPrintLabelRecord(null); }}>关闭</Button>,
+          <Button key="print" type="primary" onClick={() => { window.print(); }}>🖨 打印</Button>,
+        ]}
+      >
+        {printLabelRecord && (
+          <div style={{
+            border: '1px dashed #d9d9d9',
+            borderRadius: 6,
+            padding: 20,
+            background: '#fafafa',
+            fontFamily: 'monospace',
+          }}>
+            <div style={{ textAlign: 'center', fontSize: 16, fontWeight: 700, borderBottom: '1px solid #999', paddingBottom: 8, marginBottom: 12 }}>
+              喵喵国际物流 · 面单
+            </div>
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 12, color: '#8c8c8c' }}>子运单号</div>
+              <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: 1 }}>
+                {printLabelRecord.subWaybillNo || printLabelRecord.displaySubOrderNo || printLabelRecord.subOrderNo || '-'}
+              </div>
+            </div>
+            <div style={{
+              height: 40,
+              background: 'repeating-linear-gradient(90deg, #000 0 2px, #fff 2px 5px)',
+              marginBottom: 12,
+              borderRadius: 2,
+            }} />
+            <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '4px 12px', fontSize: 13 }}>
+              <div style={{ color: '#8c8c8c' }}>客户:</div>
+              <div style={{ fontWeight: 600 }}>{printLabelRecord.clientName || '-'}</div>
+              <div style={{ color: '#8c8c8c' }}>线路:</div>
+              <div>{printLabelRecord.route || '-'}</div>
+              <div style={{ color: '#8c8c8c' }}>服务:</div>
+              <div>{printLabelRecord.serviceType || '-'}</div>
+              <div style={{ color: '#8c8c8c' }}>品名:</div>
+              <div>{printLabelRecord.goodsDescription || '-'}</div>
+              <div style={{ color: '#8c8c8c' }}>件数/重量:</div>
+              <div>{printLabelRecord.pieces || 0} 件 / {Number(printLabelRecord.actualWeight || 0).toFixed(2)} kg</div>
+              <div style={{ color: '#8c8c8c' }}>三方运单:</div>
+              <div style={{ fontSize: 11 }}>{printLabelRecord.trackingNo || '-'}</div>
+              <div style={{ color: '#8c8c8c' }}>入库时间:</div>
+              <div style={{ fontSize: 11 }}>{printLabelRecord.inboundTime ? dayjs(printLabelRecord.inboundTime).format('YYYY-MM-DD HH:mm') : '-'}</div>
+            </div>
+            <div style={{ marginTop: 12, paddingTop: 8, borderTop: '1px dashed #d9d9d9', textAlign: 'center', fontSize: 10, color: '#bfbfbf' }}>
+              * 此面单为 Demo 预览，最终样式待客户确认
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* 添加三方快递 Modal */}
+      <Modal
+        title={`添加三方快递 - ${addWaybillMasterNo}`}
+        open={addWaybillOpen}
+        onCancel={() => { setAddWaybillOpen(false); setAddWaybillMasterNo(''); addWaybillForm.resetFields(); }}
+        onOk={handleSubmitAddWaybill}
+        okText="添加"
+        cancelText="取消"
+        width={460}
+      >
+        <Form form={addWaybillForm} layout="vertical" style={{ marginTop: 12 }}>
+          <Form.Item
+            name="trackingNo"
+            label="三方运单号"
+            rules={[{ required: true, message: '请输入三方运单号' }]}
+          >
+            <Input placeholder="例如：SF1234567890" />
+          </Form.Item>
+          <Form.Item
+            name="expressCompany"
+            label="快递公司"
+            rules={[{ required: true, message: '请选择快递公司' }]}
+          >
+            <Select placeholder="选择快递公司">
+              <Option value="顺丰速运">顺丰速运</Option>
+              <Option value="圆通速递">圆通速递</Option>
+              <Option value="中通快递">中通快递</Option>
+              <Option value="韵达快递">韵达快递</Option>
+              <Option value="申通快递">申通快递</Option>
+              <Option value="京东物流">京东物流</Option>
+              <Option value="德邦物流">德邦物流</Option>
+            </Select>
+          </Form.Item>
+          <Form.Item name="goodsDescription" label="品名">
+            <Input placeholder="选填" />
+          </Form.Item>
+          <Alert
+            type="info"
+            showIcon
+            message="Demo 原型提示：添加后仅弹出成功提示，不会真正写入 Mock 数据"
+          />
+        </Form>
       </Modal>
 
       <InboundDetailDrawer
