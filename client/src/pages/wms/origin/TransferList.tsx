@@ -708,9 +708,10 @@ export const TransferList = ({
   }, [businessLine, businessMode, warehouseId]);
 
   const baseRecords = useMemo(() => {
-    const realIds = new Set(apiRecords.map((record) => record.id));
-    return [...apiRecords, ...demoRecords.filter((record) => !realIds.has(record.id))];
-  }, [apiRecords, demoRecords]);
+    // 仅使用本地 Demo Mock 数据；后端接口数据为遗留脏数据（如 TRF- 旧格式前缀），
+    // 按 2026-04 编号规则已改为 S-T-/A-T- 格式，apiRecords 不再合并展示
+    return [...demoRecords];
+  }, [demoRecords]);
 
   const records = useMemo(
     () => baseRecords.map((record) => recordOverrides[record.id] || record),

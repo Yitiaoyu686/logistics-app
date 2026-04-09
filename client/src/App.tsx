@@ -180,7 +180,7 @@ const MENU_CONFIG: MenuItemConfig[] = [
       { key: 'wms_stock_noorder', label: '无订单快递' },
       { key: 'wms_box_sea', label: '任务执行', domains: ['SEA'] },
       { key: 'wms_box_air', label: '任务执行', domains: ['AIR'] },
-      { key: 'wms_transfer_list', label: '调拨记录' },
+      { key: 'wms_transfer_list', label: '调拨管理' },
       { key: 'wms_stock_return', label: '退运处理' }
     ]
   },
