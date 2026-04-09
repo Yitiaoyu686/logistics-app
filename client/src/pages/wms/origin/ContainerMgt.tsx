@@ -30,7 +30,7 @@ import {
   SearchOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { jobApi, systemApi, warehouseApi } from '../../../api';
+import { jobApi, supplierApi, systemApi, warehouseApi } from '../../../api';
 import {
   ListPageToolbar,
   ListPageToolbarActions,
@@ -73,14 +73,14 @@ interface TaskExecutionMeta {
   remark?: string;
 }
 
-// 拖车公司选项
-const DELIVERY_COMPANY_OPTIONS = [
-  '广东广运拖车',
-  '深圳华洋拖车',
-  '佛山安达物流',
+// 拖车公司 Mock 后备数据（当供应商管理中没有 TRUCKING 类型数据时使用）
+// 实际数据统一由 基础设置 → 供应商管理 维护
+const FALLBACK_TRUCKING_SUPPLIERS = [
+  '广东广运拖车有限公司',
+  '深圳华洋拖车服务',
+  '佛山安达物流运输',
   '广州顺风拖车',
   '东莞快运拖车',
-  '其他',
 ];
 
 interface RouteConfigRow {
@@ -537,8 +537,30 @@ export const ContainerMgt = ({
   const [createRouteForm] = Form.useForm<CreateRouteFormValues>();
   const [batchCreateForm] = Form.useForm<BatchCreateFormValues>();
   const [executeTaskForm] = Form.useForm<TaskExecutionFormValues>();
+  // 拖车公司列表（从 基础设置 → 供应商管理 的 TRUCKING 类型供应商中加载）
+  const [truckingSuppliers, setTruckingSuppliers] = useState<string[]>(FALLBACK_TRUCKING_SUPPLIERS);
 
   const printRef = useRef<HTMLDivElement>(null);
+
+  // 加载拖车公司列表：从供应商管理获取 TRUCKING 类型，失败/空则用 Mock 后备
+  useEffect(() => {
+    const loadTruckingSuppliers = async () => {
+      try {
+        const res: any = await supplierApi.list({ supplierType: 'TRUCKING', status: 'ACTIVE' });
+        const list = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+        const truckingNames = list
+          .filter((s: any) => s.supplierType === 'TRUCKING' && s.status !== 'INACTIVE')
+          .map((s: any) => s.supplierName)
+          .filter(Boolean);
+        if (truckingNames.length > 0) {
+          setTruckingSuppliers(truckingNames);
+        }
+      } catch (_) {
+        // 加载失败则保留 Mock 后备数据
+      }
+    };
+    loadTruckingSuppliers();
+  }, []);
 
   const fetchData = async () => {
     setLoading(true);
@@ -2110,12 +2132,16 @@ export const ContainerMgt = ({
               <Form.Item
                 name="deliveryCompany"
                 label="拖车公司"
+                tooltip="数据来源：基础设置 → 供应商管理（供应商类型 = 拖车公司）"
                 rules={[{ required: true, message: '请选择拖车公司' }]}
               >
                 <Select
                   placeholder="请选择拖车公司"
                   allowClear
-                  options={DELIVERY_COMPANY_OPTIONS.map((name) => ({ label: name, value: name }))}
+                  showSearch
+                  optionFilterProp="label"
+                  options={truckingSuppliers.map((name) => ({ label: name, value: name }))}
+                  notFoundContent={<span style={{ color: '#8c8c8c' }}>暂无拖车公司，请到基础设置 → 供应商管理新增</span>}
                 />
               </Form.Item>
             </Col>
