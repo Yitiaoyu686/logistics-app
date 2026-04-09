@@ -3249,6 +3249,11 @@ export const InboundList = ({
         category={(selectedRecord as any)?.category}
         goodsName={(selectedRecord as any)?.goodsName}
         remark={selectedRecord?.remark}
+        declaredWeight={Number(selectedRecord?.actualWeight || 0) || undefined}
+        declaredPieces={Number(selectedRecord?.pieces || 0) || undefined}
+        declaredLength={selectedRecord?.length}
+        declaredWidth={selectedRecord?.width}
+        declaredHeight={selectedRecord?.height}
         onSubmit={() => {
           setSupplementDrawerVisible(false);
           setSelectedRecord(null);

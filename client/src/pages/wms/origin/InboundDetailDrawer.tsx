@@ -104,6 +104,12 @@ export interface InboundDetailDrawerProps {
   category?: string;
   goodsName?: string;
   remark?: string;
+  // 客户在订单创建时申报的三方快递原始信息（用于入库核对）
+  declaredWeight?: number;
+  declaredPieces?: number;
+  declaredLength?: number;
+  declaredWidth?: number;
+  declaredHeight?: number;
   // 同一主订单下的所有子运单（含当前）
   siblingSubOrders?: SiblingSubOrder[];
   onSubmit: (data: {
@@ -139,6 +145,11 @@ const InboundDetailDrawer: React.FC<InboundDetailDrawerProps> = ({
   category: initCategory,
   goodsName: initGoodsName,
   remark: initRemark,
+  declaredWeight,
+  declaredPieces,
+  declaredLength,
+  declaredWidth,
+  declaredHeight,
   siblingSubOrders,
   onSubmit,
   onClose,
@@ -172,7 +183,14 @@ const InboundDetailDrawer: React.FC<InboundDetailDrawerProps> = ({
       setCategory(initCategory);
       setGoodsName(initGoodsName || '');
       setRemarkText(initRemark || '');
-      setDimensions([{ weightKg: 0, lengthCm: 0, widthCm: 0, heightCm: 0, pieces: 1 }]);
+      // 以客户申报值作为初始默认值，运营可按实际测量覆盖
+      setDimensions([{
+        weightKg: declaredWeight || 0,
+        lengthCm: declaredLength || 0,
+        widthCm: declaredWidth || 0,
+        heightCm: declaredHeight || 0,
+        pieces: declaredPieces || 1,
+      }]);
       setPhotos([]);
       setFeeItems([]);
       // 加载汇率
@@ -192,7 +210,7 @@ const InboundDetailDrawer: React.FC<InboundDetailDrawerProps> = ({
         }
       })();
     }
-  }, [visible, initCategory, initGoodsName, initRemark]);
+  }, [visible, initCategory, initGoodsName, initRemark, declaredWeight, declaredPieces, declaredLength, declaredWidth, declaredHeight]);
 
   // 自动计算运费 — 根据尺寸变化实时更新
   useEffect(() => {
@@ -337,6 +355,61 @@ const InboundDetailDrawer: React.FC<InboundDetailDrawerProps> = ({
               },
             ]}
           />
+        </div>
+
+        {/* 客户申报的原始快递信息（用于入库核对） */}
+        <div style={{
+          background: '#e6f4ff',
+          border: '1px solid #91caff',
+          borderRadius: 6,
+          padding: '12px 16px',
+          marginBottom: 16,
+        }}>
+          <Text strong style={{ display: 'block', marginBottom: 8, fontSize: 14, color: '#0958d9' }}>
+            客户申报信息（订单创建时填报，仅供核对参考）
+          </Text>
+          <Descriptions size="small" column={5} styles={{ label: { color: '#595959' } }}>
+            <Descriptions.Item label="申报重量">
+              {declaredWeight !== undefined && declaredWeight > 0
+                ? <span style={{ fontWeight: 600 }}>{declaredWeight.toFixed(2)} kg</span>
+                : <Text type="secondary">未申报</Text>}
+            </Descriptions.Item>
+            <Descriptions.Item label="申报件数">
+              {declaredPieces !== undefined && declaredPieces > 0
+                ? <span style={{ fontWeight: 600 }}>{declaredPieces} 件</span>
+                : <Text type="secondary">未申报</Text>}
+            </Descriptions.Item>
+            <Descriptions.Item label="申报尺寸">
+              {(declaredLength || declaredWidth || declaredHeight)
+                ? <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>
+                    {declaredLength || '-'}×{declaredWidth || '-'}×{declaredHeight || '-'} cm
+                  </span>
+                : <Text type="secondary">未申报</Text>}
+            </Descriptions.Item>
+            <Descriptions.Item label="申报体积重">
+              {(declaredLength && declaredWidth && declaredHeight)
+                ? (() => {
+                    const vol = (declaredLength * declaredWidth * declaredHeight) / 6000;
+                    const isHigher = vol > (declaredWeight || 0);
+                    return (
+                      <span style={{
+                        fontWeight: 600,
+                        color: isHigher ? '#fa8c16' : '#52c41a',
+                      }}>
+                        {vol.toFixed(2)} kg
+                        {isHigher && <Text type="warning" style={{ marginLeft: 4, fontSize: 11 }}>(偏大)</Text>}
+                      </span>
+                    );
+                  })()
+                : <Text type="secondary">-</Text>}
+            </Descriptions.Item>
+            <Descriptions.Item label="申报品类">
+              {initCategory || <Text type="secondary">-</Text>}
+            </Descriptions.Item>
+          </Descriptions>
+          <div style={{ marginTop: 6, fontSize: 11, color: '#8c8c8c' }}>
+            💡 下方入库录入区已预填申报值，请按实际测量调整；如实际与申报差异过大，请勾选异常或备注说明。
+          </div>
         </div>
 
         <Divider />
