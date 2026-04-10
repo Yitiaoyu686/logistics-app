@@ -93,6 +93,9 @@ export const LogisticsNodeManagement: React.FC = () => {
   const [routeModalVisible, setRouteModalVisible] = useState(false);
   const [nodeModalVisible, setNodeModalVisible] = useState(false);
   const [editingNode, setEditingNode] = useState<LogisticsNode | null>(null);
+  const [editingRoute, setEditingRoute] = useState<RouteRow | null>(null);
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [filterTransport, setFilterTransport] = useState<string | undefined>(undefined);
 
   const [routeForm] = Form.useForm();
   const [nodeForm] = Form.useForm();
@@ -152,22 +155,58 @@ export const LogisticsNodeManagement: React.FC = () => {
     loadNodeCounts();
   }, []);
 
-  const handleOpenRouteModal = () => {
-    routeForm.resetFields();
-    routeForm.setFieldsValue({ transportType: 'SEA', status: 'ACTIVE' });
+  const handleOpenRouteModal = (route?: RouteRow) => {
+    if (route) {
+      setEditingRoute(route);
+      routeForm.setFieldsValue({
+        originCountry: route.originCountry,
+        originCity: route.originCity,
+        destCountry: route.destCountry,
+        destCity: route.destCity,
+        transportType: route.transportType,
+        status: route.status,
+      });
+    } else {
+      setEditingRoute(null);
+      routeForm.resetFields();
+      routeForm.setFieldsValue({ transportType: 'SEA', status: 'ACTIVE' });
+    }
     setRouteModalVisible(true);
   };
 
-  const handleCreateRoute = async () => {
+  const handleSaveRoute = async () => {
     try {
       const values = await routeForm.validateFields();
-      await systemApi.createRoute(values);
-      message.success('路线已创建');
+      if (editingRoute) {
+        await systemApi.updateRoute(editingRoute.id, values);
+        message.success('路线已更新');
+      } else {
+        await systemApi.createRoute(values);
+        message.success('路线已创建');
+      }
       setRouteModalVisible(false);
+      setEditingRoute(null);
       await loadRoutes();
     } catch (err: any) {
-      message.error(err.message || '创建路线失败');
+      message.error(err.message || '保存路线失败');
     }
+  };
+
+  const handleDeleteRoute = (route: RouteRow) => {
+    Modal.confirm({
+      title: '确认删除',
+      content: `确定要删除路线 ${route.originCity}→${route.destCity} 吗？`,
+      onOk: async () => {
+        try {
+          await systemApi.deleteRoute(route.id);
+          message.success('路线删除成功');
+          await loadRoutes();
+          await loadNodeCounts();
+        } catch (err: any) {
+          message.error(err.message || '删除路线失败');
+        }
+      },
+    });
   };
 
   const handleOpenDrawer = async (route: RouteRow) => {
@@ -304,29 +343,66 @@ export const LogisticsNodeManagement: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 150,
+      width: 260,
       fixed: 'right' as const,
       render: (_: any, record: RouteRow) => (
-        <Button type="primary" size="small" icon={<SettingOutlined />} onClick={() => handleOpenDrawer(record)}>
-          配置环节
-        </Button>
+        <Space size="small">
+          <Button type="primary" size="small" icon={<SettingOutlined />} onClick={() => handleOpenDrawer(record)}>
+            配置环节
+          </Button>
+          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleOpenRouteModal(record)}>
+            编辑
+          </Button>
+          <Button type="link" size="small" danger icon={<DeleteOutlined />} onClick={() => handleDeleteRoute(record)}>
+            删除
+          </Button>
+        </Space>
       ),
     },
   ];
+
+  const filteredRoutes = routes.filter((route) => {
+    const keyword = searchKeyword.trim().toLowerCase();
+    if (keyword && !route.originCity.toLowerCase().includes(keyword) && !route.destCity.toLowerCase().includes(keyword) && !route.originCountry.toLowerCase().includes(keyword) && !route.destCountry.toLowerCase().includes(keyword)) {
+      return false;
+    }
+    if (filterTransport && route.transportType !== filterTransport) return false;
+    return true;
+  });
 
   return (
     <div style={{ padding: 24 }}>
       <Card
         title="物流环节管理"
         extra={
-          <Button type="primary" icon={<PlusOutlined />} onClick={handleOpenRouteModal}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => handleOpenRouteModal()}>
             新增路线
           </Button>
         }
       >
+        <Space style={{ marginBottom: 16 }} wrap>
+          <Input
+            placeholder="起运/到达城市"
+            allowClear
+            style={{ width: 200 }}
+            value={searchKeyword}
+            onChange={(e) => setSearchKeyword(e.target.value)}
+          />
+          <Select
+            placeholder="运输方式"
+            allowClear
+            style={{ width: 130 }}
+            value={filterTransport}
+            onChange={(v) => setFilterTransport(v)}
+            options={[
+              { value: 'SEA', label: '海运' },
+              { value: 'AIR', label: '空运' },
+            ]}
+          />
+        </Space>
         <Table
           columns={routeColumns}
-          dataSource={routes}
+          dataSource={filteredRoutes}
           rowKey="id"
           loading={loadingRoutes}
           scroll={{ x: 920 }}
@@ -424,10 +500,10 @@ export const LogisticsNodeManagement: React.FC = () => {
       </Drawer>
 
       <Modal
-        title="新增路线"
+        title={editingRoute ? '编辑路线' : '新增路线'}
         open={routeModalVisible}
-        onOk={handleCreateRoute}
-        onCancel={() => setRouteModalVisible(false)}
+        onOk={handleSaveRoute}
+        onCancel={() => { setRouteModalVisible(false); setEditingRoute(null); }}
         width={700}
       >
         <Form form={routeForm} layout="vertical">

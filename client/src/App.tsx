@@ -65,6 +65,7 @@ import { PermissionManagement } from './pages/system/PermissionManagement';
 import { DepartmentManagement } from './pages/system/DepartmentManagement';
 import { WorkflowConfigPage } from './pages/system/WorkflowConfig';
 import { FreightRateRule } from './pages/system/FreightRateRule';
+import { MessagePublish, PushTemplateManagement, SmsPushManagement } from './pages/system/MessageNotification';
 import { ExecutiveDashboard } from './pages/analytics/ExecutiveDashboard';
 import { CustomerValueAnalysis } from './pages/analytics/CustomerValueAnalysis';
 import { RouteProfitAnalysis } from './pages/analytics/RouteProfitAnalysis';
@@ -960,6 +961,10 @@ const ContentRenderer = ({
     // 系统管理 - 薪资设置
     case 'set_salary_profile': return <SalaryProfile />;
     case 'set_commission_rules': return <CommissionRuleManagement />;
+    // 系统管理 - 消息通知
+    case 'set_message_publish': return <MessagePublish />;
+    case 'set_message_template': return <PushTemplateManagement />;
+    case 'set_message_sms': return <SmsPushManagement />;
     // 起运国办
     case 'tms_origin_task': return <OriginTaskManager businessMode={businessMode} />;
     case 'tms_cost_pol_list': return <JobCostInputPOL businessMode={businessMode} />;

@@ -3,7 +3,7 @@ import {
   Card, Table, Button, Space, Tag, Modal, Form, Input, Select, Checkbox, message, Descriptions
 } from 'antd';
 import {
-  PlusOutlined, EditOutlined, DeleteOutlined, SafetyOutlined, ReloadOutlined
+  PlusOutlined, EditOutlined, DeleteOutlined, SafetyOutlined, ReloadOutlined, SearchOutlined
 } from '@ant-design/icons';
 import { systemApi } from '../../api';
 
@@ -44,6 +44,8 @@ export const RoleManagement: React.FC = () => {
   const [editingRole, setEditingRole] = useState<RbacRole | null>(null);
   const [selectedRole, setSelectedRole] = useState<RbacRole | null>(null);
   const [form] = Form.useForm();
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [filterStatus, setFilterStatus] = useState<string | undefined>(undefined);
 
   const permissionMap = useMemo(() => {
     const map = new Map<string, RbacPermission>();
@@ -259,10 +261,38 @@ export const RoleManagement: React.FC = () => {
     },
   ];
 
+  const filteredRoles = roles.filter((role) => {
+    const keyword = searchKeyword.trim().toLowerCase();
+    if (keyword && !role.roleCode.toLowerCase().includes(keyword) && !role.roleName.toLowerCase().includes(keyword)) {
+      return false;
+    }
+    if (filterStatus && role.status !== filterStatus) return false;
+    return true;
+  });
+
   return (
     <div>
       <Card>
-        <Space style={{ marginBottom: 16 }}>
+        <Space style={{ marginBottom: 16 }} wrap>
+          <Input
+            placeholder="角色编码/名称"
+            prefix={<SearchOutlined />}
+            allowClear
+            style={{ width: 200 }}
+            value={searchKeyword}
+            onChange={(e) => setSearchKeyword(e.target.value)}
+          />
+          <Select
+            placeholder="状态"
+            allowClear
+            style={{ width: 120 }}
+            value={filterStatus}
+            onChange={(v) => setFilterStatus(v)}
+            options={[
+              { value: 'ACTIVE', label: '启用' },
+              { value: 'INACTIVE', label: '停用' },
+            ]}
+          />
           <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>新建角色</Button>
           <Button icon={<ReloadOutlined />} onClick={loadData}>刷新</Button>
         </Space>
@@ -270,7 +300,7 @@ export const RoleManagement: React.FC = () => {
         <Table
           rowKey="id"
           columns={columns}
-          dataSource={roles}
+          dataSource={filteredRoles}
           loading={loading}
           scroll={{ x: 1400 }}
           pagination={{

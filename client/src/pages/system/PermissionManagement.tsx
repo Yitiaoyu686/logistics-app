@@ -3,7 +3,7 @@ import {
   Card, Table, Button, Space, Tag, Modal, Form, Input, Select, message, Descriptions, Switch
 } from 'antd';
 import {
-  PlusOutlined, EditOutlined, DeleteOutlined, SafetyOutlined, ReloadOutlined
+  PlusOutlined, EditOutlined, DeleteOutlined, SafetyOutlined, ReloadOutlined, SearchOutlined
 } from '@ant-design/icons';
 import { systemApi } from '../../api';
 
@@ -36,6 +36,8 @@ export const PermissionManagement: React.FC = () => {
   const [editingPermission, setEditingPermission] = useState<Permission | null>(null);
   const [selectedPermission, setSelectedPermission] = useState<Permission | null>(null);
   const [form] = Form.useForm();
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [filterType, setFilterType] = useState<string | undefined>(undefined);
 
   const loadData = async () => {
     setLoading(true);
@@ -209,10 +211,35 @@ export const PermissionManagement: React.FC = () => {
     },
   ];
 
+  const filteredPermissions = permissions.filter((perm) => {
+    const keyword = searchKeyword.trim().toLowerCase();
+    if (keyword && !perm.permissionCode.toLowerCase().includes(keyword) && !perm.permissionName.toLowerCase().includes(keyword)) {
+      return false;
+    }
+    if (filterType && perm.permissionType !== filterType) return false;
+    return true;
+  });
+
   return (
     <div>
       <Card>
-        <Space style={{ marginBottom: 16 }}>
+        <Space style={{ marginBottom: 16 }} wrap>
+          <Input
+            placeholder="权限编码/名称"
+            prefix={<SearchOutlined />}
+            allowClear
+            style={{ width: 200 }}
+            value={searchKeyword}
+            onChange={(e) => setSearchKeyword(e.target.value)}
+          />
+          <Select
+            placeholder="类型筛选"
+            allowClear
+            style={{ width: 130 }}
+            value={filterType}
+            onChange={(v) => setFilterType(v)}
+            options={PERMISSION_TYPE_OPTIONS}
+          />
           <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>新建权限</Button>
           <Button icon={<ReloadOutlined />} onClick={loadData}>刷新</Button>
         </Space>
@@ -220,7 +247,7 @@ export const PermissionManagement: React.FC = () => {
         <Table
           rowKey="id"
           columns={columns}
-          dataSource={permissions}
+          dataSource={filteredPermissions}
           loading={loading}
           scroll={{ x: 1700 }}
           pagination={{

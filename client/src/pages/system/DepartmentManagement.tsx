@@ -14,7 +14,7 @@ import {
   Tag,
   message
 } from 'antd';
-import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import { authApi, systemApi } from '../../api';
 
 interface Department {
@@ -43,6 +43,8 @@ export const DepartmentManagement: React.FC = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
   const [form] = Form.useForm();
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [filterStatus, setFilterStatus] = useState<string | undefined>(undefined);
 
   const loadData = async () => {
     setLoading(true);
@@ -218,9 +220,37 @@ export const DepartmentManagement: React.FC = () => {
     },
   ];
 
+  const filteredDepartments = departments.filter((dept) => {
+    const keyword = searchKeyword.trim().toLowerCase();
+    if (keyword && !dept.deptCode.toLowerCase().includes(keyword) && !dept.deptName.toLowerCase().includes(keyword)) {
+      return false;
+    }
+    if (filterStatus && dept.status !== filterStatus) return false;
+    return true;
+  });
+
   return (
     <Card>
-      <Space style={{ marginBottom: 16 }}>
+      <Space style={{ marginBottom: 16 }} wrap>
+        <Input
+          placeholder="部门编码/名称"
+          prefix={<SearchOutlined />}
+          allowClear
+          style={{ width: 200 }}
+          value={searchKeyword}
+          onChange={(e) => setSearchKeyword(e.target.value)}
+        />
+        <Select
+          placeholder="状态"
+          allowClear
+          style={{ width: 120 }}
+          value={filterStatus}
+          onChange={(v) => setFilterStatus(v)}
+          options={[
+            { value: 'ACTIVE', label: '启用' },
+            { value: 'INACTIVE', label: '停用' },
+          ]}
+        />
         <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>新增部门</Button>
         <Button icon={<ReloadOutlined />} onClick={loadData}>刷新</Button>
       </Space>
@@ -228,7 +258,7 @@ export const DepartmentManagement: React.FC = () => {
       <Table
         rowKey="id"
         columns={columns}
-        dataSource={departments}
+        dataSource={filteredDepartments}
         loading={loading}
         scroll={{ x: 1200 }}
         pagination={{

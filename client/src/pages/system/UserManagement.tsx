@@ -3,7 +3,7 @@ import {
   Card, Table, Button, Space, Tag, Modal, Form, Input, Select, message
 } from 'antd';
 import {
-  PlusOutlined, EditOutlined, DeleteOutlined, LockOutlined, ReloadOutlined
+  PlusOutlined, EditOutlined, DeleteOutlined, LockOutlined, ReloadOutlined, SearchOutlined
 } from '@ant-design/icons';
 import { authApi, systemApi, warehouseManagementApi } from '../../api';
 
@@ -82,6 +82,9 @@ export const UserManagement: React.FC = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [form] = Form.useForm<FormValues>();
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [filterRole, setFilterRole] = useState<string | undefined>(undefined);
+  const [filterStatus, setFilterStatus] = useState<string | undefined>(undefined);
 
   const loadData = async () => {
     setLoading(true);
@@ -321,10 +324,51 @@ export const UserManagement: React.FC = () => {
     },
   ];
 
+  const filteredUsers = users.filter((user) => {
+    const keyword = searchKeyword.trim().toLowerCase();
+    if (keyword && !user.username.toLowerCase().includes(keyword) && !user.realName.toLowerCase().includes(keyword) && !(user.email || '').toLowerCase().includes(keyword)) {
+      return false;
+    }
+    if (filterRole) {
+      const hasRole = user.roleDetails?.some((r) => r.id === filterRole) || false;
+      if (!hasRole) return false;
+    }
+    if (filterStatus && user.status !== filterStatus) return false;
+    return true;
+  });
+
   return (
     <div>
       <Card>
-        <Space style={{ marginBottom: 16 }}>
+        <Space style={{ marginBottom: 16 }} wrap>
+          <Input
+            placeholder="用户名/姓名/邮箱"
+            prefix={<SearchOutlined />}
+            allowClear
+            style={{ width: 200 }}
+            value={searchKeyword}
+            onChange={(e) => setSearchKeyword(e.target.value)}
+          />
+          <Select
+            placeholder="角色筛选"
+            allowClear
+            style={{ width: 160 }}
+            value={filterRole}
+            onChange={(v) => setFilterRole(v)}
+            options={roles.map((r) => ({ value: r.id, label: r.roleName }))}
+          />
+          <Select
+            placeholder="状态"
+            allowClear
+            style={{ width: 120 }}
+            value={filterStatus}
+            onChange={(v) => setFilterStatus(v)}
+            options={[
+              { value: 'ACTIVE', label: '正常' },
+              { value: 'INACTIVE', label: '停用' },
+              { value: 'LOCKED', label: '锁定' },
+            ]}
+          />
           <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>新建用户</Button>
           <Button icon={<ReloadOutlined />} onClick={loadData}>刷新</Button>
         </Space>
@@ -332,7 +376,7 @@ export const UserManagement: React.FC = () => {
         <Table
           rowKey="id"
           columns={columns}
-          dataSource={users}
+          dataSource={filteredUsers}
           loading={loading}
           scroll={{ x: 1800 }}
           pagination={{

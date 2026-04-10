@@ -3,7 +3,7 @@ import {
   Card, Table, Button, Space, Tag, Modal, Form, Input, Select, message, Switch
 } from 'antd';
 import {
-  PlusOutlined, EditOutlined, DeleteOutlined, BranchesOutlined
+  PlusOutlined, EditOutlined, DeleteOutlined, BranchesOutlined, SearchOutlined
 } from '@ant-design/icons';
 import { systemApi } from '../../api';
 
@@ -56,6 +56,8 @@ export const WorkflowConfigPage: React.FC = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingWorkflow, setEditingWorkflow] = useState<WorkflowConfig | null>(null);
   const [form] = Form.useForm();
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [filterBizType, setFilterBizType] = useState<string | undefined>(undefined);
 
   const loadWorkflows = async () => {
     setLoading(true);
@@ -222,6 +224,15 @@ export const WorkflowConfigPage: React.FC = () => {
     },
   ];
 
+  const filteredWorkflows = workflows.filter((wf) => {
+    const keyword = searchKeyword.trim().toLowerCase();
+    if (keyword && !wf.name.toLowerCase().includes(keyword) && !wf.code.toLowerCase().includes(keyword)) {
+      return false;
+    }
+    if (filterBizType && wf.businessType !== filterBizType) return false;
+    return true;
+  });
+
   return (
     <div>
       <Card>
@@ -237,10 +248,29 @@ export const WorkflowConfigPage: React.FC = () => {
           </Button>
         </div>
 
+        <Space style={{ marginBottom: 16 }} wrap>
+          <Input
+            placeholder="流程名称/编码"
+            prefix={<SearchOutlined />}
+            allowClear
+            style={{ width: 200 }}
+            value={searchKeyword}
+            onChange={(e) => setSearchKeyword(e.target.value)}
+          />
+          <Select
+            placeholder="业务类型"
+            allowClear
+            style={{ width: 150 }}
+            value={filterBizType}
+            onChange={(v) => setFilterBizType(v)}
+            options={BUSINESS_TYPES}
+          />
+        </Space>
+
         <Table
           rowKey="id"
           columns={columns}
-          dataSource={workflows}
+          dataSource={filteredWorkflows}
           loading={loading}
           pagination={false}
         />
