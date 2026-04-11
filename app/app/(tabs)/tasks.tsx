@@ -253,22 +253,25 @@ export default function TasksScreen() {
     setRefreshing(false);
   }, [role]);
 
+  // 把运营预告(preview)从操作任务中分离出来
+  const previewTasks = tasks.filter(t => t.type === 'preview');
+  const actionTasks = tasks.filter(t => t.type !== 'preview');
+
   const tabs = role === 'WAREHOUSE_CN'
-    ? ['全部', '入库', '装箱', '调拨', '无单', '发运计划']
+    ? ['全部', '入库', '装箱', '调拨', '无单']
     : role === 'WAREHOUSE_US'
-    ? ['全部', '入库', 'DPN', '配送', '自提', '到港预告']
-    : ['全部', '订单', '运输进度'];
+    ? ['全部', '入库', 'DPN', '配送', '自提']
+    : ['全部'];
 
   const tabTypeMap: Record<string, string[]> = {
     '入库': ['inbound'], '装箱': ['packing', 'execute'], '调拨': ['transfer'],
     'DPN': ['dispatch'], '配送': ['delivery'], '自提': ['pickup'],
     '无单': ['orphan'],
-    '发运计划': ['preview'],
-    '到港预告': ['preview'],
-    '订单': ['inbound'], '运输进度': ['preview'],
   };
 
-  const filteredTasks = activeTab === '全部' ? tasks : tasks.filter(t => (tabTypeMap[activeTab] || []).includes(t.type));
+  const filteredTasks = activeTab === '全部' ? actionTasks : actionTasks.filter(t => (tabTypeMap[activeTab] || []).includes(t.type));
+
+  const previewLabel = role === 'WAREHOUSE_CN' ? '📅 发运计划' : role === 'WAREHOUSE_US' ? '🚢 到港预告' : '🚢 运输进度';
 
   // Stats
   const statItems = role === 'WAREHOUSE_CN'
@@ -319,10 +322,28 @@ export default function TasksScreen() {
         </View>
       </View>
 
+      {/* Preview Cards — 运营预告横向滑动 */}
+      {previewTasks.length > 0 && (
+        <View style={styles.previewSection}>
+          <View style={styles.previewHeader}>
+            <Text style={styles.previewTitle}>{previewLabel} ({previewTasks.length})</Text>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.previewScroll}>
+            {previewTasks.map((task) => (
+              <Pressable key={task.id} style={styles.previewCard}>
+                <Text style={styles.previewCardTitle}>{task.subtitle}</Text>
+                <Text style={styles.previewCardDetail} numberOfLines={2}>{task.detail}</Text>
+                <Text style={[styles.previewCardEta, { color: task.statusColor }]}>{task.status}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+
       {/* Filter Tabs */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabBar} contentContainerStyle={styles.tabBarContent}>
         {tabs.map((tab) => {
-          const count = tab === '全部' ? tasks.length : (tabTypeMap[tab] ? tasks.filter(t => (tabTypeMap[tab] || []).includes(t.type)).length : 0);
+          const count = tab === '全部' ? actionTasks.length : (tabTypeMap[tab] ? actionTasks.filter(t => (tabTypeMap[tab] || []).includes(t.type)).length : 0);
           return (
             <Pressable
               key={tab}
@@ -416,6 +437,15 @@ const styles = StyleSheet.create({
   roleText: { fontSize: font.xs, fontWeight: '600' },
   printerBadge: { backgroundColor: colors.successLight, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.full },
   printerText: { fontSize: font.xs, color: colors.success, fontWeight: '500' },
+  // Preview section (运营预告横向滑动)
+  previewSection: { backgroundColor: colors.card, paddingTop: spacing.md, paddingBottom: spacing.md, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
+  previewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.lg, marginBottom: spacing.sm },
+  previewTitle: { fontSize: font.sm, fontWeight: '600', color: colors.text },
+  previewScroll: { paddingHorizontal: spacing.md, gap: spacing.sm },
+  previewCard: { width: 180, backgroundColor: colors.primaryLight, borderRadius: radius.md, padding: spacing.md, borderLeftWidth: 3, borderLeftColor: colors.taskPreview },
+  previewCardTitle: { fontSize: font.sm, fontWeight: '600', color: colors.text, fontFamily: font.mono, marginBottom: 4 },
+  previewCardDetail: { fontSize: font.xs, color: colors.textSecondary, lineHeight: 16, marginBottom: 6 },
+  previewCardEta: { fontSize: font.xs, fontWeight: '600' },
   statsRow: { flexDirection: 'row', gap: spacing.sm },
   statCard: { flex: 1, backgroundColor: colors.bg, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center' },
   statNum: { fontSize: font.xl, fontWeight: '700' },
