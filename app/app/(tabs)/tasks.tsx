@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, SafeAreaView } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Pressable, RefreshControl, SafeAreaView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing, radius, font } from '../../lib/theme';
@@ -254,16 +254,18 @@ export default function TasksScreen() {
   }, [role]);
 
   const tabs = role === 'WAREHOUSE_CN'
-    ? ['全部', '入库', '装箱', '调拨', '其他']
+    ? ['全部', '入库', '装箱', '调拨', '无单', '发运计划']
     : role === 'WAREHOUSE_US'
-    ? ['全部', '入库', 'DPN', '配送', '自提', '在途']
-    : ['全部', '订单', '运输'];
+    ? ['全部', '入库', 'DPN', '配送', '自提', '到港预告']
+    : ['全部', '订单', '运输进度'];
 
   const tabTypeMap: Record<string, string[]> = {
     '入库': ['inbound'], '装箱': ['packing', 'execute'], '调拨': ['transfer'],
-    'DPN': ['dispatch'], '配送': ['delivery'], '自提': ['pickup'], '在途': ['preview'],
-    '订单': ['inbound'], '运输': ['preview'],
-    '其他': ['orphan', 'preview'],
+    'DPN': ['dispatch'], '配送': ['delivery'], '自提': ['pickup'],
+    '无单': ['orphan'],
+    '发运计划': ['preview'],
+    '到港预告': ['preview'],
+    '订单': ['inbound'], '运输进度': ['preview'],
   };
 
   const filteredTasks = activeTab === '全部' ? tasks : tasks.filter(t => (tabTypeMap[activeTab] || []).includes(t.type));
@@ -274,18 +276,18 @@ export default function TasksScreen() {
         { label: '待入库', value: tasks.filter(t => t.type === 'inbound').length, color: colors.primary },
         { label: '待装箱', value: tasks.filter(t => t.type === 'packing').length, color: colors.success },
         { label: '调拨', value: tasks.filter(t => t.type === 'transfer').length, color: colors.info },
-        { label: '无单', value: tasks.filter(t => t.type === 'orphan').length, color: colors.warning },
+        { label: '发运计划', value: tasks.filter(t => t.type === 'preview').length, color: colors.taskPreview },
       ]
     : role === 'WAREHOUSE_US'
     ? [
         { label: '待入库', value: tasks.filter(t => t.type === 'inbound').length, color: colors.primary },
         { label: 'DPN', value: tasks.filter(t => t.type === 'dispatch').length, color: colors.info },
         { label: '配送', value: tasks.filter(t => t.type === 'delivery').length, color: colors.danger },
-        { label: '自提', value: tasks.filter(t => t.type === 'pickup').length, color: colors.success },
+        { label: '到港预告', value: tasks.filter(t => t.type === 'preview').length, color: colors.taskPreview },
       ]
     : [
-        { label: '订单', value: tasks.filter(t => t.type === 'inbound').length, color: colors.primary },
-        { label: '运输', value: tasks.filter(t => t.type === 'preview').length, color: colors.info },
+        { label: '待办订单', value: tasks.filter(t => t.type === 'inbound').length, color: colors.primary },
+        { label: '运输进度', value: tasks.filter(t => t.type === 'preview').length, color: colors.info },
       ];
 
   return (
@@ -322,7 +324,7 @@ export default function TasksScreen() {
         {tabs.map((tab) => {
           const count = tab === '全部' ? tasks.length : (tabTypeMap[tab] ? tasks.filter(t => (tabTypeMap[tab] || []).includes(t.type)).length : 0);
           return (
-            <TouchableOpacity
+            <Pressable
               key={tab}
               style={[styles.tab, activeTab === tab && styles.tabActive]}
               onPress={() => setActiveTab(tab)}
@@ -330,7 +332,7 @@ export default function TasksScreen() {
               <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
                 {tab} {count > 0 && <Text style={styles.tabBadge}>{count}</Text>}
               </Text>
-            </TouchableOpacity>
+            </Pressable>
           );
         })}
       </ScrollView>
