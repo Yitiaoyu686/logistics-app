@@ -29,7 +29,12 @@ export default function LoginScreen() {
       const { token, user: userData } = res.data;
       await AsyncStorage.setItem('token', token);
       await AsyncStorage.setItem('user', JSON.stringify(userData));
-      router.replace('/(tabs)/tasks');
+      // Force page reload on web to re-trigger auth check
+      if (typeof window !== 'undefined') {
+        window.location.href = '/(tabs)/tasks';
+      } else {
+        router.replace('/(tabs)/tasks');
+      }
     } catch (err: any) {
       Alert.alert('登录失败', err.message || '请检查用户名和密码');
     } finally {

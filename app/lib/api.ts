@@ -1,10 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// For Expo Go on physical device, use your computer's local IP
-// For simulator, use localhost
-const BASE_URL = __DEV__
-  ? 'http://192.168.3.127:3001/api'  // Change to your computer IP
-  : 'https://api.example.com/api';
+import { Platform } from 'react-native';
+
+// Web uses localhost, native device uses computer's local IP
+const BASE_URL = Platform.OS === 'web'
+  ? 'http://localhost:3001/api'
+  : 'http://192.168.3.127:3001/api';
 
 async function getToken(): Promise<string | null> {
   return AsyncStorage.getItem('token');
