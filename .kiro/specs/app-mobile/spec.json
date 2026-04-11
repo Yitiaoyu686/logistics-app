@@ -1,0 +1,13 @@
+{
+  "name": "app-mobile",
+  "description": "跨境物流App端（销售/起运国仓管/到达国仓管三角色）",
+  "language": "zh-CN",
+  "created_at": "2026-04-11",
+  "updated_at": "2026-04-11",
+  "phase": "tasks-generated",
+  "approvals": {
+    "requirements": { "approved": true },
+    "design": { "approved": true },
+    "tasks": { "generated": true, "approved": false }
+  }
+}
