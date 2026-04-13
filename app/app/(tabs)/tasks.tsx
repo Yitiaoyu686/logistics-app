@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Pressable, RefreshControl, SafeAreaView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { getRoleLabel, getRoleColor } from '../../lib/auth';
@@ -17,11 +18,12 @@ interface TaskItem {
   statusColor: string;
   time?: string;
   progress?: { current: number; total: number };
-  actions: { label: string; color: string; onPress?: () => void }[];
+  actions: { label: string; color: string; route?: string; params?: Record<string, any> }[];
   borderColor: string;
 }
 
 export default function TasksScreen() {
+  const router = useRouter();
   const [role, setRole] = useState('');
   const [userName, setUserName] = useState('');
   const [tasks, setTasks] = useState<TaskItem[]>([]);
@@ -53,7 +55,7 @@ export default function TasksScreen() {
             detail: `${o.customer_name} · ${o.total_declared_pieces || 0}件 · ${o.route_code || ''}`,
             status: '待处理', statusColor: colors.warning,
             time: formatTime(o.created_at),
-            actions: [{ label: '扫码入库', color: colors.primary }],
+            actions: [{ label: '扫码入库', color: colors.primary, route: '/task/inbound', params: { orderId: o.id, orderNo: o.order_no } }],
             borderColor: colors.taskInbound,
           });
         }
@@ -396,18 +398,22 @@ export default function TasksScreen() {
 
               <View style={styles.cardActions}>
                 {task.actions.map((action, i) => (
-                  <TouchableOpacity
+                  <Pressable
                     key={i}
                     style={[styles.actionBtn, action.color === colors.primary && styles.actionBtnPrimary,
                       action.color === colors.success && styles.actionBtnSuccess,
                       action.color === colors.danger && styles.actionBtnDanger,
                       action.color === colors.warning && styles.actionBtnWarning]}
-                    activeOpacity={0.7}
+                    onPress={() => {
+                      if (action.route) {
+                        router.push({ pathname: action.route as any, params: action.params || {} });
+                      }
+                    }}
                   >
                     <Text style={[styles.actionBtnText, {
                       color: [colors.primary, colors.success, colors.danger, colors.warning].includes(action.color) ? '#fff' : action.color
                     }]}>{action.label}</Text>
-                  </TouchableOpacity>
+                  </Pressable>
                 ))}
               </View>
             </View>
