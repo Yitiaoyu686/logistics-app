@@ -1,18 +1,27 @@
 import { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, SafeAreaView, TouchableOpacity, FlatList } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
 
-const MENU_ITEMS = [
-  { icon: '📋', label: '库存查询', desc: '搜索在库货物' },
-  { icon: '📦', label: '入库记录', desc: '历史入库数据' },
-  { icon: '🏗', label: '装箱任务', desc: '集装箱装箱列表' },
-  { icon: '📄', label: '订单查询', desc: '按运单号查订单' },
-  { icon: '🔄', label: '调拨记录', desc: '调拨单历史' },
-  { icon: '🚚', label: '配送记录', desc: 'DPN配送历史' },
+interface MenuItem {
+  icon: string;
+  label: string;
+  desc: string;
+  route: string;
+}
+
+const MENU_ITEMS: MenuItem[] = [
+  { icon: '📋', label: '库存查询', desc: '搜索在库货物', route: '/task/stock' },
+  { icon: '👥', label: '客户查询', desc: '我的客户列表', route: '/task/customer' },
+  { icon: '📄', label: '订单查询', desc: '按运单号查订单', route: '/task/order' },
+  { icon: '💰', label: '运费试算', desc: '即时报价分享', route: '/task/quote' },
+  { icon: '📦', label: '扫码入库', desc: '称重量方计费', route: '/task/inbound' },
+  { icon: '🏗', label: '装箱出库', desc: '柜内装箱发车', route: '/task/packing' },
 ];
 
 export default function SearchScreen() {
+  const router = useRouter();
   const [keyword, setKeyword] = useState('');
 
   return (
@@ -42,7 +51,11 @@ export default function SearchScreen() {
         columnWrapperStyle={styles.gridRow}
         keyExtractor={(item) => item.label}
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.menuCard} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={styles.menuCard}
+            activeOpacity={0.7}
+            onPress={() => router.push(item.route as any)}
+          >
             <Text style={styles.menuIcon}>{item.icon}</Text>
             <Text style={styles.menuLabel}>{item.label}</Text>
             <Text style={styles.menuDesc}>{item.desc}</Text>

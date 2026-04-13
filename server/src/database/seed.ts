@@ -214,6 +214,22 @@ export function seedDatabase(): void {
   `);
 
   // ============================================================
+  // 5.5 WMS 库存（已入库的子单 → 在库/已装箱/已出库）
+  // ============================================================
+
+  db.exec(`
+    INSERT INTO wms_stock (id, business_line, warehouse_id, order_id, sub_order_id, stock_status, pieces, gross_weight_kg, volume_cbm, location_code, created_at) VALUES
+    ('stk-1', 'SEA', 'wh-gz', 'ord-1', 'sub-1-1', 'IN_STOCK',  1, 6.5,  0.045, 'A-01-03',  '${now}'),
+    ('stk-2', 'SEA', 'wh-gz', 'ord-2', 'sub-2-1', 'IN_STOCK',  1, 5.2,  0.030, 'A-02-01',  '${now}'),
+    ('stk-3', 'SEA', 'wh-gz', 'ord-4', 'sub-4-1', 'PACKED',    2, 15.0, 0.120, 'B-03-05',  '${now}'),
+    ('stk-4', 'SEA', 'wh-gz', 'ord-5', 'sub-5-1', 'OUTBOUND',  3, 25.0, 0.180, 'C-01-02',  '${now}'),
+    ('stk-5', 'SEA', 'wh-sz', 'ord-2', 'sub-2-1', 'IN_STOCK',  1, 5.2,  0.030, 'SZ-A-12',  '${now}'),
+    ('stk-6', 'SEA', 'wh-gz', 'ord-1', 'sub-1-2', 'ALLOCATED', 1, 6.0,  0.040, 'A-01-04',  '${now}'),
+    ('stk-7', 'SEA', 'wh-gz', 'ord-6', 'sub-6-1', 'IN_STOCK',  3, 18.0, 0.140, 'A-04-02',  '${now}'),
+    ('stk-8', 'SEA', 'wh-gz', 'ord-6', 'sub-6-2', 'IN_STOCK',  2, 12.0, 0.090, 'A-04-03',  '${now}');
+  `);
+
+  // ============================================================
   // 6. TMS 任务（10条 JOB，对齐 Web 起运国办数据）
   // ============================================================
 

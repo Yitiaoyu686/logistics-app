@@ -225,7 +225,7 @@ export default function TasksScreen() {
             title: '未完成订单', subtitle: o.order_no,
             detail: `${o.customer_name} · ${o.total_declared_pieces || 0}件 · ${o.route_code || ''}`,
             status: '待入库', statusColor: colors.warning,
-            actions: [{ label: '查看详情', color: colors.primary }],
+            actions: [{ label: '查看详情', color: colors.primary, route: '/task/order' }],
             borderColor: colors.taskInbound,
           });
         }
@@ -240,7 +240,7 @@ export default function TasksScreen() {
             detail: `${j.carrier_name || '-'} · ${j.container_no || '-'}\n当前: ${nodeLabel}`,
             status: j.etd ? `ETD ${j.etd.substring(5)}` : '', statusColor: colors.info,
             actions: [
-              { label: '详情', color: colors.primary },
+              { label: '详情', color: colors.primary, route: '/task/order' },
               { label: '分享', color: colors.textSecondary },
             ],
             borderColor: colors.taskPreview,
@@ -328,6 +328,42 @@ export default function TasksScreen() {
           ))}
         </View>
       </View>
+
+      {/* Sales 快捷入口 */}
+      {role === 'SALES' && (
+        <View style={styles.quickActions}>
+          <Pressable style={styles.quickAction} onPress={() => router.push('/task/customer' as any)}>
+            <Text style={styles.quickActionIcon}>👥</Text>
+            <Text style={styles.quickActionLabel}>客户列表</Text>
+          </Pressable>
+          <Pressable style={styles.quickAction} onPress={() => router.push('/task/order' as any)}>
+            <Text style={styles.quickActionIcon}>📄</Text>
+            <Text style={styles.quickActionLabel}>订单查询</Text>
+          </Pressable>
+          <Pressable style={styles.quickAction} onPress={() => router.push('/task/quote' as any)}>
+            <Text style={styles.quickActionIcon}>💰</Text>
+            <Text style={styles.quickActionLabel}>运费试算</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {/* WAREHOUSE_CN 快捷入口 */}
+      {role === 'WAREHOUSE_CN' && (
+        <View style={styles.quickActions}>
+          <Pressable style={styles.quickAction} onPress={() => router.push('/task/stock' as any)}>
+            <Text style={styles.quickActionIcon}>📋</Text>
+            <Text style={styles.quickActionLabel}>库存查询</Text>
+          </Pressable>
+          <Pressable style={styles.quickAction} onPress={() => router.push('/task/inbound' as any)}>
+            <Text style={styles.quickActionIcon}>📦</Text>
+            <Text style={styles.quickActionLabel}>扫码入库</Text>
+          </Pressable>
+          <Pressable style={styles.quickAction} onPress={() => router.push('/task/packing' as any)}>
+            <Text style={styles.quickActionIcon}>🏗</Text>
+            <Text style={styles.quickActionLabel}>装箱出库</Text>
+          </Pressable>
+        </View>
+      )}
 
       {/* Preview Cards — 运营预告横向滑动 */}
       {previewTasks.length > 0 && (
@@ -448,6 +484,11 @@ const styles = StyleSheet.create({
   roleText: { fontSize: font.xs, fontWeight: '600' },
   printerBadge: { backgroundColor: colors.successLight, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.full },
   printerText: { fontSize: font.xs, color: colors.success, fontWeight: '500' },
+  // 快捷操作入口
+  quickActions: { flexDirection: 'row', backgroundColor: colors.card, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.sm, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
+  quickAction: { flex: 1, alignItems: 'center', paddingVertical: spacing.md, backgroundColor: colors.bg, borderRadius: radius.md, gap: 4 },
+  quickActionIcon: { fontSize: 24 },
+  quickActionLabel: { fontSize: font.xs, color: colors.text, fontWeight: '500' },
   // Preview section (运营预告横向滑动)
   previewSection: { backgroundColor: colors.card, paddingTop: spacing.md, paddingBottom: spacing.md, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
   previewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.lg, marginBottom: spacing.sm },
