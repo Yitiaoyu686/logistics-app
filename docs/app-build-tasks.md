@@ -12,7 +12,7 @@
 |------|------|------|
 | 阶段一：后端搭建 | ✅ 完成 | 34表数据库 + 7个路由文件 + JWT认证 + Seed数据 |
 | 阶段二：App骨架 | ✅ 完成 | Expo项目 + 5Tab导航 + 登录 + 任务流首页 |
-| 阶段三：P0页面 | 🔵 进行中 | 19页中已完成 13 页（骨架5 + 第一批4 + 第二批4） |
+| 阶段三：P0页面 | ✅ 完成 | 19页中已完成 19 页（骨架5 + 第一批4 + 第二批4 + 第三批4 + 复用2） |
 | 阶段四：数据联通验证 | ⬜ 未开始 | Web↔App数据互通 |
 
 ---
@@ -119,9 +119,9 @@ cd app && npx expo start --web --port 4003    # Web预览 → http://localhost:4
 
 | # | 页面 | 文件路径 | 状态 | 说明 |
 |---|------|---------|------|------|
-| 5 | 任务流首页 | app/(tabs)/tasks.tsx | ✅ 已完成 | 同文件，按角色分支 |
-| 6 | 任务入库 | app/task/dest-inbound.tsx | ⬜ 待开发 | 扫码核对+差异处理+拍照 |
-| 7 | DPN管理 | app/task/dpn.tsx | ⬜ 待开发 | 绑运单+执行发车(拖车表单)+确认到达+入库确认 |
+| 5 | 任务流首页 | app/(tabs)/tasks.tsx | ✅ 已完成 | 同文件，按角色分支+US快捷入口 |
+| 6 | 任务入库 | app/task/dest-inbound.tsx | ✅ 已完成 | 扫码核对+逐条标记(到货/少件/破损)+进度条+拍照+提交 |
+| 7 | DPN管理 | app/task/dpn.tsx | ✅ 已完成 | 4模式切换(绑运单/发车/到达/入库)+按状态自动初始化 |
 | 8 | 配送签收/失败 | app/task/delivery.tsx | ✅ 已完成 | 签收(拍照+COD)+失败(原因+拍照)+转自提 |
 | 9 | 自提管理 | app/task/pickup.tsx | ✅ 已完成 | 通知(短信)+核销(验提货码+COD) |
 
@@ -139,11 +139,11 @@ cd app && npx expo start --web --port 4003    # Web预览 → http://localhost:4
 | # | 页面 | 文件路径 | 状态 | 说明 |
 |---|------|---------|------|------|
 | 14 | 登录 | app/(auth)/login.tsx | ✅ 已完成 | — |
-| 15 | 扫码页 | app/(tabs)/scan.tsx | ✅ 骨架 | 需接入真实相机+万能识别逻辑 |
-| 16 | 消息中心 | app/(tabs)/messages.tsx | ✅ 骨架 | 需接后端通知API |
+| 15 | 扫码页 | app/(tabs)/scan.tsx | ✅ 已完成 | expo-camera条码扫描+万能识别(JOB/DPN/运单/库位)+手动输入+最近扫描 |
+| 16 | 消息中心 | app/(tabs)/messages.tsx | ✅ 已完成 | 后端动态消息+角色过滤+4Tab+已读状态+点击跳转目标页 |
 | 17 | 个人中心 | app/(tabs)/profile.tsx | ✅ 已完成 | — |
-| 18 | 库存查询(仓管US) | app/task/dest-stock.tsx | ⬜ 待开发 | 与起运国库存类似 |
-| 19 | 订单查询(只读) | (复用#12) | ⬜ 待开发 | 仓管角色只读 |
+| 18 | 库存查询(仓管US) | (复用#3) | ✅ 复用 | 复用 stock.tsx，多仓筛选 |
+| 19 | 订单查询(只读) | (复用#12) | ✅ 复用 | 复用 order.tsx |
 
 ### 开发优先级
 
@@ -156,9 +156,13 @@ cd app && npx expo start --web --port 4003    # Web预览 → http://localhost:4
   + tasks.tsx SALES/WAREHOUSE_CN 快捷入口
   + seed.ts 补充 wms_stock 8条数据
 
-第三批（补全）：⬜ 待开发
-  #6 任务入库 → #7 DPN管理 → #15 扫码接入 → #16 消息接入
+第三批（补全）：✅ 完成
+  #6 任务入库(dest-inbound) → #7 DPN管理 → #15 扫码万能识别 → #16 消息中心
+  + WAREHOUSE_US 快捷入口
+  + 后端 /api/system/notifications 动态消息生成
 ```
+
+阶段三共 19 页全部完成。下一步：阶段四 数据联通验证。
 
 ---
 

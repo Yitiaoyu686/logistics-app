@@ -137,8 +137,8 @@ export default function TasksScreen() {
             detail: `${j.carrier_name || ''} · ${j.origin_port}→${j.dest_port}\n集装箱 ${j.container_no || '-'} · ${j.total_pieces}件/${j.total_weight_kg}kg`,
             status: '待入库', statusColor: colors.warning,
             actions: [
-              { label: '入库', color: colors.primary },
-              { label: '清单', color: colors.textSecondary },
+              { label: '入库核对', color: colors.primary, route: '/task/dest-inbound', params: { jobNo: j.job_no, jobId: j.id } },
+              { label: '清单', color: colors.textSecondary, route: '/task/order' },
             ],
             borderColor: colors.taskInbound,
           });
@@ -148,7 +148,8 @@ export default function TasksScreen() {
         const dpns = await deliveryApi.getDpns();
         for (const d of (dpns.data || []).filter((d: any) => !['SIGNED', 'CANCELLED'].includes(d.dpn_status)).slice(0, 5)) {
           const statusMap: Record<string, string> = { DRAFT: '草稿', PENDING_BIND: '待绑定', PENDING_DISPATCH: '待发运', IN_TRANSIT: '运输中', ARRIVED: '已到达' };
-          const actionMap: Record<string, string[]> = { PENDING_BIND: ['绑定运单'], PENDING_DISPATCH: ['执行发车'], IN_TRANSIT: ['查看'] };
+          const actionMap: Record<string, string> = { PENDING_BIND: '绑定运单', PENDING_DISPATCH: '执行发车', IN_TRANSIT: '确认到达', ARRIVED: '入库确认' };
+          const dpnParams = { dpnId: d.id, dpnNo: d.dpn_no, dpnStatus: d.dpn_status, fromSite: d.from_site, toSite: d.to_site };
           items.push({
             id: `dpn-${d.id}`, type: 'dispatch', icon: '📄',
             title: `DPN${statusMap[d.dpn_status] || d.dpn_status}`,
@@ -156,8 +157,8 @@ export default function TasksScreen() {
             detail: `${d.from_site || ''} → ${d.to_site || ''}\n运单 ${d.total_orders} · 件数 ${d.total_pieces}`,
             status: statusMap[d.dpn_status] || d.dpn_status, statusColor: colors.info,
             actions: [
-              ...(actionMap[d.dpn_status] || []).map(a => ({ label: a, color: colors.primary })),
-              { label: '打印', color: colors.textSecondary },
+              ...(actionMap[d.dpn_status] ? [{ label: actionMap[d.dpn_status], color: colors.primary, route: '/task/dpn', params: dpnParams }] : []),
+              { label: '详情', color: colors.textSecondary, route: '/task/dpn', params: dpnParams },
             ],
             borderColor: colors.taskDispatch,
           });
@@ -361,6 +362,24 @@ export default function TasksScreen() {
           <Pressable style={styles.quickAction} onPress={() => router.push('/task/packing' as any)}>
             <Text style={styles.quickActionIcon}>🏗</Text>
             <Text style={styles.quickActionLabel}>装箱出库</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {/* WAREHOUSE_US 快捷入口 */}
+      {role === 'WAREHOUSE_US' && (
+        <View style={styles.quickActions}>
+          <Pressable style={styles.quickAction} onPress={() => router.push('/task/dest-inbound' as any)}>
+            <Text style={styles.quickActionIcon}>📥</Text>
+            <Text style={styles.quickActionLabel}>任务入库</Text>
+          </Pressable>
+          <Pressable style={styles.quickAction} onPress={() => router.push('/task/dpn' as any)}>
+            <Text style={styles.quickActionIcon}>📄</Text>
+            <Text style={styles.quickActionLabel}>DPN管理</Text>
+          </Pressable>
+          <Pressable style={styles.quickAction} onPress={() => router.push('/task/delivery' as any)}>
+            <Text style={styles.quickActionIcon}>🚚</Text>
+            <Text style={styles.quickActionLabel}>配送签收</Text>
           </Pressable>
         </View>
       )}

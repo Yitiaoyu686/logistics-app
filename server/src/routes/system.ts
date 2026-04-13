@@ -319,4 +319,127 @@ router.get('/workflows', (_req: Request, res: Response) => {
   res.json({ data: [] });
 });
 
+// ============================================================
+// 消息通知 — 根据当前业务状态动态生成（Demo用）
+// ============================================================
+
+router.get('/notifications', (_req: Request, res: Response) => {
+  const db = getDb();
+  const notifications: any[] = [];
+
+  // 1. 已到港待入库的 JOB
+  const arrivedJobs = db.prepare("SELECT * FROM tms_job WHERE job_status = 'ARRIVED' ORDER BY ata DESC, created_at DESC LIMIT 5").all() as any[];
+  for (const j of arrivedJobs) {
+    notifications.push({
+      id: `job-arrived-${j.id}`,
+      type: 'JOB_ARRIVED',
+      title: '任务已到港',
+      content: `${j.job_no} 已抵达 ${j.dest_port}，柜号 ${j.container_no || '-'}，${j.total_pieces} 件`,
+      icon: '🚢',
+      color: 'success',
+      target: 'WAREHOUSE_US',
+      routePath: '/task/dest-inbound',
+      routeParams: { jobNo: j.job_no, jobId: j.id },
+      time: j.ata || j.updated_at || j.created_at,
+      read: false,
+    });
+  }
+
+  // 2. 即将发运的 JOB
+  const departingJobs = db.prepare("SELECT * FROM tms_job WHERE job_status IN ('CUSTOMS_EXPORT','DEPARTED') ORDER BY etd ASC LIMIT 5").all() as any[];
+  for (const j of departingJobs) {
+    const etd = j.etd ? new Date(j.etd).getTime() : null;
+    const days = etd ? Math.ceil((etd - Date.now()) / 86400000) : null;
+    notifications.push({
+      id: `job-departing-${j.id}`,
+      type: 'JOB_DEPARTING',
+      title: '发运计划提醒',
+      content: `${j.job_no} 计划 ${days !== null ? (days >= 0 ? `${days}天后` : `${-days}天前`) : ''}发运，路线 ${j.route_code || '-'}`,
+      icon: '📅',
+      color: 'info',
+      target: 'WAREHOUSE_CN',
+      routePath: '/(tabs)/tasks',
+      time: j.updated_at || j.created_at,
+      read: false,
+    });
+  }
+
+  // 3. 待绑定/发运的 DPN
+  const pendingDpns = db.prepare("SELECT * FROM pod_dpn WHERE dpn_status IN ('PENDING_BIND','PENDING_DISPATCH','IN_TRANSIT') ORDER BY created_at DESC LIMIT 5").all() as any[];
+  for (const d of pendingDpns) {
+    const statusLabel = d.dpn_status === 'PENDING_BIND' ? '待绑定' : d.dpn_status === 'PENDING_DISPATCH' ? '待发运' : '运输中';
+    notifications.push({
+      id: `dpn-${d.id}`,
+      type: 'DPN_UPDATE',
+      title: `DPN ${statusLabel}`,
+      content: `${d.dpn_no} · ${d.from_site || '-'} → ${d.to_site || '-'} · ${d.total_orders} 单`,
+      icon: '📄',
+      color: d.dpn_status === 'PENDING_BIND' ? 'warning' : 'primary',
+      target: 'WAREHOUSE_US',
+      routePath: '/task/dpn',
+      routeParams: { dpnId: d.id, dpnNo: d.dpn_no, dpnStatus: d.dpn_status, fromSite: d.from_site, toSite: d.to_site },
+      time: d.updated_at || d.created_at,
+      read: false,
+    });
+  }
+
+  // 4. 待入库订单
+  const pendingOrders = db.prepare("SELECT * FROM oms_order WHERE order_status = 'PENDING_INBOUND' ORDER BY created_at DESC LIMIT 3").all() as any[];
+  for (const o of pendingOrders) {
+    notifications.push({
+      id: `order-pending-${o.id}`,
+      type: 'ORDER_PENDING',
+      title: '新订单待入库',
+      content: `${o.order_no} · ${o.customer_name} · ${o.total_declared_pieces || 0}件`,
+      icon: '📦',
+      color: 'warning',
+      target: 'WAREHOUSE_CN',
+      routePath: '/task/inbound',
+      routeParams: { orderId: o.id, orderNo: o.order_no },
+      time: o.created_at,
+      read: false,
+    });
+  }
+
+  // 5. 无单快递
+  const unmatched = db.prepare("SELECT * FROM wms_unmatched_package WHERE status = 'PENDING' ORDER BY created_at DESC LIMIT 3").all() as any[];
+  for (const u of unmatched) {
+    notifications.push({
+      id: `unmatched-${u.id}`,
+      type: 'UNMATCHED_PACKAGE',
+      title: '无单快递待处理',
+      content: `${u.tracking_no} · ${u.express_company || '-'} · ${u.sender_name || '未知寄件人'}`,
+      icon: '❓',
+      color: 'danger',
+      target: 'WAREHOUSE_CN',
+      routePath: '/(tabs)/tasks',
+      time: u.created_at,
+      read: false,
+    });
+  }
+
+  // 6. 待自提通知
+  const pendingPickups = db.prepare("SELECT * FROM pod_pickup WHERE notify_status = 'PENDING' ORDER BY created_at DESC LIMIT 3").all() as any[];
+  for (const p of pendingPickups) {
+    notifications.push({
+      id: `pickup-${p.id}`,
+      type: 'PICKUP_PENDING',
+      title: '自提单待通知',
+      content: `${p.pickup_no} · ${p.recipient_name} · ${p.pickup_station}`,
+      icon: '🏪',
+      color: 'warning',
+      target: 'WAREHOUSE_US',
+      routePath: '/task/pickup',
+      routeParams: { pickupId: p.id, pickupNo: p.pickup_no, recipientName: p.recipient_name, recipientPhone: p.recipient_phone, pickupStation: p.pickup_station, notifyStatus: p.notify_status, mode: 'notify' },
+      time: p.created_at,
+      read: false,
+    });
+  }
+
+  // 按时间倒序
+  notifications.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+
+  res.json({ data: notifications });
+});
+
 export default router;

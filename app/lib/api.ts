@@ -45,6 +45,11 @@ export const authApi = {
   login: (username: string, password: string) => api.post('/auth/login', { username, password }),
 };
 
+// Notifications
+export const notificationApi = {
+  list: () => api.get('/system/notifications'),
+};
+
 // Jobs (TMS)
 export const jobApi = {
   list: (params?: Record<string, string>) => {
@@ -52,6 +57,8 @@ export const jobApi = {
     return api.get(`/jobs${qs}`);
   },
   get: (jobNo: string) => api.get(`/jobs/${jobNo}`),
+  update: (jobNo: string, data: any) => api.put(`/jobs/${jobNo}`, data),
+  addEvent: (data: any) => api.post('/v2/tms/tracking-events', data),
 };
 
 // Orders
@@ -86,6 +93,9 @@ export const warehouseApi = {
 // DPN & Delivery
 export const deliveryApi = {
   getDpns: () => api.get('/v2/pod/dpns'),
+  getDpn: (id: string) => api.get(`/v2/pod/dpns/${id}`),
+  updateDpn: (id: string, data: any) => api.put(`/v2/pod/dpns/${id}`, data),
+  bindSubOrders: (id: string, subOrderIds: string[]) => api.post(`/v2/pod/dpns/${id}/bind-sub-orders`, { subOrderIds }),
   getDeliveryTasks: () => api.get('/v2/pod/delivery-tasks'),
   getPickups: () => api.get('/delivery/pickups'),
   signDelivery: (id: string, data: any) => api.post(`/v2/pod/delivery-tasks/${id}/sign`, data),
