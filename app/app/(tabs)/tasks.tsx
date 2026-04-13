@@ -70,8 +70,8 @@ export default function TasksScreen() {
             status: '装箱中', statusColor: colors.info,
             progress: { current: j.total_weight_kg || 0, total: 26000 },
             actions: [
-              { label: '添加订单', color: colors.success },
-              { label: '详情', color: colors.textSecondary },
+              { label: '添加订单', color: colors.success, route: '/task/packing', params: { jobId: j.id, mode: 'add-order' } },
+              { label: '执行出库', color: colors.warning, route: '/task/packing', params: { jobId: j.id, mode: 'execute-out' } },
             ],
             borderColor: colors.taskPacking,
           });
