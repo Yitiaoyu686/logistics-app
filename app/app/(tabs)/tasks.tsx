@@ -189,8 +189,14 @@ export default function TasksScreen() {
             detail: `${p.recipient_name || ''} · ${p.recipient_phone || ''}`,
             status: p.notify_status === 'PENDING' ? '待通知' : '已通知', statusColor: p.notify_status === 'PENDING' ? colors.warning : colors.success,
             actions: [
-              ...(p.notify_status === 'PENDING' ? [{ label: '通知', color: colors.primary }] : []),
-              { label: '核销自提', color: colors.success },
+              ...(p.notify_status === 'PENDING' ? [{
+                label: '通知', color: colors.primary, route: '/task/pickup',
+                params: { pickupId: p.id, pickupNo: p.pickup_no, trackingNo: p.tracking_no, recipientName: p.recipient_name, recipientPhone: p.recipient_phone, pickupStation: p.pickup_station, notifyStatus: p.notify_status, mode: 'notify' },
+              }] : []),
+              {
+                label: '核销自提', color: colors.success, route: '/task/pickup',
+                params: { pickupId: p.id, pickupNo: p.pickup_no, trackingNo: p.tracking_no, recipientName: p.recipient_name, recipientPhone: p.recipient_phone, pickupStation: p.pickup_station, notifyStatus: p.notify_status, mode: 'verify' },
+              },
             ],
             borderColor: colors.taskPickup,
           });
