@@ -172,9 +172,8 @@ export default function TasksScreen() {
             detail: `${dt.dpn_no || ''} · 送货上门\n${dt.recipient_name || ''} · ${dt.recipient_phone || ''}`,
             status: dt.task_status === 'IN_TRANSIT' ? '执行中' : '待接单', statusColor: dt.task_status === 'FAILED' ? colors.danger : colors.info,
             actions: [
-              { label: '配送完成', color: colors.success },
-              { label: '配送失败', color: colors.danger },
-              { label: '转自提', color: colors.textSecondary },
+              { label: '配送完成', color: colors.success, route: '/task/delivery', params: { taskId: dt.id, taskNo: dt.task_no, dpnNo: dt.dpn_no, recipientName: dt.recipient_name, recipientPhone: dt.recipient_phone, mode: 'sign' } },
+              { label: '配送失败', color: colors.danger, route: '/task/delivery', params: { taskId: dt.id, taskNo: dt.task_no, dpnNo: dt.dpn_no, recipientName: dt.recipient_name, recipientPhone: dt.recipient_phone, mode: 'fail' } },
             ],
             borderColor: colors.taskDelivery,
           });
