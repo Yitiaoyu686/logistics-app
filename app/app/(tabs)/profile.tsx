@@ -18,16 +18,11 @@ interface DemoAccount {
   desc: string;
 }
 
+// App 端按规格只覆盖 3 个角色（其他角色仅 Web 端可用）
 const DEMO_ACCOUNTS: DemoAccount[] = [
-  { username: 'sales1',         password: '123456', realName: 'AkinGbolahan', role: 'SALES',         desc: '销售：客户/订单/试算' },
-  { username: 'warehouse_cn1',  password: '123456', realName: '李仓管',        role: 'WAREHOUSE_CN',  desc: '起运国仓管：扫码入库/装箱' },
-  { username: 'warehouse_us1',  password: '123456', realName: '王仓管',        role: 'WAREHOUSE_US',  desc: '到达国仓管：DPN/配送/自提' },
-  { username: 'ops_cn1',        password: '123456', realName: '张运营',        role: 'OPS_CN',        desc: '起运国操作：JOB任务管理' },
-  { username: 'ops_us1',        password: '123456', realName: '赵运营',        role: 'OPS_US',        desc: '到达国操作：DPN/配送计划' },
-  { username: 'finance1',       password: '123456', realName: '钱财务',        role: 'FINANCE',       desc: '财务：费用审批/应收应付' },
-  { username: 'boss1',          password: '123456', realName: '孙总',          role: 'BOSS',          desc: '管理层：经营分析' },
-  { username: 'driver1',        password: '123456', realName: 'Ibrahim',       role: 'DRIVER',        desc: '司机' },
-  { username: 'admin',          password: 'admin123', realName: '系统管理员',  role: 'ADMIN',         desc: '系统管理员（仅 Web）' },
+  { username: 'sales1',        password: '123456', realName: 'AkinGbolahan', role: 'SALES',        desc: '客户跟进 / 订单管理 / 运费试算' },
+  { username: 'warehouse_cn1', password: '123456', realName: '李仓管',        role: 'WAREHOUSE_CN', desc: '扫码入库 / 称重量方 / 装箱发车' },
+  { username: 'warehouse_us1', password: '123456', realName: '王仓管',        role: 'WAREHOUSE_US', desc: '任务入库 / DPN 管理 / 配送签收 / 自提' },
 ];
 
 export default function ProfileScreen() {
@@ -163,7 +158,10 @@ export default function ProfileScreen() {
                 <Ionicons name="close" size={24} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
-            <Text style={styles.modalHint}>当前身份：{getRoleLabel(user.role)}（{user.username}）</Text>
+            <Text style={styles.modalHint}>
+              当前身份：{getRoleLabel(user.role)}（{user.username}）
+              {'\n'}App 端覆盖 3 个角色，其他角色请在 Web 端使用
+            </Text>
             <ScrollView style={{ maxHeight: 540 }}>
               {DEMO_ACCOUNTS.map((acc) => {
                 const isCurrent = acc.username === user.username;
