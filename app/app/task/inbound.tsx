@@ -18,9 +18,18 @@ const CONDITIONS: { value: PackageCondition; label: string; emoji: string; color
   { value: 'INCOMPLETE', label: '少件', emoji: '❌', color: colors.danger },
 ];
 
+type InboundMode = 'EXPRESS' | 'TRANSFER' | 'RETURN';
+
+const MODE_LABEL: Record<InboundMode, string> = {
+  EXPRESS: '快递入库',
+  TRANSFER: '调拨入库',
+  RETURN: '退回入库',
+};
+
 export default function InboundScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ orderId?: string; orderNo?: string }>();
+  const params = useLocalSearchParams<{ orderId?: string; orderNo?: string; mode?: InboundMode }>();
+  const mode: InboundMode = (params.mode as InboundMode) || 'EXPRESS';
 
   const [order, setOrder] = useState<any>(null);
   const [pkg, setPkg] = useState<any>(null);
@@ -91,7 +100,7 @@ export default function InboundScreen() {
         subOrderId,
         businessLine: order.business_line,
         warehouseId: 'wh-gz',
-        sourceType: 'THIRD_PARTY',
+        sourceType: mode === 'TRANSFER' ? 'TRANSFER' : mode === 'RETURN' ? 'RETURN' : 'THIRD_PARTY',
         trackingNo: pkg?.tracking_no || '',
         pieces: Number(pieces),
         grossWeightKg: Number(weight),
@@ -133,7 +142,7 @@ export default function InboundScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={styles.navTitle}>扫码入库</Text>
+          <Text style={styles.navTitle}>{MODE_LABEL[mode]}</Text>
           <Text style={styles.navExtra}>今日 12件</Text>
         </View>
 

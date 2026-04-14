@@ -95,7 +95,6 @@ export default function TasksScreen() {
         const transfers = await warehouseApi.getTransfers();
         for (const t of (transfers.data || []).filter((t: any) => t.transfer_status !== 'CANCELLED')) {
           const statusMap: Record<string, string> = { PENDING: '待发运', IN_TRANSIT: '运输中', ARRIVED: '已到达', RECEIVED: '已签收' };
-          const actionMap: Record<string, string[]> = { PENDING: ['绑运单', '执行'], IN_TRANSIT: ['确认到达'], ARRIVED: ['确认入库'] };
           items.push({
             id: `transfer-${t.id}`, type: 'transfer', icon: '📋',
             title: `调拨${statusMap[t.transfer_status] || t.transfer_status}`,
@@ -103,8 +102,7 @@ export default function TasksScreen() {
             detail: `${t.from_warehouse_name || ''} → ${t.to_warehouse_name || ''} · ${t.total_pieces}件/${t.total_weight_kg}kg`,
             status: statusMap[t.transfer_status] || t.transfer_status, statusColor: t.transfer_status === 'PENDING' ? colors.warning : colors.info,
             actions: [
-              { label: '详情', color: colors.textSecondary },
-              ...(actionMap[t.transfer_status] || []).map(a => ({ label: a, color: colors.primary })),
+              { label: '管理', color: colors.primary, route: '/task/transfer' },
             ],
             borderColor: colors.taskTransfer,
           });
@@ -120,8 +118,7 @@ export default function TasksScreen() {
             status: '待匹配', statusColor: colors.warning,
             time: formatTime(u.created_at),
             actions: [
-              { label: '详情', color: colors.textSecondary },
-              { label: '匹配', color: colors.warning },
+              { label: '匹配', color: colors.warning, route: '/task/no-order-express' },
             ],
             borderColor: colors.taskOrphan,
           });

@@ -447,8 +447,24 @@ router.delete('/warehouse/returns/:id', stubSuccess);
 router.put('/warehouse/no-order-express/:id', stubSuccess);
 router.delete('/warehouse/no-order-express/:id', stubSuccess);
 router.put('/v2/wms/unmatched-packages/:id', stubSuccess);
-router.delete('/v2/wms/unmatched-packages/:id', stubSuccess);
-router.post('/v2/wms/unmatched-packages/:id/match', stubSuccess);
+router.delete('/v2/wms/unmatched-packages/:id', (req: Request, res: Response) => {
+  const db = getDb();
+  db.prepare('DELETE FROM wms_unmatched_package WHERE id = ?').run(req.params.id);
+  res.json({ data: { success: true } });
+});
+
+// 真实匹配：把无单快递关联到客户，更新状态为 MATCHED
+router.post('/v2/wms/unmatched-packages/:id/match', (req: Request, res: Response) => {
+  const db = getDb();
+  const { customerId, customerName, orderId } = req.body || {};
+  if (!customerId && !orderId) {
+    res.status(400).json({ error: 'customerId or orderId required' });
+    return;
+  }
+  db.prepare("UPDATE wms_unmatched_package SET status='MATCHED', matched_order_id=?, customer_hint=?, matched_at=datetime('now'), updated_at=datetime('now') WHERE id=?")
+    .run(orderId || null, `已匹配到 ${customerName || customerId || ''}`, req.params.id);
+  res.json({ data: { success: true, customerId, orderId } });
+});
 
 // Job 写操作
 router.post('/jobs/:jobNo/bind-units', stubSuccess);

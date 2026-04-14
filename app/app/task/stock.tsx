@@ -3,7 +3,7 @@ import {
   View, Text, ScrollView, StyleSheet, TextInput, TouchableOpacity,
   SafeAreaView, FlatList, Modal, Alert, ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { warehouseApi } from '../../lib/api';
@@ -45,6 +45,8 @@ const STATUS_META: Record<StockStatus, { label: string; color: string; bg: strin
 
 export default function StockScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ destination?: string }>();
+  const isDestination = params.destination === '1';
   const [loading, setLoading] = useState(true);
   const [list, setList] = useState<StockItem[]>([]);
   const [keyword, setKeyword] = useState('');
@@ -61,8 +63,13 @@ export default function StockScreen() {
   const load = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
+      // 到达国筛选 wh-los/wh-abv/wh-acc 仓库；起运国筛选 wh-gz/wh-sz
+      const warehouseIds = isDestination ? ['wh-los', 'wh-abv', 'wh-acc'] : ['wh-gz', 'wh-sz'];
       const res = await warehouseApi.getStock();
-      setList(res.data || []);
+      const filtered = (res.data || []).filter((s: StockItem) =>
+        !s.warehouse_id || warehouseIds.includes(s.warehouse_id)
+      );
+      setList(filtered);
     } catch (err: any) {
       if (!silent) Alert.alert('加载失败', err.message || '请重试');
     } finally {
@@ -148,7 +155,7 @@ export default function StockScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.navTitle}>库存管理</Text>
+        <Text style={styles.navTitle}>{isDestination ? '到达国库存查询' : '库存管理'}</Text>
         <TouchableOpacity onPress={() => load()} style={styles.navBtn}>
           <Ionicons name="refresh" size={20} color={colors.primary} />
         </TouchableOpacity>

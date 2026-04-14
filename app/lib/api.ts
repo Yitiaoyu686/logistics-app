@@ -109,8 +109,13 @@ export const warehouseApi = {
     return api.get(`/warehouse/stock${qs}`);
   },
   getTransfers: () => api.get('/warehouse/transfers'),
+  createTransfer: (data: any) => api.post('/warehouse/transfers', data),
+  updateTransfer: (id: string, data: any) => api.put(`/warehouse/transfers/${id}`, data),
   getUnmatched: () => api.get('/warehouse/no-order-express'),
+  createUnmatched: (data: any) => api.post('/warehouse/no-order-express', data),
+  matchUnmatched: (id: string, data: any) => api.post(`/v2/wms/unmatched-packages/${id}/match`, data),
   createInbound: (data: any) => api.post('/v2/wms/inbounds', data),
+  getReturns: () => api.get('/warehouse/returns'),
 };
 
 // DPN & Delivery
