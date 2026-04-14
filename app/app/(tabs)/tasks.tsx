@@ -6,6 +6,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { getRoleLabel, getRoleColor } from '../../lib/auth';
 import { jobApi, orderApi, warehouseApi, deliveryApi, customerApi, salesApi } from '../../lib/api';
+import { TransferActionDialog, TransferActionMode, TransferTargetItem } from '../../components/TransferActionDialog';
+import { UnmatchedMatchDialog, UnmatchedTargetItem } from '../../components/UnmatchedMatchDialog';
+
+type ActionIntent = 'transfer-dispatch' | 'transfer-arrive' | 'transfer-receive' | 'unmatched-match';
 
 interface TaskItem {
   id: string;
@@ -18,8 +22,11 @@ interface TaskItem {
   statusColor: string;
   time?: string;
   progress?: { current: number; total: number };
-  actions: { label: string; color: string; route?: string; params?: Record<string, any> }[];
+  actions: { label: string; color: string; route?: string; params?: Record<string, any>; intent?: ActionIntent }[];
   borderColor: string;
+  // 用于内联弹窗的原始数据
+  rawTransfer?: TransferTargetItem;
+  rawUnmatched?: UnmatchedTargetItem;
 }
 
 interface SalesStats {
@@ -38,6 +45,10 @@ export default function TasksScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('全部');
   const [salesStats, setSalesStats] = useState<SalesStats>({ myCustomers: 0, pendingOrders: 0, unpaidOrders: 0, monthlyNew: 0 });
+  // 内联弹窗状态
+  const [transferTarget, setTransferTarget] = useState<TransferTargetItem | null>(null);
+  const [transferMode, setTransferMode] = useState<TransferActionMode | null>(null);
+  const [unmatchedTarget, setUnmatchedTarget] = useState<UnmatchedTargetItem | null>(null);
 
   useEffect(() => {
     let timer: any = null;
@@ -91,18 +102,17 @@ export default function TasksScreen() {
           });
         }
 
-        // 调拨 — 按状态显示对应操作按钮，点击直达操作弹窗
+        // 调拨 — 按状态显示对应操作按钮，点击直接打开内联弹窗
         const transfers = await warehouseApi.getTransfers();
         for (const t of (transfers.data || []).filter((t: any) => t.transfer_status !== 'CANCELLED' && t.transfer_status !== 'RECEIVED')) {
           const statusMap: Record<string, string> = { PENDING: '待发运', IN_TRANSIT: '运输中', ARRIVED: '已到达' };
-          // 按状态决定显示的操作按钮
-          const actions: { label: string; color: string; route?: string; params?: Record<string, any> }[] = [];
+          const actions: TaskItem['actions'] = [];
           if (t.transfer_status === 'PENDING') {
-            actions.push({ label: '执行发车', color: colors.primary, route: '/task/transfer', params: { id: t.id, action: 'dispatch' } });
+            actions.push({ label: '执行发车', color: colors.primary, intent: 'transfer-dispatch' });
           } else if (t.transfer_status === 'IN_TRANSIT') {
-            actions.push({ label: '确认到达', color: colors.primary, route: '/task/transfer', params: { id: t.id, action: 'arrive' } });
+            actions.push({ label: '确认到达', color: colors.primary, intent: 'transfer-arrive' });
           } else if (t.transfer_status === 'ARRIVED') {
-            actions.push({ label: '确认入库', color: colors.success, route: '/task/transfer', params: { id: t.id, action: 'receive' } });
+            actions.push({ label: '确认入库', color: colors.success, intent: 'transfer-receive' });
           }
           items.push({
             id: `transfer-${t.id}`, type: 'transfer', icon: '📋',
@@ -112,10 +122,18 @@ export default function TasksScreen() {
             status: statusMap[t.transfer_status] || t.transfer_status, statusColor: t.transfer_status === 'PENDING' ? colors.warning : colors.info,
             actions,
             borderColor: colors.taskTransfer,
+            rawTransfer: {
+              id: t.id,
+              transfer_no: t.transfer_no,
+              from_warehouse_name: t.from_warehouse_name || '-',
+              to_warehouse_name: t.to_warehouse_name || '-',
+              total_pieces: t.total_pieces || 0,
+              total_weight_kg: t.total_weight_kg || 0,
+            },
           });
         }
 
-        // 无单快递 — 卡片直接显示"匹配订单"按钮，点击直达匹配弹窗
+        // 无单快递 — 卡片"匹配订单"按钮直接打开内联弹窗
         const unmatched = await warehouseApi.getUnmatched();
         for (const u of (unmatched.data || []).filter((u: any) => u.status === 'PENDING')) {
           items.push({
@@ -125,9 +143,19 @@ export default function TasksScreen() {
             status: '待匹配', statusColor: colors.warning,
             time: formatTime(u.created_at),
             actions: [
-              { label: '匹配订单', color: colors.warning, route: '/task/no-order-express', params: { id: u.id, action: 'match' } },
+              { label: '匹配订单', color: colors.warning, intent: 'unmatched-match' },
             ],
             borderColor: colors.taskOrphan,
+            rawUnmatched: {
+              id: u.id,
+              tracking_no: u.tracking_no,
+              express_company: u.express_company,
+              sender_name: u.sender_name,
+              sender_phone: u.sender_phone,
+              pieces: u.pieces || 0,
+              gross_weight_kg: u.gross_weight_kg || 0,
+              customer_hint: u.customer_hint,
+            },
           });
         }
 
@@ -457,6 +485,27 @@ export default function TasksScreen() {
                       action.color === colors.danger && styles.actionBtnDanger,
                       action.color === colors.warning && styles.actionBtnWarning]}
                     onPress={() => {
+                      // 内联弹窗：调拨/无单
+                      if (action.intent === 'transfer-dispatch' && task.rawTransfer) {
+                        setTransferTarget(task.rawTransfer);
+                        setTransferMode('dispatch');
+                        return;
+                      }
+                      if (action.intent === 'transfer-arrive' && task.rawTransfer) {
+                        setTransferTarget(task.rawTransfer);
+                        setTransferMode('arrive');
+                        return;
+                      }
+                      if (action.intent === 'transfer-receive' && task.rawTransfer) {
+                        setTransferTarget(task.rawTransfer);
+                        setTransferMode('receive');
+                        return;
+                      }
+                      if (action.intent === 'unmatched-match' && task.rawUnmatched) {
+                        setUnmatchedTarget(task.rawUnmatched);
+                        return;
+                      }
+                      // 跳转路由
                       if (action.route) {
                         router.push({ pathname: action.route as any, params: action.params || {} });
                       }
@@ -473,6 +522,30 @@ export default function TasksScreen() {
         )}
         <View style={{ height: 20 }} />
       </ScrollView>
+
+      {/* 内联弹窗：调拨执行/到达/入库 */}
+      <TransferActionDialog
+        visible={!!transferTarget && !!transferMode}
+        target={transferTarget}
+        mode={transferMode}
+        onClose={() => { setTransferTarget(null); setTransferMode(null); }}
+        onSuccess={() => {
+          setTransferTarget(null);
+          setTransferMode(null);
+          loadTasks(role);
+        }}
+      />
+
+      {/* 内联弹窗：无单快递匹配客户 */}
+      <UnmatchedMatchDialog
+        visible={!!unmatchedTarget}
+        target={unmatchedTarget}
+        onClose={() => setUnmatchedTarget(null)}
+        onSuccess={() => {
+          setUnmatchedTarget(null);
+          loadTasks(role);
+        }}
+      />
     </SafeAreaView>
   );
 }
