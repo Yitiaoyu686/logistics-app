@@ -422,6 +422,7 @@ export function createTables(): void {
       to_warehouse_name TEXT,
       route_label TEXT,
       job_id TEXT,
+      shipping_unit_no TEXT,
       total_pieces INTEGER DEFAULT 0,
       total_weight_kg REAL DEFAULT 0,
       total_volume_cbm REAL DEFAULT 0,
@@ -439,6 +440,23 @@ export function createTables(): void {
       remark TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS wms_transfer_item (
+      id TEXT PRIMARY KEY,
+      transfer_id TEXT NOT NULL REFERENCES wms_transfer(id) ON DELETE CASCADE,
+      sub_order_id TEXT,
+      sub_order_no TEXT,
+      tracking_no TEXT,
+      customer_name TEXT,
+      pieces INTEGER DEFAULT 0,
+      weight_kg REAL DEFAULT 0,
+      volume_cbm REAL DEFAULT 0,
+      route TEXT,
+      inbound_status TEXT NOT NULL DEFAULT 'PENDING' CHECK(inbound_status IN ('PENDING','RECEIVED')),
+      inbound_method TEXT CHECK(inbound_method IN ('SCAN','MANUAL')),
+      inbound_time TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     -- ============================================================

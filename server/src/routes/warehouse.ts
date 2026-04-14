@@ -142,6 +142,95 @@ router.get('/transfers', (req: Request, res: Response) => {
   res.json({ data: rows });
 });
 
+// GET /api/warehouse/transfers/:id — 调拨详情含运单清单
+router.get('/transfers/:id', (req: Request, res: Response) => {
+  const db = getDb();
+  const transfer = db.prepare('SELECT * FROM wms_transfer WHERE id = ? OR transfer_no = ?').get(req.params.id, req.params.id) as any;
+  if (!transfer) { res.status(404).json({ error: 'Transfer not found' }); return; }
+  const items = db.prepare('SELECT * FROM wms_transfer_item WHERE transfer_id = ? ORDER BY created_at').all(transfer.id);
+  res.json({ data: { ...transfer, items } });
+});
+
+// POST /api/warehouse/transfers/:id/scan-inbound — 扫码入库（按集装号或运单号）
+router.post('/transfers/:id/scan-inbound', (req: Request, res: Response) => {
+  const db = getDb();
+  const { keyword, method } = req.body;
+  if (!keyword) {
+    res.status(400).json({ error: 'keyword is required' });
+    return;
+  }
+  const transfer = db.prepare('SELECT * FROM wms_transfer WHERE id = ?').get(req.params.id) as any;
+  if (!transfer) { res.status(404).json({ error: 'Transfer not found' }); return; }
+
+  const m = String(method || 'SCAN');
+  let updated = 0;
+  let hits: any[] = [];
+
+  // 优先：扫的是集装号 → 整箱入库（所有未入库的 items）
+  if (transfer.shipping_unit_no && keyword === transfer.shipping_unit_no) {
+    const items = db.prepare("SELECT * FROM wms_transfer_item WHERE transfer_id = ? AND inbound_status = 'PENDING'").all(transfer.id) as any[];
+    for (const it of items) {
+      db.prepare("UPDATE wms_transfer_item SET inbound_status='RECEIVED', inbound_method=?, inbound_time=datetime('now') WHERE id=?")
+        .run(m, it.id);
+      updated++;
+      hits.push(it.id);
+    }
+  } else {
+    // 否则：按运单号/sub_order_no/tracking_no 匹配单条
+    const item = db.prepare(`
+      SELECT * FROM wms_transfer_item
+      WHERE transfer_id = ?
+        AND inbound_status = 'PENDING'
+        AND (sub_order_no = ? OR tracking_no = ?)
+      LIMIT 1
+    `).get(transfer.id, keyword, keyword) as any;
+    if (item) {
+      db.prepare("UPDATE wms_transfer_item SET inbound_status='RECEIVED', inbound_method=?, inbound_time=datetime('now') WHERE id=?")
+        .run(m, item.id);
+      updated = 1;
+      hits.push(item.id);
+    }
+  }
+
+  res.json({ data: { updated, hits } });
+});
+
+// POST /api/warehouse/transfers/:id/items — 手动添加并入库
+router.post('/transfers/:id/items', (req: Request, res: Response) => {
+  const db = getDb();
+  const { subOrderNo, trackingNo, customerName, pieces, weightKg, volumeCbm, route, autoInbound } = req.body;
+  if (!subOrderNo) {
+    res.status(400).json({ error: 'subOrderNo is required' });
+    return;
+  }
+  const transfer = db.prepare('SELECT * FROM wms_transfer WHERE id = ?').get(req.params.id) as any;
+  if (!transfer) { res.status(404).json({ error: 'Transfer not found' }); return; }
+
+  const id = uuid();
+  db.prepare(`INSERT INTO wms_transfer_item (id, transfer_id, sub_order_no, tracking_no, customer_name, pieces, weight_kg, volume_cbm, route, inbound_status, inbound_method, inbound_time)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,${autoInbound ? "datetime('now')" : 'NULL'})`).run(
+    id, req.params.id, subOrderNo, trackingNo || null, customerName || null,
+    pieces || 0, weightKg || 0, volumeCbm || 0, route || null,
+    autoInbound ? 'RECEIVED' : 'PENDING',
+    autoInbound ? 'MANUAL' : null,
+  );
+  res.json({ data: { id } });
+});
+
+// POST /api/warehouse/transfers/:id/confirm-inbound — 最终确认入库
+router.post('/transfers/:id/confirm-inbound', (req: Request, res: Response) => {
+  const db = getDb();
+  const transfer = db.prepare('SELECT * FROM wms_transfer WHERE id = ?').get(req.params.id) as any;
+  if (!transfer) { res.status(404).json({ error: 'Transfer not found' }); return; }
+
+  // 标记所有 PENDING 的 items 也变为 RECEIVED（演示场景）
+  db.prepare("UPDATE wms_transfer_item SET inbound_status='RECEIVED', inbound_method=COALESCE(inbound_method,'MANUAL'), inbound_time=COALESCE(inbound_time,datetime('now')) WHERE transfer_id=? AND inbound_status='PENDING'")
+    .run(req.params.id);
+  db.prepare("UPDATE wms_transfer SET transfer_status='RECEIVED', receive_time=datetime('now'), updated_at=datetime('now') WHERE id=?")
+    .run(req.params.id);
+  res.json({ data: { success: true } });
+});
+
 // POST /api/warehouse/transfers
 router.post('/transfers', (req: Request, res: Response) => {
   const db = getDb();

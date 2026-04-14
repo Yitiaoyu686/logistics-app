@@ -112,7 +112,8 @@ export default function TasksScreen() {
           } else if (t.transfer_status === 'IN_TRANSIT') {
             actions.push({ label: '确认到达', color: colors.primary, intent: 'transfer-arrive' });
           } else if (t.transfer_status === 'ARRIVED') {
-            actions.push({ label: '确认入库', color: colors.success, intent: 'transfer-receive' });
+            // ARRIVED 状态: 跳转扫码入库页（逐件确认而不是简单 confirm）
+            actions.push({ label: '扫码入库', color: colors.success, route: '/task/transfer-inbound', params: { id: t.id } });
           }
           items.push({
             id: `transfer-${t.id}`, type: 'transfer', icon: '📋',

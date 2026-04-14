@@ -69,6 +69,14 @@ export default function TransferScreen() {
   const [plateNo, setPlateNo] = useState('');
   const [arrivalRemark, setArrivalRemark] = useState('');
 
+  // 创建调拨单
+  const [createVisible, setCreateVisible] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [cFromWh, setCFromWh] = useState('');
+  const [cToWh, setCToWh] = useState('');
+  const [cRoute, setCRoute] = useState('');
+  const [cRemark, setCRemark] = useState('');
+
   useFocusEffect(useCallback(() => {
     load();
   }, []));
@@ -113,6 +121,37 @@ export default function TransferScreen() {
     setDriverPhone('');
     setPlateNo('');
     setArrivalRemark('');
+  };
+
+  const handleCreate = async () => {
+    if (!cFromWh.trim() || !cToWh.trim()) {
+      Alert.alert('请填写来源仓和目标仓');
+      return;
+    }
+    setCreating(true);
+    try {
+      await warehouseApi.createTransfer({
+        businessLine: 'SEA',
+        direction: 'SATELLITE_TO_MAIN',
+        fromWarehouseName: cFromWh,
+        toWarehouseName: cToWh,
+        routeLabel: cRoute || `${cFromWh}→${cToWh}`,
+        totalPieces: 0,
+        totalWeightKg: 0,
+        remark: cRemark || undefined,
+      });
+      Alert.alert('创建成功', '调拨单已创建，请到详情页绑定运单', [
+        { text: '确定', onPress: () => {
+          setCreateVisible(false);
+          setCFromWh(''); setCToWh(''); setCRoute(''); setCRemark('');
+          load();
+        } },
+      ]);
+    } catch (err: any) {
+      Alert.alert('创建失败', err.message || '请重试');
+    } finally {
+      setCreating(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -201,9 +240,10 @@ export default function TransferScreen() {
           {item.transfer_status === 'ARRIVED' && (
             <TouchableOpacity
               style={[styles.actionBtn, styles.actionBtnSuccess]}
-              onPress={() => openAction(item, 'receive')}
+              onPress={() => router.push({ pathname: '/task/transfer-inbound' as any, params: { id: item.id } })}
             >
-              <Text style={styles.actionBtnText}>确认入库</Text>
+              <Ionicons name="scan" size={14} color="#fff" />
+              <Text style={styles.actionBtnText}>扫码入库</Text>
             </TouchableOpacity>
           )}
           {item.transfer_status === 'RECEIVED' && (
@@ -221,8 +261,8 @@ export default function TransferScreen() {
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.navTitle}>调拨管理</Text>
-        <TouchableOpacity onPress={load} style={styles.navBtn}>
-          <Ionicons name="refresh" size={20} color={colors.primary} />
+        <TouchableOpacity onPress={() => setCreateVisible(true)} style={styles.navBtn}>
+          <Ionicons name="add-circle-outline" size={24} color={colors.primary} />
         </TouchableOpacity>
       </View>
 
@@ -342,6 +382,49 @@ export default function TransferScreen() {
                     {actionMode === 'receive' && '确认入库'}
                   </Text>
                 )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* 创建调拨单 Modal */}
+      <Modal visible={createVisible} transparent animationType="slide" onRequestClose={() => setCreateVisible(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+          <View style={styles.modalMask}>
+            <View style={styles.modalSheet}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>📋 创建调拨单</Text>
+                <TouchableOpacity onPress={() => setCreateVisible(false)}>
+                  <Ionicons name="close" size={24} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView contentContainerStyle={{ paddingBottom: spacing.md }}>
+                <FormField label="来源仓库 *" value={cFromWh} onChangeText={setCFromWh} placeholder="如：深圳集货区" />
+                <FormField label="目标仓库 *" value={cToWh} onChangeText={setCToWh} placeholder="如：广州总仓" />
+                <FormField label="线路名称" value={cRoute} onChangeText={setCRoute} placeholder="选填，不填自动生成" />
+                <View style={styles.formItem}>
+                  <Text style={styles.formLabel}>备注</Text>
+                  <TextInput
+                    style={styles.textarea}
+                    value={cRemark}
+                    onChangeText={setCRemark}
+                    placeholder="选填"
+                    placeholderTextColor={colors.textTertiary}
+                    multiline
+                  />
+                </View>
+                <View style={styles.tipCard}>
+                  <Ionicons name="information-circle-outline" size={16} color={colors.info} />
+                  <Text style={styles.tipText}>创建后可在详情中绑定运单或后续到达自动入库</Text>
+                </View>
+              </ScrollView>
+              <TouchableOpacity
+                style={[styles.submitBtn, creating && styles.btnDisabled]}
+                onPress={handleCreate}
+                disabled={creating}
+              >
+                {creating ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>创建调拨单</Text>}
               </TouchableOpacity>
             </View>
           </View>

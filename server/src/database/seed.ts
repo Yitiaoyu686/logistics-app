@@ -263,10 +263,22 @@ export function seedDatabase(): void {
   // ============================================================
 
   db.exec(`
-    INSERT INTO wms_transfer (id, transfer_no, business_line, direction, from_warehouse_name, to_warehouse_name, route_label, job_id, total_pieces, total_weight_kg, transfer_status, created_at) VALUES
-    ('trf-1', 'S-T-20260321-0001', 'SEA', 'SATELLITE_TO_MAIN', '深圳集货区', '广州总仓', '深圳集货区→广州总仓→拉各斯主仓', 'job-7', 5, 120, 'PENDING', '${now}'),
-    ('trf-2', 'S-T-20260321-0002', 'SEA', 'MAIN_TO_SATELLITE', '广州总仓', '佛山拼货区', '广州总仓→佛山拼货区', 'job-8', 2, 85, 'IN_TRANSIT', '${now}'),
-    ('trf-3', 'S-T-20260321-0003', 'SEA', 'MAIN_TO_SATELLITE', '广州总仓', '海珠区站点', '广州总仓→海珠区站点', 'job-8', 3, 60, 'ARRIVED', '${now}');
+    INSERT INTO wms_transfer (id, transfer_no, business_line, direction, from_warehouse_name, to_warehouse_name, route_label, job_id, shipping_unit_no, total_pieces, total_weight_kg, transfer_status, created_at) VALUES
+    ('trf-1', 'S-T-20260321-0001', 'SEA', 'SATELLITE_TO_MAIN', '深圳集货区', '广州总仓', '深圳集货区→广州总仓→拉各斯主仓', 'job-7', 'SEA-CN-201', 5, 120, 'PENDING', '${now}'),
+    ('trf-2', 'S-T-20260321-0002', 'SEA', 'MAIN_TO_SATELLITE', '广州总仓', '佛山拼货区', '广州总仓→佛山拼货区', 'job-8', 'SEA-CN-202', 2, 85, 'IN_TRANSIT', '${now}'),
+    ('trf-3', 'S-T-20260321-0003', 'SEA', 'MAIN_TO_SATELLITE', '广州总仓', '海珠区站点', '广州总仓→海珠区站点', 'job-8', 'SEA-CN-203', 3, 60, 'ARRIVED', '${now}');
+
+    INSERT INTO wms_transfer_item (id, transfer_id, sub_order_no, tracking_no, customer_name, pieces, weight_kg, volume_cbm, route, inbound_status) VALUES
+    -- trf-1 (PENDING) 5 件 / 2 单
+    ('tri-1-1', 'trf-1', 'S-202603260001-01', 'SF26032601', '深圳旺达贸易', 3, 65, 0.18, '深圳→广州', 'PENDING'),
+    ('tri-1-2', 'trf-1', 'S-202603260002-01', 'YT26032602', '广州金辉国际', 2, 55, 0.12, '深圳→广州', 'PENDING'),
+    -- trf-2 (IN_TRANSIT) 2 件 / 2 单
+    ('tri-2-1', 'trf-2', 'S-202603260003-01', 'SF26032603', '联调航海客户PSea-2', 1, 40, 0.08, '广州→佛山', 'PENDING'),
+    ('tri-2-2', 'trf-2', 'S-202603260004-01', 'YT26032604', '联调综合客户P1-2026', 1, 45, 0.09, '广州→佛山', 'PENDING'),
+    -- trf-3 (ARRIVED) 3 件 / 3 单 — 待入库的核心场景
+    ('tri-3-1', 'trf-3', 'S-202603260005-01', 'SF26032605', 'Web联调客户-S1836', 1, 20, 0.05, '广州→海珠', 'PENDING'),
+    ('tri-3-2', 'trf-3', 'S-202603260006-01', 'YT26032606', 'Web联调客户-S1836-2', 1, 18, 0.04, '广州→海珠', 'PENDING'),
+    ('tri-3-3', 'trf-3', 'S-202603260007-01', 'ZT26032607', '深圳旺达贸易', 1, 22, 0.06, '广州→海珠', 'PENDING');
   `);
 
   // ============================================================
