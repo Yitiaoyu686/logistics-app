@@ -15,7 +15,7 @@ router.post('/inbounds', (req: Request, res: Response) => {
   const id = uuid();
   const inboundNo = generateInboundNo();
 
-  db.prepare('INSERT INTO wms_inbound_order (id, inbound_no, business_line, warehouse_id, order_id, sub_order_id, source_type, inbound_status, inbound_at, operator_user_id, remark) VALUES (?,?,?,?,?,?,?,?,datetime("now"),?,?)').run(
+  db.prepare("INSERT INTO wms_inbound_order (id, inbound_no, business_line, warehouse_id, order_id, sub_order_id, source_type, inbound_status, inbound_at, operator_user_id, remark) VALUES (?,?,?,?,?,?,?,?,datetime('now'),?,?)").run(
     id, inboundNo, b.businessLine || 'SEA', b.warehouseId, b.orderId, b.subOrderId,
     b.sourceType || 'THIRD_PARTY', 'COMPLETED', b.operatorUserId, b.remark
   );
@@ -31,9 +31,28 @@ router.post('/inbounds', (req: Request, res: Response) => {
     );
   }
 
+  // Create/update stock record (关键：让 Web 库存列表看得到)
+  if (b.subOrderId) {
+    const stockId = uuid();
+    db.prepare("INSERT INTO wms_stock (id, business_line, warehouse_id, order_id, sub_order_id, stock_status, pieces, gross_weight_kg, volume_cbm, location_code, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,datetime('now'))").run(
+      stockId, b.businessLine || 'SEA', b.warehouseId, b.orderId, b.subOrderId,
+      'IN_STOCK', b.pieces || 1, b.grossWeightKg || 0,
+      ((b.lengthCm || 0) * (b.widthCm || 0) * (b.heightCm || 0)) / 1000000,
+      b.locationCode
+    );
+  }
+
   // Update sub-order status to INBOUND
   if (b.subOrderId) {
     db.prepare("UPDATE oms_sub_order SET sub_status='INBOUND', updated_at=datetime('now') WHERE id=?").run(b.subOrderId);
+  }
+
+  // Update master order status if all sub-orders are inbound
+  if (b.orderId) {
+    const total = (db.prepare('SELECT COUNT(*) as c FROM oms_sub_order WHERE order_id=?').get(b.orderId) as any).c;
+    const inbound = (db.prepare("SELECT COUNT(*) as c FROM oms_sub_order WHERE order_id=? AND sub_status='INBOUND'").get(b.orderId) as any).c;
+    const newStatus = inbound >= total ? 'INBOUND' : 'PENDING_INBOUND';
+    db.prepare("UPDATE oms_order SET order_status=?, updated_at=datetime('now') WHERE id=?").run(newStatus, b.orderId);
   }
 
   res.json({ data: { id, inboundNo } });
