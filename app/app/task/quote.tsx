@@ -19,37 +19,46 @@ interface Route {
   volume_ratio: number;
 }
 
-// 演示报价规则（可被实际业务规则替换）
-function calculateQuote(weight: number, length: number, width: number, height: number, transport: 'SEA' | 'AIR') {
+type CargoType = 'GENERAL' | 'SENSITIVE';
+
+// 按规格的报价规则
+function calculateQuote(
+  weight: number,
+  length: number,
+  width: number,
+  height: number,
+  transport: 'SEA' | 'AIR',
+  cargoType: CargoType,
+) {
   const volumeWeight = transport === 'AIR'
     ? (length * width * height) / 6000
     : (length * width * height) / 5000;
   const chargeable = Math.max(weight, volumeWeight);
 
-  // 海运: 首重 ¥60 + 续重 ¥55/kg, 起步价 ¥80
-  // 空运: 首重 ¥120 + 续重 ¥85/kg, 起步价 ¥150
-  let freight = 0;
-  if (transport === 'SEA') {
-    freight = chargeable <= 1 ? 60 : 60 + (chargeable - 1) * 55;
-    freight = Math.max(freight, 80);
-  } else {
-    freight = chargeable <= 1 ? 120 : 120 + (chargeable - 1) * 85;
-    freight = Math.max(freight, 150);
+  // 按规格示例: 首重 ¥63 + 续重 ¥57/kg
+  // 海运普货首续重各 +0; 海运敏感首续重各 +20; 空运首续重 ¥120/¥85
+  let firstWeightPrice = 63;
+  let extraWeightPrice = 57;
+  if (transport === 'AIR') {
+    firstWeightPrice = 120;
+    extraWeightPrice = 85;
+  }
+  if (cargoType === 'SENSITIVE') {
+    firstWeightPrice += 20;
+    extraWeightPrice += 20;
   }
 
-  const fuel = freight * 0.08;        // 燃油附加费 8%
-  const insurance = chargeable * 2;   // 保险费
-  const handling = 15;                // 操作费
-  const total = freight + fuel + insurance + handling;
+  const extraWeight = Math.max(0, chargeable - 1);
+  const freight = firstWeightPrice + extraWeight * extraWeightPrice;
 
   return {
     volumeWeight: Math.round(volumeWeight * 100) / 100,
     chargeable: Math.round(chargeable * 100) / 100,
+    firstWeightPrice,
+    extraWeightPrice,
+    extraWeight: Math.round(extraWeight * 100) / 100,
     freight: Math.round(freight * 100) / 100,
-    fuel: Math.round(fuel * 100) / 100,
-    insurance: Math.round(insurance * 100) / 100,
-    handling,
-    total: Math.round(total * 100) / 100,
+    total: Math.round(freight * 100) / 100,
   };
 }
 
@@ -62,6 +71,7 @@ export default function QuoteScreen() {
   const [width, setWidth] = useState('');
   const [height, setHeight] = useState('');
   const [pieces, setPieces] = useState('1');
+  const [cargoType, setCargoType] = useState<CargoType>('GENERAL');
   const [calculated, setCalculated] = useState<ReturnType<typeof calculateQuote> | null>(null);
 
   useEffect(() => {
@@ -79,30 +89,19 @@ export default function QuoteScreen() {
     if (!w || w <= 0) { Alert.alert('请填写实际重量'); return; }
     if (!selectedRoute) { Alert.alert('请选择路线'); return; }
 
-    const q = calculateQuote(w, l, wd, h, selectedRoute.transport_type);
+    const q = calculateQuote(w, l, wd, h, selectedRoute.transport_type, cargoType);
     setCalculated(q);
   };
 
   const quoteText = useMemo(() => {
     if (!calculated || !selectedRoute) return '';
+    const transportLabel = selectedRoute.transport_type === 'SEA' ? '海运拼箱' : '空运';
     return `【运费报价】
-路线：${selectedRoute.origin_city} → ${selectedRoute.dest_city}
-方式：${selectedRoute.transport_type === 'SEA' ? '🚢 海运' : '✈️ 空运'}
-时效：${selectedRoute.transit_days}
-件数：${pieces} 件
-实重：${weight} kg
-体积重：${calculated.volumeWeight} kg
-计费重：${calculated.chargeable} kg
-———————————————
-运费：¥${calculated.freight}
-燃油附加：¥${calculated.fuel}
-保险费：¥${calculated.insurance}
-操作费：¥${calculated.handling}
-———————————————
-合计：¥${calculated.total}
-
-* 报价仅供参考，最终以实际称重为准`;
-  }, [calculated, selectedRoute, pieces, weight]);
+路线：${selectedRoute.origin_city}→${selectedRoute.dest_city}（${transportLabel}）
+计费重量：${calculated.chargeable} kg
+首重 ¥${calculated.firstWeightPrice} + 续重 ¥${calculated.extraWeightPrice}×${calculated.extraWeight} = ¥${calculated.total.toFixed(2)}
+时效：${selectedRoute.transit_days}`;
+  }, [calculated, selectedRoute]);
 
   const handleCopy = async () => {
     if (!quoteText) return;
@@ -177,6 +176,21 @@ export default function QuoteScreen() {
               <FormField label="宽" value={width} onChangeText={setWidth} unit="cm" />
               <FormField label="高" value={height} onChangeText={setHeight} unit="cm" />
             </View>
+            <Text style={styles.cargoLabel}>货物属性</Text>
+            <View style={styles.cargoRow}>
+              <TouchableOpacity
+                style={[styles.cargoBtn, cargoType === 'GENERAL' && styles.cargoBtnActive]}
+                onPress={() => { setCargoType('GENERAL'); setCalculated(null); }}
+              >
+                <Text style={[styles.cargoText, cargoType === 'GENERAL' && styles.cargoTextActive]}>📦 普货</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.cargoBtn, cargoType === 'SENSITIVE' && styles.cargoBtnActive]}
+                onPress={() => { setCargoType('SENSITIVE'); setCalculated(null); }}
+              >
+                <Text style={[styles.cargoText, cargoType === 'SENSITIVE' && styles.cargoTextActive]}>⚠️ 敏感</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* 计算按钮 */}
@@ -211,15 +225,13 @@ export default function QuoteScreen() {
               </View>
 
               <View style={styles.feeBlock}>
-                <FeeRow label="运费" value={calculated.freight} />
-                <FeeRow label="燃油附加费 (8%)" value={calculated.fuel} />
-                <FeeRow label="保险费" value={calculated.insurance} />
-                <FeeRow label="操作费" value={calculated.handling} />
+                <FeeRow label={`首重 (≤1kg)`} value={calculated.firstWeightPrice} />
+                <FeeRow label={`续重 ¥${calculated.extraWeightPrice}/kg × ${calculated.extraWeight}kg`} value={Math.round(calculated.extraWeight * calculated.extraWeightPrice * 100) / 100} />
               </View>
 
               <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>合计</Text>
-                <Text style={styles.totalValue}>¥ {calculated.total}</Text>
+                <Text style={styles.totalLabel}>预估总价</Text>
+                <Text style={styles.totalValue}>¥ {calculated.total.toFixed(2)}</Text>
               </View>
 
               <View style={styles.actionRow}>
@@ -281,6 +293,12 @@ const styles = StyleSheet.create({
   scroll: { padding: spacing.md, paddingBottom: spacing.xxl },
   section: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.md },
   sectionTitle: { fontSize: font.md, fontWeight: '600', color: colors.text, marginBottom: spacing.md },
+  cargoLabel: { fontSize: font.xs, color: colors.textSecondary, marginBottom: 6, marginTop: spacing.sm },
+  cargoRow: { flexDirection: 'row', gap: spacing.sm },
+  cargoBtn: { flex: 1, paddingVertical: spacing.md, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center', backgroundColor: colors.card },
+  cargoBtnActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+  cargoText: { fontSize: font.sm, color: colors.textSecondary },
+  cargoTextActive: { color: colors.primary, fontWeight: '600' },
   routeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   routeCard: { width: '48%', padding: spacing.md, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.card, alignItems: 'center' },
   routeCardActive: { borderColor: colors.primary, backgroundColor: colors.primary },

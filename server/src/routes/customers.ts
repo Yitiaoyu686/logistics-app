@@ -103,4 +103,26 @@ router.post('/:id/release', (req: Request, res: Response) => {
   res.json({ data: { success: true } });
 });
 
+// POST /:id/transfer — 转移客户给其他业务员
+router.post('/:id/transfer', (req: Request, res: Response) => {
+  const db = getDb();
+  const { toSalesId } = req.body;
+  if (!toSalesId) {
+    res.status(400).json({ error: 'toSalesId is required' });
+    return;
+  }
+  db.prepare("UPDATE crm_customer SET owner_user_id=?, pool_type='PRIVATE', updated_at=datetime('now') WHERE id=?").run(toSalesId, req.params.id);
+  res.json({ data: { success: true } });
+});
+
+// GET /:id/pool-logs — 客户公海池日志（暂返回空数组）
+router.get('/:id/pool-logs', (_req: Request, res: Response) => {
+  res.json({ data: [] });
+});
+
+// GET /:id/line-profiles — 客户线路档案（暂返回空数组）
+router.get('/:id/line-profiles', (_req: Request, res: Response) => {
+  res.json({ data: [] });
+});
+
 export default router;

@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { View, Text, TextInput, StyleSheet, SafeAreaView, TouchableOpacity, FlatList } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
 
@@ -23,6 +24,20 @@ const MENU_ITEMS: MenuItem[] = [
 export default function SearchScreen() {
   const router = useRouter();
   const [keyword, setKeyword] = useState('');
+  const [role, setRole] = useState('');
+
+  useEffect(() => {
+    AsyncStorage.getItem('user').then((u) => {
+      if (u) setRole(JSON.parse(u).role);
+    });
+  }, []);
+
+  useFocusEffect(useCallback(() => {
+    // SALES 角色：客户 Tab 直接打开客户中心
+    if (role === 'SALES') {
+      router.replace('/task/customer' as any);
+    }
+  }, [role]));
 
   return (
     <SafeAreaView style={styles.safe}>

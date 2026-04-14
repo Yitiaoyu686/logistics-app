@@ -71,19 +71,22 @@ const STATUS_META: Record<string, { label: string; color: string; bg: string }> 
   DELIVERED:       { label: '已签收', color: colors.textSecondary,  bg: colors.borderLight },
 };
 
-// 物流时间线节点
+// 物流时间线节点（按规格 10 节点）
 const TIMELINE_NODES = [
-  { key: 'CREATED',   label: '订单创建', icon: 'document-text-outline' },
-  { key: 'INBOUND',   label: '已入库',   icon: 'archive-outline' },
-  { key: 'PACKED',    label: '已装箱',   icon: 'cube-outline' },
-  { key: 'DEPARTED',  label: '已发车',   icon: 'car-outline' },
-  { key: 'IN_TRANSIT', label: '运输中',  icon: 'boat-outline' },
-  { key: 'ARRIVED',   label: '已到达',   icon: 'flag-outline' },
-  { key: 'DELIVERED', label: '已签收',   icon: 'checkmark-circle-outline' },
+  { key: 'CREATED',         label: '已下单',   icon: 'document-text-outline' },
+  { key: 'INBOUND',         label: '已入库',   icon: 'archive-outline' },
+  { key: 'PACKED',          label: '已装箱',   icon: 'cube-outline' },
+  { key: 'CUSTOMS_EXPORT',  label: '出口报关', icon: 'reader-outline' },
+  { key: 'DEPARTED',        label: '已发车',   icon: 'car-outline' },
+  { key: 'IN_TRANSIT',      label: '运输中',   icon: 'boat-outline' },
+  { key: 'ARRIVED',         label: '已到港',   icon: 'flag-outline' },
+  { key: 'CUSTOMS_IMPORT',  label: '清关中',   icon: 'shield-checkmark-outline' },
+  { key: 'DELIVERING',      label: '派送中',   icon: 'bicycle-outline' },
+  { key: 'DELIVERED',       label: '已签收',   icon: 'checkmark-circle-outline' },
 ];
 
 function getProgressIndex(status: string): number {
-  const order = ['PENDING_INBOUND', 'INBOUND', 'PACKED', 'DEPARTED', 'IN_TRANSIT', 'ARRIVED', 'DELIVERED'];
+  const order = ['PENDING_INBOUND', 'INBOUND', 'PACKED', 'CUSTOMS_EXPORT', 'DEPARTED', 'IN_TRANSIT', 'ARRIVED', 'CUSTOMS_IMPORT', 'DELIVERING', 'DELIVERED'];
   return order.indexOf(status);
 }
 

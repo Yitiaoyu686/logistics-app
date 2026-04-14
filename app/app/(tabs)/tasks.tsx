@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { getRoleLabel, getRoleColor } from '../../lib/auth';
-import { jobApi, orderApi, warehouseApi, deliveryApi } from '../../lib/api';
+import { jobApi, orderApi, warehouseApi, deliveryApi, customerApi, salesApi } from '../../lib/api';
 
 interface TaskItem {
   id: string;
@@ -22,13 +22,22 @@ interface TaskItem {
   borderColor: string;
 }
 
+interface SalesStats {
+  myCustomers: number;
+  pendingOrders: number;
+  unpaidOrders: number;
+  monthlyNew: number;
+}
+
 export default function TasksScreen() {
   const router = useRouter();
   const [role, setRole] = useState('');
   const [userName, setUserName] = useState('');
+  const [userId, setUserId] = useState('');
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('全部');
+  const [salesStats, setSalesStats] = useState<SalesStats>({ myCustomers: 0, pendingOrders: 0, unpaidOrders: 0, monthlyNew: 0 });
 
   useEffect(() => {
     let timer: any = null;
@@ -37,6 +46,7 @@ export default function TasksScreen() {
         const user = JSON.parse(u);
         setRole(user.role);
         setUserName(user.realName);
+        setUserId(user.id);
         loadTasks(user.role);
         // 轮询：每 15 秒静默刷新任务流
         timer = setInterval(() => loadTasks(user.role), 15000);
@@ -222,21 +232,79 @@ export default function TasksScreen() {
         }
 
       } else if (userRole === 'SALES') {
-        // 待处理订单
-        const pendingOrders = await orderApi.list({ status: 'PENDING_INBOUND' });
-        for (const o of (pendingOrders.data || []).slice(0, 3)) {
+        // 1. 加载销售统计
+        const [myCustomersRes, allOrdersRes] = await Promise.all([
+          customerApi.list({ poolType: 'PRIVATE' }),
+          orderApi.list({}),
+        ]);
+        const myCustomers = (myCustomersRes.data || []).length;
+        const pendingOrdersList = (allOrdersRes.data || []).filter((o: any) => o.order_status === 'PENDING_INBOUND');
+        const unpaidOrdersList = (allOrdersRes.data || []).filter((o: any) => o.payment_status === 'UNPAID' || o.payment_status === 'PARTIAL');
+        const now = new Date();
+        const monthlyNew = (myCustomersRes.data || []).filter((c: any) => {
+          if (!c.createdAt) return false;
+          const d = new Date(c.createdAt);
+          return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        }).length;
+        setSalesStats({
+          myCustomers,
+          pendingOrders: pendingOrdersList.length,
+          unpaidOrders: unpaidOrdersList.length,
+          monthlyNew,
+        });
+
+        // 2. 待办任务卡片（5 项）
+        items.push({
+          id: 'todo-customer-followup', type: 'inbound', icon: '👥',
+          title: '我的客户待跟进', subtitle: `${myCustomers} 个客户`,
+          detail: '查看您负责的所有客户，点击拨打 / 短信跟进',
+          status: `${myCustomers} 个`, statusColor: colors.primary,
+          actions: [{ label: '去处理', color: colors.primary, route: '/task/customer' }],
+          borderColor: colors.taskInbound,
+        });
+
+        if (pendingOrdersList.length > 0) {
           items.push({
-            id: `order-pending-${o.id}`, type: 'inbound', icon: '📋',
-            title: '未完成订单', subtitle: o.order_no,
-            detail: `${o.customer_name} · ${o.total_declared_pieces || 0}件 · ${o.route_code || ''}`,
-            status: '待入库', statusColor: colors.warning,
-            actions: [{ label: '查看详情', color: colors.primary, route: '/task/order' }],
+            id: 'todo-pending-orders', type: 'inbound', icon: '📋',
+            title: '未完成订单', subtitle: `${pendingOrdersList.length} 单待入库`,
+            detail: '客户已下单但货物未到仓，跟进客户尽快发货',
+            status: `${pendingOrdersList.length} 单`, statusColor: colors.warning,
+            actions: [{ label: '去处理', color: colors.primary, route: '/task/order' }],
             borderColor: colors.taskInbound,
           });
         }
 
-        // 运输进度
+        if (unpaidOrdersList.length > 0) {
+          items.push({
+            id: 'todo-unpaid', type: 'inbound', icon: '💰',
+            title: '待收款订单', subtitle: `${unpaidOrdersList.length} 单未结清`,
+            detail: '订单已完成但客户尚未付款，建议提醒催收',
+            status: `${unpaidOrdersList.length} 单`, statusColor: colors.danger,
+            actions: [{ label: '去处理', color: colors.danger, route: '/task/order' }],
+            borderColor: colors.taskOrphan,
+          });
+        }
+
+        if (monthlyNew > 0) {
+          items.push({
+            id: 'todo-monthly-new', type: 'inbound', icon: '✨',
+            title: '本月新增客户', subtitle: `本月新增 ${monthlyNew} 个`,
+            detail: '关注新客户首单转化',
+            status: `${monthlyNew} 个`, statusColor: colors.success,
+            actions: [{ label: '去处理', color: colors.success, route: '/task/customer' }],
+            borderColor: colors.taskInbound,
+          });
+        }
+
+        // 3. 运输进度（preview 卡片）— 只显示自己客户的JOB
         const allJobs = await jobApi.list();
+        const myCustomerNames = new Set((myCustomersRes.data || []).map((c: any) => c.customerName));
+        const myOrderIds = new Set(
+          (allOrdersRes.data || [])
+            .filter((o: any) => myCustomerNames.has(o.customer_name))
+            .map((o: any) => o.id)
+        );
+        // 简化：所有进行中 JOB 都算（实际应通过 job-order 关联表过滤）
         for (const j of (allJobs.data || []).filter((j: any) => !['COMPLETED', 'CANCELLED'].includes(j.job_status)).slice(0, 5)) {
           const nodeLabel = j.current_node || j.job_status;
           items.push({
@@ -301,8 +369,10 @@ export default function TasksScreen() {
         { label: '到港预告', value: tasks.filter(t => t.type === 'preview').length, color: colors.taskPreview },
       ]
     : [
-        { label: '待办订单', value: tasks.filter(t => t.type === 'inbound').length, color: colors.primary },
-        { label: '运输进度', value: tasks.filter(t => t.type === 'preview').length, color: colors.info },
+        { label: '我的客户', value: salesStats.myCustomers, color: colors.primary },
+        { label: '未完成订单', value: salesStats.pendingOrders, color: colors.warning },
+        { label: '待收款', value: salesStats.unpaidOrders, color: colors.danger },
+        { label: '本月新增', value: salesStats.monthlyNew, color: colors.success },
       ];
 
   return (
@@ -337,13 +407,13 @@ export default function TasksScreen() {
       {/* Sales 快捷入口 */}
       {role === 'SALES' && (
         <View style={styles.quickActions}>
-          <Pressable style={styles.quickAction} onPress={() => router.push('/task/customer' as any)}>
-            <Text style={styles.quickActionIcon}>👥</Text>
-            <Text style={styles.quickActionLabel}>客户列表</Text>
+          <Pressable style={styles.quickAction} onPress={() => router.push('/task/customer-create' as any)}>
+            <Text style={styles.quickActionIcon}>➕</Text>
+            <Text style={styles.quickActionLabel}>新建客户</Text>
           </Pressable>
-          <Pressable style={styles.quickAction} onPress={() => router.push('/task/order' as any)}>
-            <Text style={styles.quickActionIcon}>📄</Text>
-            <Text style={styles.quickActionLabel}>订单查询</Text>
+          <Pressable style={styles.quickAction} onPress={() => router.push('/task/order-create' as any)}>
+            <Text style={styles.quickActionIcon}>📝</Text>
+            <Text style={styles.quickActionLabel}>新建订单</Text>
           </Pressable>
           <Pressable style={styles.quickAction} onPress={() => router.push('/task/quote' as any)}>
             <Text style={styles.quickActionIcon}>💰</Text>

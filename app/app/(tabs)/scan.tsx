@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing, radius, font } from '../../lib/theme';
 
 // Dynamic import of expo-camera to avoid breaking web preview
@@ -69,6 +70,7 @@ const KIND_COLOR: Record<CodeKind, string> = {
 
 export default function ScanScreen() {
   const router = useRouter();
+  const [role, setRole] = useState('');
   const [manualVisible, setManualVisible] = useState(false);
   const [manualCode, setManualCode] = useState('');
   const [torch, setTorch] = useState(false);
@@ -77,6 +79,9 @@ export default function ScanScreen() {
   const [lastScanned, setLastScanned] = useState('');
 
   useEffect(() => {
+    AsyncStorage.getItem('user').then((u) => {
+      if (u) setRole(JSON.parse(u).role);
+    });
     if (Platform.OS !== 'web' && permission && !permission.granted) {
       requestPermission();
     }
@@ -170,6 +175,84 @@ export default function ScanScreen() {
       </View>
     );
   };
+
+  // 销售角色：直接显示快捷菜单
+  if (role === 'SALES') {
+    return (
+      <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]}>
+        <View style={styles.salesMenuWrap}>
+          <Text style={styles.salesMenuTitle}>快捷操作</Text>
+          <Text style={styles.salesMenuSubtitle}>常用功能一键直达</Text>
+
+          <View style={styles.salesMenuGrid}>
+            <TouchableOpacity style={styles.salesMenuCard} onPress={() => router.push('/task/order-create' as any)}>
+              <View style={[styles.salesMenuIcon, { backgroundColor: colors.primaryLight }]}>
+                <Text style={{ fontSize: 32 }}>📝</Text>
+              </View>
+              <Text style={styles.salesMenuName}>新建订单</Text>
+              <Text style={styles.salesMenuDesc}>4 步快速创建</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.salesMenuCard} onPress={() => router.push('/task/customer-create' as any)}>
+              <View style={[styles.salesMenuIcon, { backgroundColor: colors.successLight }]}>
+                <Text style={{ fontSize: 32 }}>➕</Text>
+              </View>
+              <Text style={styles.salesMenuName}>新建客户</Text>
+              <Text style={styles.salesMenuDesc}>录入新客户</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.salesMenuCard} onPress={() => router.push('/task/quote' as any)}>
+              <View style={[styles.salesMenuIcon, { backgroundColor: colors.warningLight }]}>
+                <Text style={{ fontSize: 32 }}>💰</Text>
+              </View>
+              <Text style={styles.salesMenuName}>运费试算</Text>
+              <Text style={styles.salesMenuDesc}>即时报价分享</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.salesMenuCard} onPress={() => setManualVisible(true)}>
+              <View style={[styles.salesMenuIcon, { backgroundColor: colors.infoLight }]}>
+                <Text style={{ fontSize: 32 }}>🔍</Text>
+              </View>
+              <Text style={styles.salesMenuName}>扫码查单</Text>
+              <Text style={styles.salesMenuDesc}>查询订单状态</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Manual Input Modal (复用) */}
+        <Modal visible={manualVisible} transparent animationType="slide" onRequestClose={() => setManualVisible(false)}>
+          <View style={styles.modalMask}>
+            <View style={styles.modalSheet}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>查询单号</Text>
+                <TouchableOpacity onPress={() => setManualVisible(false)}>
+                  <Ionicons name="close" size={24} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.modalHint}>输入运单号 / 子运单号 / 入仓号</Text>
+              <TextInput
+                style={styles.manualInput}
+                value={manualCode}
+                onChangeText={setManualCode}
+                placeholder="如 S-20260320990003"
+                placeholderTextColor={colors.textTertiary}
+                autoCapitalize="characters"
+                autoFocus
+                onSubmitEditing={handleManualSubmit}
+              />
+              <TouchableOpacity
+                style={[styles.submitBtn, !manualCode.trim() && styles.btnDisabled]}
+                onPress={handleManualSubmit}
+                disabled={!manualCode.trim()}
+              >
+                <Text style={styles.submitBtnText}>查询并跳转</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -302,6 +385,16 @@ const styles = StyleSheet.create({
   controlLabel: { fontSize: font.xs, color: colors.textSecondary },
   manualBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderRadius: radius.full, borderWidth: 1.5, borderColor: colors.primary },
   manualLabel: { fontSize: font.sm, color: colors.primary, fontWeight: '600' },
+
+  // Sales 菜单
+  salesMenuWrap: { flex: 1, padding: spacing.lg, paddingTop: spacing.xl },
+  salesMenuTitle: { fontSize: font.xxl, fontWeight: '700', color: colors.text, marginBottom: 4 },
+  salesMenuSubtitle: { fontSize: font.sm, color: colors.textSecondary, marginBottom: spacing.xl },
+  salesMenuGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  salesMenuCard: { width: '47%', backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 },
+  salesMenuIcon: { width: 64, height: 64, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md },
+  salesMenuName: { fontSize: font.md, fontWeight: '600', color: colors.text, marginBottom: 4 },
+  salesMenuDesc: { fontSize: font.xs, color: colors.textSecondary },
 
   recent: { backgroundColor: '#fff', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, maxHeight: 240 },
   recentTitle: { fontSize: font.sm, fontWeight: '600', color: colors.text, marginBottom: spacing.sm },

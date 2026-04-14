@@ -60,10 +60,15 @@ export default function MessagesScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => {
+    // SALES 角色：订单 Tab 直接打开订单列表
+    if (userRole === 'SALES') {
+      router.replace('/task/order' as any);
+      return;
+    }
     load();
     const timer = setInterval(load, 15000);
     return () => clearInterval(timer);
-  }, []));
+  }, [userRole]));
 
   const load = async () => {
     setLoading(true);

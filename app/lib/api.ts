@@ -68,6 +68,8 @@ export const orderApi = {
     return api.get(`/v2/oms/orders${qs}`);
   },
   get: (id: string) => api.get(`/v2/oms/orders/${id}/full`),
+  create: (data: any) => api.post('/v2/oms/orders', data),
+  update: (id: string, data: any) => api.put(`/v2/oms/orders/${id}`, data),
 };
 
 // Customers
@@ -77,6 +79,27 @@ export const customerApi = {
     return api.get(`/v2/oms/customers${qs}`);
   },
   get: (id: string) => api.get(`/v2/oms/customers/${id}`),
+  create: (data: any) => api.post('/v2/oms/customers', data),
+  update: (id: string, data: any) => api.put(`/v2/oms/customers/${id}`, data),
+  claim: (id: string, userId?: string) => api.post(`/v2/oms/customers/${id}/claim`, { userId }),
+  release: (id: string) => api.post(`/v2/oms/customers/${id}/release`, {}),
+};
+
+// Sales 工作台数据
+export const salesApi = {
+  dashboard: (salesId?: string) => {
+    const qs = salesId ? `?salesId=${salesId}` : '';
+    return api.get(`/sales/dashboard${qs}`);
+  },
+  pendingPayments: () => api.get('/sales/pending-payments'),
+};
+
+// 系统 (路线等)
+export const systemApi = {
+  routes: () => api.get('/system/routes'),
+  countries: () => api.get('/system/countries'),
+  expressCompanies: () => api.get('/system/express-companies'),
+  feeTypes: () => api.get('/system/fee-types'),
 };
 
 // Warehouse

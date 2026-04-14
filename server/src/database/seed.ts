@@ -138,17 +138,21 @@ export function seedDatabase(): void {
   // ============================================================
 
   const customers = [
-    { id: 'cust-1', code: 'A1B0', name: 'Web联调客户-S1836', type: 'COMPANY_CN', country: '中国', contact: '张三', phone: '13800001111', owner: 'user-sales1' },
-    { id: 'cust-2', code: 'A1B1', name: 'Web联调客户-S1836-2', type: 'COMPANY_CN', country: '中国', contact: '李四', phone: '13800002222', owner: 'user-sales1' },
-    { id: 'cust-3', code: 'C2D0', name: '联调航海客户PSea-2', type: 'COMPANY_CN', country: '中国', contact: '王五', phone: '13800003333', owner: 'user-sales1' },
-    { id: 'cust-4', code: 'E3F0', name: '联调综合客户P1-2026', type: 'COMPANY_CN', country: '中国', contact: '赵六', phone: '13800004444', owner: 'user-sales1' },
-    { id: 'cust-5', code: 'G4H0', name: '深圳旺达贸易', type: 'COMPANY_CN', country: '中国', contact: '钱七', phone: '13800005555', owner: 'user-sales1' },
-    { id: 'cust-6', code: 'J5K0', name: '广州金辉国际', type: 'COMPANY_CN', country: '中国', contact: '孙八', phone: '13800006666', owner: 'user-sales1' },
+    { id: 'cust-1', code: 'A1B0', name: 'Web联调客户-S1836', type: 'COMPANY_CN', country: '中国', contact: '张三', phone: '13800001111', owner: 'user-sales1', pool: 'PRIVATE' },
+    { id: 'cust-2', code: 'A1B1', name: 'Web联调客户-S1836-2', type: 'COMPANY_CN', country: '中国', contact: '李四', phone: '13800002222', owner: 'user-sales1', pool: 'PRIVATE' },
+    { id: 'cust-3', code: 'C2D0', name: '联调航海客户PSea-2', type: 'COMPANY_CN', country: '中国', contact: '王五', phone: '13800003333', owner: 'user-sales1', pool: 'PRIVATE' },
+    { id: 'cust-4', code: 'E3F0', name: '联调综合客户P1-2026', type: 'COMPANY_CN', country: '中国', contact: '赵六', phone: '13800004444', owner: 'user-sales1', pool: 'PRIVATE' },
+    { id: 'cust-5', code: 'G4H0', name: '深圳旺达贸易', type: 'COMPANY_CN', country: '中国', contact: '钱七', phone: '13800005555', owner: 'user-sales1', pool: 'PRIVATE' },
+    { id: 'cust-6', code: 'J5K0', name: '广州金辉国际', type: 'COMPANY_CN', country: '中国', contact: '孙八', phone: '13800006666', owner: 'user-sales1', pool: 'PRIVATE' },
+    // 公海池客户（未认领）
+    { id: 'cust-7', code: 'M7N0', name: '义乌小商品市场', type: 'COMPANY_CN', country: '中国', contact: '周九', phone: '13800007777', owner: null, pool: 'PUBLIC' },
+    { id: 'cust-8', code: 'P8Q0', name: '东莞机械制造', type: 'COMPANY_CN', country: '中国', contact: '吴十', phone: '13800008888', owner: null, pool: 'PUBLIC' },
+    { id: 'cust-9', code: 'R9S0', name: '佛山家具出口', type: 'COMPANY_CN', country: '中国', contact: '郑十一', phone: '13800009999', owner: null, pool: 'PUBLIC' },
   ];
 
   const insertCust = db.prepare('INSERT INTO crm_customer (id, customer_code, customer_name, customer_type, country, contact_name, contact_phone, owner_user_id, pool_type, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
   for (const c of customers) {
-    insertCust.run(c.id, c.code, c.name, c.type, c.country, c.contact, c.phone, c.owner, 'PRIVATE', 'ACTIVE', now);
+    insertCust.run(c.id, c.code, c.name, c.type, c.country, c.contact, c.phone, c.owner, c.pool, 'ACTIVE', now);
   }
 
   // 每个客户添加收件人
