@@ -689,6 +689,27 @@ export function createTables(): void {
   };
   ensureColumn('wms_inbound_item', 'goods_category', 'TEXT');
   ensureColumn('wms_inbound_item', 'photo_urls', 'TEXT');
+  // wms_transfer 发车扩展字段
+  ensureColumn('wms_transfer', 'shipping_no', 'TEXT');
+  ensureColumn('wms_transfer', 'track_url', 'TEXT');
+  ensureColumn('wms_transfer', 'remark', 'TEXT');
+  ensureColumn('wms_transfer', 'logistics_company_id', 'TEXT');
+  // tms_job 发车扩展字段
+  ensureColumn('tms_job', 'trucking_company', 'TEXT');
+  ensureColumn('tms_job', 'trucking_company_id', 'TEXT');
+  ensureColumn('tms_job', 'shipping_no', 'TEXT');
+  ensureColumn('tms_job', 'driver_name', 'TEXT');
+  ensureColumn('tms_job', 'driver_phone', 'TEXT');
+  ensureColumn('tms_job', 'plate_no', 'TEXT');
+  ensureColumn('tms_job', 'query_phone', 'TEXT');
+  ensureColumn('tms_job', 'track_url', 'TEXT');
+  ensureColumn('tms_job', 'recipient_name', 'TEXT');
+  ensureColumn('tms_job', 'recipient_phone', 'TEXT');
+  ensureColumn('tms_job', 'recipient_address', 'TEXT');
+  // pod_dpn 发车扩展字段
+  ensureColumn('pod_dpn', 'shipping_no', 'TEXT');
+  ensureColumn('pod_dpn', 'track_url', 'TEXT');
+  ensureColumn('pod_dpn', 'logistics_company_id', 'TEXT');
 
   console.log('All tables created successfully');
 }

@@ -99,6 +99,8 @@ export const systemApi = {
   routes: () => api.get('/system/routes'),
   countries: () => api.get('/system/countries'),
   expressCompanies: () => api.get('/system/express-companies'),
+  carriers: () => api.get('/system/carriers'),
+  suppliers: () => api.get('/system/suppliers'),
   feeTypes: () => api.get('/system/fee-types'),
 };
 

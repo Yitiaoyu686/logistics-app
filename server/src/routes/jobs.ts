@@ -83,7 +83,14 @@ router.put('/:jobNo', (req: Request, res: Response) => {
   const sets: string[] = [];
   const vals: any[] = [];
 
-  const allowedFields = ['job_status', 'current_node', 'carrier_name', 'vessel_voyage', 'flight_no', 'bill_no', 'container_no', 'etd', 'eta', 'atd', 'ata', 'remark'];
+  const allowedFields = [
+    'job_status', 'current_node', 'carrier_name', 'vessel_voyage', 'flight_no', 'bill_no',
+    'container_no', 'etd', 'eta', 'atd', 'ata', 'remark',
+    'trucking_company', 'trucking_company_id', 'shipping_no',
+    'driver_name', 'driver_phone', 'plate_no',
+    'query_phone', 'track_url',
+    'recipient_name', 'recipient_phone', 'recipient_address',
+  ];
   for (const field of allowedFields) {
     const camelKey = field.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
     const value = b[field] || b[camelKey];

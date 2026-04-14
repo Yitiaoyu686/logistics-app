@@ -1,12 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TextInput, TouchableOpacity,
-  SafeAreaView, Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
+  SafeAreaView, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, Modal,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
-import { deliveryApi, orderApi } from '../../lib/api';
+import { deliveryApi, orderApi, systemApi } from '../../lib/api';
+
+interface SupplierOption {
+  id: string;
+  name: string;
+  supplier_type: string;
+  phone?: string | null;
+}
 
 type DpnStatus = 'DRAFT' | 'PENDING_BIND' | 'PENDING_DISPATCH' | 'IN_TRANSIT' | 'ARRIVED' | 'SIGNED' | 'CANCELLED';
 
@@ -59,14 +66,32 @@ export default function DpnScreen() {
   const [driverName, setDriverName] = useState('');
   const [driverPhone, setDriverPhone] = useState('');
   const [plateNo, setPlateNo] = useState('');
+  const [logisticsCompanyId, setLogisticsCompanyId] = useState('');
   const [logisticsCompany, setLogisticsCompany] = useState('');
+  const [shippingNo, setShippingNo] = useState('');
+  const [queryPhone, setQueryPhone] = useState('');
+  const [trackUrl, setTrackUrl] = useState('');
+  const [dispatchRemark, setDispatchRemark] = useState('');
+  const [supplierPickerOpen, setSupplierPickerOpen] = useState(false);
+  const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
 
   // Arrive mode
   const [arrivalRemark, setArrivalRemark] = useState('');
 
   useEffect(() => {
     if (mode === 'bind') loadAvailableSubOrders();
+    if (mode === 'dispatch') loadSuppliers();
   }, [mode]);
+
+  const loadSuppliers = async () => {
+    try {
+      const res = await systemApi.suppliers();
+      const list = (res.data as SupplierOption[]) || [];
+      setSuppliers(list.filter((s) => s.supplier_type === 'CARRIER' || s.supplier_type === 'TRUCKING'));
+    } catch {
+      setSuppliers([]);
+    }
+  };
 
   const loadAvailableSubOrders = async () => {
     setLoading(true);
@@ -117,6 +142,7 @@ export default function DpnScreen() {
   };
 
   const handleDispatch = async () => {
+    if (!logisticsCompany.trim()) { Alert.alert('请选择物流/承运公司'); return; }
     if (!driverName.trim()) { Alert.alert('请填写司机姓名'); return; }
     if (!plateNo.trim()) { Alert.alert('请填写车牌号'); return; }
 
@@ -125,8 +151,13 @@ export default function DpnScreen() {
       if (params.dpnId) {
         await deliveryApi.updateDpn(params.dpnId as string, {
           dpnStatus: 'IN_TRANSIT',
+          logisticsCompanyId: logisticsCompanyId || undefined,
+          logisticsCompany,
+          shippingNo: shippingNo || undefined,
+          queryPhone: queryPhone || undefined,
+          trackUrl: trackUrl || undefined,
           driverName, driverPhone, plateNo,
-          logisticsCompany: logisticsCompany || undefined,
+          remark: dispatchRemark || undefined,
           dispatchTime: new Date().toISOString(),
         });
       }
@@ -264,10 +295,32 @@ export default function DpnScreen() {
           {mode === 'dispatch' && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>🚚 执行发车</Text>
-              <FormField label="承运公司" value={logisticsCompany} onChangeText={setLogisticsCompany} placeholder="如：尼日利亚快运" />
+              <View style={styles.formItem}>
+                <Text style={styles.formLabel}>物流 / 承运公司 *</Text>
+                <TouchableOpacity style={styles.selectField} onPress={() => setSupplierPickerOpen(true)}>
+                  <Text style={[styles.selectText, !logisticsCompany && { color: colors.textTertiary }]}>
+                    {logisticsCompany || '请选择'}
+                  </Text>
+                  <Ionicons name="chevron-down" size={18} color={colors.textTertiary} />
+                </TouchableOpacity>
+              </View>
+              <FormField label="送货单号" value={shippingNo} onChangeText={setShippingNo} placeholder="承运方的送货单号" />
               <FormField label="司机姓名 *" value={driverName} onChangeText={setDriverName} placeholder="请输入" />
               <FormField label="司机电话" value={driverPhone} onChangeText={setDriverPhone} placeholder="如：+234..." keyboardType="phone-pad" />
               <FormField label="车牌号 *" value={plateNo} onChangeText={setPlateNo} placeholder="如：LAG-1234" />
+              <FormField label="查询电话" value={queryPhone} onChangeText={setQueryPhone} placeholder="物流方客服电话" keyboardType="phone-pad" />
+              <FormField label="查询网址" value={trackUrl} onChangeText={setTrackUrl} placeholder="物流公司的跟踪网址" />
+              <View style={styles.formItem}>
+                <Text style={styles.formLabel}>备注</Text>
+                <TextInput
+                  style={styles.textarea}
+                  value={dispatchRemark}
+                  onChangeText={setDispatchRemark}
+                  placeholder="可选"
+                  placeholderTextColor={colors.textTertiary}
+                  multiline
+                />
+              </View>
               <View style={styles.tipCard}>
                 <Ionicons name="information-circle" size={18} color={colors.info} />
                 <Text style={styles.tipText}>发车后 DPN 状态变更为"运输中"，并自动记录发车时间</Text>
@@ -353,6 +406,53 @@ export default function DpnScreen() {
             </TouchableOpacity>
           )}
         </View>
+
+        {/* 承运方选择 */}
+        <Modal
+          visible={supplierPickerOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setSupplierPickerOpen(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={styles.modalBackdrop}
+            onPress={() => setSupplierPickerOpen(false)}
+          >
+            <View style={styles.modalSheet}>
+              <Text style={styles.modalTitle}>选择物流 / 承运公司</Text>
+              <ScrollView style={{ maxHeight: 400 }}>
+                {suppliers.length === 0 ? (
+                  <Text style={{ textAlign: 'center', color: colors.textTertiary, paddingVertical: spacing.lg }}>
+                    暂无数据
+                  </Text>
+                ) : (
+                  suppliers.map((s) => (
+                    <TouchableOpacity
+                      key={s.id}
+                      style={styles.supplierItem}
+                      onPress={() => {
+                        setLogisticsCompanyId(s.id);
+                        setLogisticsCompany(s.name);
+                        if (s.phone && !queryPhone) setQueryPhone(s.phone);
+                        setSupplierPickerOpen(false);
+                      }}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.supplierName}>{s.name}</Text>
+                        <Text style={styles.supplierSub}>
+                          {s.supplier_type === 'CARRIER' ? '物流公司' : '拖车公司'}
+                          {s.phone ? ` · ${s.phone}` : ''}
+                        </Text>
+                      </View>
+                      {logisticsCompanyId === s.id && <Ionicons name="checkmark" size={20} color={colors.primary} />}
+                    </TouchableOpacity>
+                  ))
+                )}
+              </ScrollView>
+            </View>
+          </TouchableOpacity>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -437,4 +537,14 @@ const styles = StyleSheet.create({
   btnSuccess: { flexDirection: 'row', height: 52, backgroundColor: colors.success, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
   btnText: { color: '#fff', fontSize: font.lg, fontWeight: '600', letterSpacing: 2 },
   btnDisabled: { opacity: 0.5 },
+
+  // Select & Modal
+  selectField: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.md, height: 44, backgroundColor: colors.card },
+  selectText: { fontSize: font.md, color: colors.text },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalSheet: { backgroundColor: colors.card, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.lg, paddingBottom: spacing.xl },
+  modalTitle: { fontSize: font.lg, fontWeight: '700', color: colors.text, marginBottom: spacing.md, textAlign: 'center' },
+  supplierItem: { flexDirection: 'row', alignItems: 'center', padding: spacing.md, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
+  supplierName: { fontSize: font.md, fontWeight: '600', color: colors.text },
+  supplierSub: { fontSize: font.xs, color: colors.textSecondary, marginTop: 2 },
 });

@@ -286,7 +286,11 @@ router.put('/transfers/:id', (req: Request, res: Response) => {
 
   const fieldMap: Record<string, string> = {
     transferStatus: 'transfer_status', logisticsCompany: 'logistics_company',
-    trackingNo: 'tracking_no', queryPhone: 'query_phone', driverName: 'driver_name',
+    logisticsCompanyId: 'logistics_company_id',
+    trackingNo: 'tracking_no', shippingNo: 'shipping_no',
+    queryPhone: 'query_phone', trackPhone: 'query_phone',
+    trackUrl: 'track_url',
+    driverName: 'driver_name',
     driverPhone: 'driver_phone', plateNo: 'plate_no', dispatchTime: 'dispatch_time',
     arrivalTime: 'arrival_time', receiveTime: 'receive_time', remark: 'remark',
   };

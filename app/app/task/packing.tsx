@@ -1,12 +1,19 @@
 import { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TextInput, TouchableOpacity,
-  SafeAreaView, Alert, KeyboardAvoidingView, Platform, Pressable,
+  SafeAreaView, Alert, KeyboardAvoidingView, Platform, Pressable, Modal,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
-import { jobApi } from '../../lib/api';
+import { jobApi, systemApi } from '../../lib/api';
+
+interface SupplierOption {
+  id: string;
+  name: string;
+  supplier_type: string;
+  phone?: string | null;
+}
 
 type Mode = 'add-order' | 'execute-out';
 
@@ -26,19 +33,38 @@ export default function PackingScreen() {
   const [recipientName, setRecipientName] = useState('');
   const [recipientPhone, setRecipientPhone] = useState('');
   const [recipientAddress, setRecipientAddress] = useState('');
+  const [truckingCompanyId, setTruckingCompanyId] = useState('');
   const [truckingCompany, setTruckingCompany] = useState('');
-  const [trackingNo, setTrackingNo] = useState('');
+  const [shippingNo, setShippingNo] = useState('');
   const [queryPhone, setQueryPhone] = useState('');
+  const [trackUrl, setTrackUrl] = useState('');
   const [driverName, setDriverName] = useState('');
   const [driverPhone, setDriverPhone] = useState('');
   const [plateNo, setPlateNo] = useState('');
   const [plannedTime, setPlannedTime] = useState('');
   const [remark, setRemark] = useState('');
 
+  const [supplierPickerOpen, setSupplierPickerOpen] = useState(false);
+  const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+
   useEffect(() => {
     if (params.jobId) loadJob(params.jobId as string);
     else setLoading(false);
   }, [params.jobId]);
+
+  useEffect(() => {
+    if (mode !== 'execute-out') return;
+    (async () => {
+      try {
+        const res = await systemApi.suppliers();
+        const list = (res.data as SupplierOption[]) || [];
+        setSuppliers(list.filter((s) => s.supplier_type === 'CARRIER' || s.supplier_type === 'TRUCKING'));
+      } catch {
+        setSuppliers([]);
+      }
+    })();
+  }, [mode]);
 
   const loadJob = async (id: string) => {
     try {
@@ -57,16 +83,51 @@ export default function PackingScreen() {
     setScanInput('');
   };
 
-  const handleExecuteOut = () => {
+  const handleExecuteOut = async () => {
     if (!recipientName || !recipientPhone || !recipientAddress) {
       Alert.alert('请填写发往地址'); return;
     }
     if (!truckingCompany || !driverName || !driverPhone || !plateNo) {
-      Alert.alert('请填写拖车和司机信息'); return;
+      Alert.alert('请填写拖车公司/司机信息'); return;
     }
-    Alert.alert('执行成功', '任务已安排发运', [
-      { text: '确定', onPress: () => router.back() },
-    ]);
+    if (!job) { Alert.alert('任务信息缺失'); return; }
+
+    setSubmitting(true);
+    try {
+      await jobApi.update(job.job_no || job.id, {
+        jobStatus: 'LOADING',
+        truckingCompany,
+        truckingCompanyId: truckingCompanyId || undefined,
+        shippingNo: shippingNo || undefined,
+        driverName,
+        driverPhone,
+        plateNo,
+        queryPhone: queryPhone || undefined,
+        trackUrl: trackUrl || undefined,
+        recipientName,
+        recipientPhone,
+        recipientAddress,
+        remark: remark || undefined,
+      });
+      // 记录一条跟踪事件
+      await jobApi.addEvent({
+        jobId: job.id,
+        eventScope: 'JOB',
+        nodeCode: 'DEPARTED',
+        nodeName: '已发车',
+        eventType: 'DISPATCH',
+        statusCode: 'LOADING',
+        remark: `${truckingCompany} ${driverName} ${plateNo}`,
+      }).catch(() => null);
+      Alert.alert('执行成功', '任务已安排发运', [
+        { text: '确定', onPress: () => router.back() },
+      ]);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '请重试';
+      Alert.alert('执行失败', message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (loading) {
@@ -193,10 +254,25 @@ export default function PackingScreen() {
 
               {/* 拖车公司 */}
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>拖车公司</Text>
-                <FormInput label="拖车公司" value={truckingCompany} onChange={setTruckingCompany} required placeholder="广州顺达拖车" />
-                <FormInput label="送货单号" value={trackingNo} onChange={setTrackingNo} placeholder="选填" />
+                <Text style={styles.sectionTitle}>拖车 / 物流公司</Text>
+                <View style={styles.formItem}>
+                  <Text style={styles.formLabel}>公司名称 <Text style={styles.required}>*</Text></Text>
+                  <TouchableOpacity
+                    style={[styles.input, styles.selectInput]}
+                    onPress={() => setSupplierPickerOpen(true)}
+                  >
+                    <Text style={{
+                      fontSize: font.md,
+                      color: truckingCompany ? colors.text : colors.textTertiary,
+                    }}>
+                      {truckingCompany || '请选择承运方'}
+                    </Text>
+                    <Ionicons name="chevron-down" size={18} color={colors.textTertiary} />
+                  </TouchableOpacity>
+                </View>
+                <FormInput label="送货单号" value={shippingNo} onChange={setShippingNo} placeholder="承运方的送货单号" />
                 <FormInput label="查询电话" value={queryPhone} onChange={setQueryPhone} keyboardType="phone-pad" placeholder="拖车公司客服电话" />
+                <FormInput label="查询网址" value={trackUrl} onChange={setTrackUrl} placeholder="物流公司跟踪网址" />
               </View>
 
               {/* 司机与车辆 */}
@@ -221,11 +297,62 @@ export default function PackingScreen() {
               <Text style={styles.btnPrimaryText}>下一步：执行出库</Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={styles.btnExecute} onPress={handleExecuteOut}>
-              <Text style={styles.btnPrimaryText}>确认执行出库</Text>
+            <TouchableOpacity
+              style={[styles.btnExecute, submitting && { opacity: 0.6 }]}
+              onPress={handleExecuteOut}
+              disabled={submitting}
+            >
+              <Text style={styles.btnPrimaryText}>{submitting ? '处理中...' : '确认执行出库'}</Text>
             </TouchableOpacity>
           )}
         </View>
+
+        {/* 承运方选择 */}
+        <Modal
+          visible={supplierPickerOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setSupplierPickerOpen(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={styles.modalBackdrop}
+            onPress={() => setSupplierPickerOpen(false)}
+          >
+            <View style={styles.modalSheet}>
+              <Text style={styles.modalTitle}>选择拖车 / 物流公司</Text>
+              <ScrollView style={{ maxHeight: 400 }}>
+                {suppliers.length === 0 ? (
+                  <Text style={{ textAlign: 'center', color: colors.textTertiary, paddingVertical: spacing.lg }}>
+                    暂无数据
+                  </Text>
+                ) : (
+                  suppliers.map((s) => (
+                    <TouchableOpacity
+                      key={s.id}
+                      style={styles.supplierItem}
+                      onPress={() => {
+                        setTruckingCompanyId(s.id);
+                        setTruckingCompany(s.name);
+                        if (s.phone && !queryPhone) setQueryPhone(s.phone);
+                        setSupplierPickerOpen(false);
+                      }}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.supplierName}>{s.name}</Text>
+                        <Text style={styles.supplierSub}>
+                          {s.supplier_type === 'CARRIER' ? '物流公司' : '拖车公司'}
+                          {s.phone ? ` · ${s.phone}` : ''}
+                        </Text>
+                      </View>
+                      {truckingCompanyId === s.id && <Ionicons name="checkmark" size={20} color={colors.primary} />}
+                    </TouchableOpacity>
+                  ))
+                )}
+              </ScrollView>
+            </View>
+          </TouchableOpacity>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -299,6 +426,13 @@ const styles = StyleSheet.create({
   required: { color: colors.danger },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.md, height: 44, fontSize: font.md, color: colors.text, backgroundColor: colors.card },
   textarea: { height: 64, paddingVertical: spacing.sm, textAlignVertical: 'top' },
+  selectInput: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalSheet: { backgroundColor: colors.card, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.lg, paddingBottom: spacing.xl },
+  modalTitle: { fontSize: font.lg, fontWeight: '700', color: colors.text, marginBottom: spacing.md, textAlign: 'center' },
+  supplierItem: { flexDirection: 'row', alignItems: 'center', padding: spacing.md, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
+  supplierName: { fontSize: font.md, fontWeight: '600', color: colors.text },
+  supplierSub: { fontSize: font.xs, color: colors.textSecondary, marginTop: 2 },
 
   bottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.card, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xl, borderTopWidth: 0.5, borderTopColor: colors.borderLight },
   btnPrimary: { height: 52, backgroundColor: colors.primary, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
