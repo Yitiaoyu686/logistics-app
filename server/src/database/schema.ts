@@ -369,6 +369,7 @@ export function createTables(): void {
       package_condition TEXT DEFAULT 'GOOD' CHECK(package_condition IN ('GOOD','DAMAGED','WET','OPENED','INCOMPLETE')),
       location_code TEXT,
       photo_urls TEXT,
+      goods_category TEXT,
       item_status TEXT DEFAULT 'COMPLETED' CHECK(item_status IN ('PENDING','COMPLETED','ABNORMAL')),
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -678,6 +679,16 @@ export function createTables(): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+
+  // 对老库做增量兼容(SQLite 不支持 IF NOT EXISTS 于 ALTER TABLE ADD COLUMN)
+  const ensureColumn = (table: string, column: string, ddl: string) => {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+    if (!cols.some((c) => c.name === column)) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+    }
+  };
+  ensureColumn('wms_inbound_item', 'goods_category', 'TEXT');
+  ensureColumn('wms_inbound_item', 'photo_urls', 'TEXT');
 
   console.log('All tables created successfully');
 }

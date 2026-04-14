@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TextInput, TouchableOpacity,
-  SafeAreaView, Alert, KeyboardAvoidingView, Platform,
+  SafeAreaView, Alert, KeyboardAvoidingView, Platform, Modal,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,6 +26,54 @@ const MODE_LABEL: Record<InboundMode, string> = {
   RETURN: '退回入库',
 };
 
+// 货物类别（与 Web 对齐）
+const GOODS_CATEGORIES = [
+  '日用百货', '机械/五金/仪表', '食品', '化妆品', '保健品',
+  '药品', '电子产品', '服装/纺织品', '文件', '其他',
+];
+
+// 费用类型
+const FEE_TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'FREIGHT', label: '运费' },
+  { value: 'SURCHARGE_DRUG', label: '药品附加运费' },
+  { value: 'CUSTOMS', label: '报关费' },
+  { value: 'DOOR_DELIVERY', label: '到门费用' },
+  { value: 'PACKAGING', label: '包装费' },
+  { value: 'WAREHOUSE', label: '仓储费' },
+  { value: 'INSURANCE', label: '保险费' },
+  { value: 'DISCOUNT', label: '折扣' },
+  { value: 'OTHER', label: '其他' },
+];
+const FEE_TYPE_LABEL: Record<string, string> = Object.fromEntries(
+  FEE_TYPE_OPTIONS.map((o) => [o.value, o.label]),
+);
+const CURRENCY_OPTIONS = ['USD', 'CNY', 'NGN'];
+const FX_RATE: Record<string, number> = { USD: 1, CNY: 7.25, NGN: 1650 };
+
+// 服务类型决定体积系数和单价
+// EXPRESS(空运): 体积系数 5000,55 USD/kg,最低 150 USD
+// 其它(海运): 6000, 12 USD/kg, 最低 50 USD
+const getServiceConfig = (serviceType?: string) => {
+  const isAir = (serviceType || '').toUpperCase() === 'EXPRESS' || (serviceType || '').toUpperCase() === 'AIR';
+  return {
+    divisor: isAir ? 5000 : 6000,
+    unitRate: isAir ? 55 : 12,
+    minCharge: isAir ? 150 : 50,
+  };
+};
+
+interface InboundFee {
+  id: string;
+  feeType: string;
+  currency: string;
+  unitPrice: number;
+  quantity: number;
+  exchangeRate: number;
+  amount: number;
+  remark: string;
+  isAutoFreight?: boolean;
+}
+
 export default function InboundScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ orderId?: string; orderNo?: string; mode?: InboundMode }>();
@@ -45,6 +93,11 @@ export default function InboundScreen() {
   const [condition, setCondition] = useState<PackageCondition>('GOOD');
   const [location, setLocation] = useState('');
   const [remark, setRemark] = useState('');
+  const [goodsCategory, setGoodsCategory] = useState<string | undefined>(undefined);
+  const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
+  const [fees, setFees] = useState<InboundFee[]>([]);
+  const [feeEditorOpen, setFeeEditorOpen] = useState(false);
+  const [editingFee, setEditingFee] = useState<InboundFee | null>(null);
 
   useEffect(() => {
     if (params.orderId) loadOrder(params.orderId as string);
@@ -68,21 +121,84 @@ export default function InboundScreen() {
     }
   };
 
-  // 自动计算体积重和计费重量
+  // 自动计算体积重和计费重量（根据服务类型选择体积系数）
+  const serviceConfig = useMemo(() => getServiceConfig(order?.service_type), [order?.service_type]);
   const { volumeWeight, chargeableWeight } = useMemo(() => {
     const l = Number(length) || 0, w = Number(width) || 0, h = Number(height) || 0;
     const aw = Number(weight) || 0;
-    const vw = (l * w * h) / 6000;
+    const vw = (l * w * h) / serviceConfig.divisor;
     const cw = Math.max(aw, vw);
     return { volumeWeight: vw, chargeableWeight: cw };
-  }, [length, width, height, weight]);
+  }, [length, width, height, weight, serviceConfig.divisor]);
 
-  // 预估运费（首重 63 + 续重 57/kg）
-  const estimatedFee = useMemo(() => {
-    if (chargeableWeight <= 0) return 0;
-    if (chargeableWeight <= 1) return 63;
-    return 63 + (chargeableWeight - 1) * 57;
-  }, [chargeableWeight]);
+  // 自动运费(USD) — 与 Web 保持一致
+  useEffect(() => {
+    const { unitRate, minCharge } = serviceConfig;
+    if (chargeableWeight <= 0) {
+      setFees((prev) => prev.filter((f) => !f.isAutoFreight));
+      return;
+    }
+    const amount = Math.max(chargeableWeight * unitRate, minCharge);
+    const autoRow: InboundFee = {
+      id: 'AUTO_FREIGHT',
+      feeType: 'FREIGHT',
+      currency: 'USD',
+      unitPrice: unitRate,
+      quantity: Number(chargeableWeight.toFixed(2)),
+      exchangeRate: 1,
+      amount: Number(amount.toFixed(2)),
+      remark: `实重${(Number(weight) || 0).toFixed(2)}kg｜体积重${volumeWeight.toFixed(2)}kg｜计费重${chargeableWeight.toFixed(2)}kg`,
+      isAutoFreight: true,
+    };
+    setFees((prev) => {
+      const manual = prev.filter((f) => !f.isAutoFreight);
+      return [autoRow, ...manual];
+    });
+  }, [chargeableWeight, volumeWeight, weight, serviceConfig]);
+
+  // 合计(USD) — 币种按当前汇率折算
+  const feeTotalUSD = useMemo(() => {
+    return fees.reduce((sum, f) => {
+      const rate = f.currency === 'USD' ? 1 : (FX_RATE[f.currency] || 1);
+      return sum + (f.amount || 0) / rate;
+    }, 0);
+  }, [fees]);
+
+  const openAddFee = () => {
+    setEditingFee({
+      id: `FEE-${Date.now()}`,
+      feeType: '',
+      currency: 'USD',
+      unitPrice: 0,
+      quantity: 1,
+      exchangeRate: 1,
+      amount: 0,
+      remark: '',
+    });
+    setFeeEditorOpen(true);
+  };
+
+  const saveFee = () => {
+    if (!editingFee) return;
+    if (!editingFee.feeType) {
+      Alert.alert('请选择费用类型'); return;
+    }
+    setFees((prev) => {
+      const idx = prev.findIndex((f) => f.id === editingFee.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = editingFee;
+        return next;
+      }
+      return [...prev, editingFee];
+    });
+    setFeeEditorOpen(false);
+    setEditingFee(null);
+  };
+
+  const removeFee = (id: string) => {
+    setFees((prev) => prev.filter((f) => f.id !== id));
+  };
 
   const isAbnormal = condition !== 'GOOD';
 
@@ -109,6 +225,16 @@ export default function InboundScreen() {
         heightCm: Number(height) || null,
         packageCondition: condition,
         locationCode: location,
+        goodsCategory: goodsCategory || null,
+        fees: fees.map((f) => ({
+          feeType: f.feeType,
+          currency: f.currency,
+          unitPrice: f.unitPrice,
+          quantity: f.quantity,
+          exchangeRate: f.exchangeRate,
+          amount: f.amount,
+          remark: f.remark,
+        })),
         remark,
       });
 
@@ -215,15 +341,71 @@ export default function InboundScreen() {
             </View>
           </View>
 
-          {/* 运费参考 */}
-          {chargeableWeight > 0 && (
-            <View style={styles.feeRef}>
-              <Text style={styles.feeRefLabel}>
-                运费参考：首重 ¥63 + 续重 ¥57×{Math.max(0, chargeableWeight - 1).toFixed(2)}
+          {/* 货物类别 */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>🏷️ 货物类别</Text>
+            <TouchableOpacity
+              style={styles.selectField}
+              onPress={() => setCategoryPickerOpen(true)}
+            >
+              <Text style={[styles.selectText, !goodsCategory && { color: colors.textTertiary }]}>
+                {goodsCategory || '请选择货物类别'}
               </Text>
-              <Text style={styles.feeRefValue}>¥ {estimatedFee.toFixed(2)}</Text>
+              <Ionicons name="chevron-down" size={18} color={colors.textTertiary} />
+            </TouchableOpacity>
+          </View>
+
+          {/* 费用明细 */}
+          <View style={styles.section}>
+            <View style={styles.feeHeader}>
+              <Text style={styles.sectionTitle}>💰 费用明细</Text>
+              <TouchableOpacity style={styles.addFeeBtn} onPress={openAddFee}>
+                <Ionicons name="add-circle" size={18} color={colors.primary} />
+                <Text style={styles.addFeeText}>添加费用</Text>
+              </TouchableOpacity>
             </View>
-          )}
+
+            {fees.length === 0 ? (
+              <Text style={styles.feeEmpty}>请先称重量方以生成自动运费</Text>
+            ) : (
+              <View style={{ gap: spacing.sm }}>
+                {fees.map((f) => (
+                  <View
+                    key={f.id}
+                    style={[
+                      styles.feeItem,
+                      f.isAutoFreight && { backgroundColor: colors.primaryLight, borderColor: colors.primary },
+                    ]}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.feeItemTitle}>
+                        {FEE_TYPE_LABEL[f.feeType] || f.feeType}
+                        {f.isAutoFreight && <Text style={styles.feeAutoBadge}> 自动</Text>}
+                      </Text>
+                      <Text style={styles.feeItemSub}>
+                        {f.currency} {f.unitPrice.toFixed(2)} × {f.quantity}{f.exchangeRate !== 1 ? `  汇率${f.exchangeRate}` : ''}
+                      </Text>
+                      {!!f.remark && <Text style={styles.feeItemRemark} numberOfLines={1}>{f.remark}</Text>}
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.feeItemAmount, f.isAutoFreight && { color: colors.primary }]}>
+                        {f.currency} {f.amount.toFixed(2)}
+                      </Text>
+                      {!f.isAutoFreight && (
+                        <TouchableOpacity onPress={() => removeFee(f.id)} style={{ padding: 4, marginTop: 4 }}>
+                          <Ionicons name="trash-outline" size={16} color={colors.danger} />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                ))}
+                <View style={styles.feeTotalRow}>
+                  <Text style={styles.feeTotalLabel}>合计</Text>
+                  <Text style={styles.feeTotalValue}>USD {feeTotalUSD.toFixed(2)}</Text>
+                </View>
+              </View>
+            )}
+          </View>
 
           {/* 包裹状况 */}
           <View style={styles.section}>
@@ -287,6 +469,181 @@ export default function InboundScreen() {
             />
           </View>
         </ScrollView>
+
+        {/* 货物类别选择器 */}
+        <Modal
+          visible={categoryPickerOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setCategoryPickerOpen(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={styles.modalBackdrop}
+            onPress={() => setCategoryPickerOpen(false)}
+          >
+            <View style={styles.modalSheet}>
+              <Text style={styles.modalTitle}>选择货物类别</Text>
+              <ScrollView style={{ maxHeight: 400 }}>
+                {GOODS_CATEGORIES.map((c) => (
+                  <TouchableOpacity
+                    key={c}
+                    style={styles.modalOption}
+                    onPress={() => {
+                      setGoodsCategory(c);
+                      setCategoryPickerOpen(false);
+                    }}
+                  >
+                    <Text style={[styles.modalOptionText, goodsCategory === c && { color: colors.primary, fontWeight: '600' }]}>
+                      {c}
+                    </Text>
+                    {goodsCategory === c && <Ionicons name="checkmark" size={20} color={colors.primary} />}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
+        {/* 费用编辑器 */}
+        <Modal
+          visible={feeEditorOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setFeeEditorOpen(false)}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalSheet}>
+              <Text style={styles.modalTitle}>添加费用</Text>
+
+              {/* 费用类型 */}
+              <Text style={styles.feeFieldLabel}>费用类型 *</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
+                <View style={{ flexDirection: 'row', gap: spacing.xs, paddingRight: spacing.md }}>
+                  {FEE_TYPE_OPTIONS.filter((o) => o.value !== 'FREIGHT').map((o) => (
+                    <TouchableOpacity
+                      key={o.value}
+                      style={[
+                        styles.chip,
+                        editingFee?.feeType === o.value && { backgroundColor: colors.primary, borderColor: colors.primary },
+                      ]}
+                      onPress={() =>
+                        setEditingFee((prev) => (prev ? { ...prev, feeType: o.value } : prev))
+                      }
+                    >
+                      <Text
+                        style={[
+                          styles.chipText,
+                          editingFee?.feeType === o.value && { color: '#fff' },
+                        ]}
+                      >
+                        {o.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+
+              {/* 币种 */}
+              <Text style={styles.feeFieldLabel}>币种</Text>
+              <View style={{ flexDirection: 'row', gap: spacing.xs, marginBottom: spacing.md }}>
+                {CURRENCY_OPTIONS.map((c) => (
+                  <TouchableOpacity
+                    key={c}
+                    style={[
+                      styles.chip,
+                      editingFee?.currency === c && { backgroundColor: colors.primary, borderColor: colors.primary },
+                    ]}
+                    onPress={() =>
+                      setEditingFee((prev) =>
+                        prev ? { ...prev, currency: c, exchangeRate: FX_RATE[c] || 1 } : prev,
+                      )
+                    }
+                  >
+                    <Text style={[styles.chipText, editingFee?.currency === c && { color: '#fff' }]}>
+                      {c}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* 单价 / 数量 */}
+              <View style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.feeFieldLabel}>单价</Text>
+                  <TextInput
+                    style={styles.feeInput}
+                    keyboardType="decimal-pad"
+                    value={String(editingFee?.unitPrice ?? '')}
+                    onChangeText={(v) =>
+                      setEditingFee((prev) => {
+                        if (!prev) return prev;
+                        const up = Number(v) || 0;
+                        return { ...prev, unitPrice: up, amount: Number((up * prev.quantity).toFixed(2)) };
+                      })
+                    }
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.feeFieldLabel}>数量</Text>
+                  <TextInput
+                    style={styles.feeInput}
+                    keyboardType="decimal-pad"
+                    value={String(editingFee?.quantity ?? '')}
+                    onChangeText={(v) =>
+                      setEditingFee((prev) => {
+                        if (!prev) return prev;
+                        const q = Number(v) || 0;
+                        return { ...prev, quantity: q, amount: Number((prev.unitPrice * q).toFixed(2)) };
+                      })
+                    }
+                  />
+                </View>
+              </View>
+
+              {/* 金额（可覆盖） */}
+              <Text style={styles.feeFieldLabel}>金额</Text>
+              <TextInput
+                style={[styles.feeInput, { marginBottom: spacing.md }]}
+                keyboardType="decimal-pad"
+                value={String(editingFee?.amount ?? '')}
+                onChangeText={(v) =>
+                  setEditingFee((prev) => (prev ? { ...prev, amount: Number(v) || 0 } : prev))
+                }
+              />
+
+              {/* 备注 */}
+              <Text style={styles.feeFieldLabel}>备注</Text>
+              <TextInput
+                style={[styles.feeInput, { marginBottom: spacing.lg }]}
+                value={editingFee?.remark ?? ''}
+                onChangeText={(v) =>
+                  setEditingFee((prev) => (prev ? { ...prev, remark: v } : prev))
+                }
+                placeholder="可选"
+                placeholderTextColor={colors.textTertiary}
+              />
+
+              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                <TouchableOpacity
+                  style={[styles.btnSecondary, { flex: 1, height: 48, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md }]}
+                  onPress={() => {
+                    setFeeEditorOpen(false);
+                    setEditingFee(null);
+                  }}
+                >
+                  <Text style={{ color: colors.textSecondary, fontSize: font.md }}>取消</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.btnPrimary, { flex: 1, height: 48 }]}
+                  onPress={saveFee}
+                >
+                  <Text style={styles.btnPrimaryText}>保存</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
         {/* 底部操作按钮 */}
         <View style={styles.bottomBar}>
@@ -368,10 +725,39 @@ const styles = StyleSheet.create({
   readonlyText: { fontSize: font.md, color: colors.textSecondary },
   highlight: { borderWidth: 1, borderColor: colors.primary, borderRadius: radius.md, backgroundColor: colors.primaryLight, paddingHorizontal: spacing.md, height: 44, justifyContent: 'center', alignItems: 'center' },
   highlightText: { fontSize: font.xl, color: colors.primary, fontWeight: '700' },
-  // Fee reference
+  // Fee reference (legacy, still used by old blocks if any)
   feeRef: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff7ed', borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: '#fed7aa' },
   feeRefLabel: { fontSize: font.xs, color: colors.textSecondary, flex: 1 },
   feeRefValue: { fontSize: font.lg, color: '#ea580c', fontWeight: '700' },
+  // Select field
+  selectField: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.card, paddingHorizontal: spacing.md, height: 48 },
+  selectText: { fontSize: font.md, color: colors.text },
+  // Fee section
+  feeHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
+  addFeeBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.sm, paddingVertical: 6 },
+  addFeeText: { fontSize: font.sm, color: colors.primary, fontWeight: '600' },
+  feeEmpty: { fontSize: font.sm, color: colors.textTertiary, textAlign: 'center', paddingVertical: spacing.md },
+  feeItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderWidth: 1, borderColor: colors.borderLight, borderRadius: radius.md, padding: spacing.md, backgroundColor: colors.card },
+  feeItemTitle: { fontSize: font.sm, fontWeight: '600', color: colors.text },
+  feeAutoBadge: { fontSize: font.xs, color: colors.primary, fontWeight: '500' },
+  feeItemSub: { fontSize: font.xs, color: colors.textSecondary, marginTop: 2 },
+  feeItemRemark: { fontSize: font.xs, color: colors.textTertiary, marginTop: 2 },
+  feeItemAmount: { fontSize: font.md, fontWeight: '700', color: colors.text },
+  feeTotalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: spacing.md, marginTop: spacing.xs, borderTopWidth: 1, borderTopColor: colors.borderLight },
+  feeTotalLabel: { fontSize: font.md, fontWeight: '600', color: colors.text },
+  feeTotalValue: { fontSize: font.lg, fontWeight: '700', color: colors.primary },
+  // Modal
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalSheet: { backgroundColor: colors.card, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.lg, paddingBottom: spacing.xl },
+  modalTitle: { fontSize: font.lg, fontWeight: '700', color: colors.text, marginBottom: spacing.md, textAlign: 'center' },
+  modalOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
+  modalOptionText: { fontSize: font.md, color: colors.text },
+  // Chips
+  chip: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radius.full, backgroundColor: colors.card },
+  chipText: { fontSize: font.sm, color: colors.textSecondary },
+  // Fee editor inputs
+  feeFieldLabel: { fontSize: font.xs, color: colors.textSecondary, marginBottom: 6 },
+  feeInput: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.md, height: 44, fontSize: font.md, color: colors.text, backgroundColor: colors.card },
   // Conditions
   conditionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   conditionBtn: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.full, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.card },

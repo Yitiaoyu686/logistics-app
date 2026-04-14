@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../database/schema';
-import { uuid, generateInboundNo } from '../utils/idGenerator';
+import { uuid, generateInboundNo, generateFeeNo } from '../utils/idGenerator';
 
 const router = Router();
 
@@ -23,12 +23,42 @@ router.post('/inbounds', (req: Request, res: Response) => {
   // Create inbound item
   if (b.trackingNo) {
     const itemId = uuid();
-    db.prepare('INSERT INTO wms_inbound_item (id, inbound_order_id, order_id, sub_order_id, tracking_no, pieces, gross_weight_kg, length_cm, width_cm, height_cm, package_condition, location_code, item_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)').run(
+    const photoUrls = Array.isArray(b.photoUrls) ? JSON.stringify(b.photoUrls) : null;
+    db.prepare('INSERT INTO wms_inbound_item (id, inbound_order_id, order_id, sub_order_id, tracking_no, pieces, gross_weight_kg, length_cm, width_cm, height_cm, package_condition, location_code, goods_category, photo_urls, item_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(
       itemId, id, b.orderId, b.subOrderId, b.trackingNo,
       b.pieces || 1, b.grossWeightKg || 0,
       b.lengthCm, b.widthCm, b.heightCm,
-      b.packageCondition || 'GOOD', b.locationCode, 'COMPLETED'
+      b.packageCondition || 'GOOD', b.locationCode,
+      b.goodsCategory || null, photoUrls,
+      'COMPLETED'
     );
+  }
+
+  // Create fin_fee records for any fees submitted with inbound
+  if (Array.isArray(b.fees) && b.fees.length > 0) {
+    const feeInsert = db.prepare(
+      "INSERT INTO fin_fee (id, fee_no, business_line, fee_level, related_id, related_no, fee_item_code, fee_direction, unit_price, quantity, amount, currency_code, fx_rate, description, created_by, fee_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'DRAFT')"
+    );
+    for (const fee of b.fees) {
+      if (!fee || !fee.feeType) continue;
+      feeInsert.run(
+        uuid(),
+        generateFeeNo(b.businessLine || 'SEA'),
+        b.businessLine || 'SEA',
+        'SUB_ORDER',
+        b.subOrderId || b.orderId,
+        b.trackingNo || null,
+        fee.feeType,
+        'RECEIVABLE',
+        Number(fee.unitPrice) || 0,
+        Number(fee.quantity) || 1,
+        Number(fee.amount) || 0,
+        fee.currency || 'USD',
+        Number(fee.exchangeRate) || 1,
+        fee.remark || null,
+        b.operatorUserId || null
+      );
+    }
   }
 
   // Create/update stock record (关键：让 Web 库存列表看得到)
