@@ -121,6 +121,7 @@ export const warehouseApi = {
   createUnmatched: (data: any) => api.post('/warehouse/no-order-express', data),
   matchUnmatched: (id: string, data: any) => api.post(`/v2/wms/unmatched-packages/${id}/match`, data),
   createInbound: (data: any) => api.post('/v2/wms/inbounds', data),
+  submitDestInbound: (jobId: string, data: any) => api.post(`/v2/wms/dest-inbound/${jobId}/submit`, data),
   getReturns: () => api.get('/warehouse/returns'),
 };
 

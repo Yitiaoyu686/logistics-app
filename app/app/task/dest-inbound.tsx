@@ -6,9 +6,10 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
-import { jobApi } from '../../lib/api';
+import { jobApi, warehouseApi } from '../../lib/api';
 
-type ItemStatus = 'PENDING' | 'CHECKED' | 'MISSING' | 'DAMAGED';
+type DeliveryStatus = 'ARRIVED_WAREHOUSE' | 'DIRECT_TO_CUSTOMER';
+type CargoStatus = 'INTACT' | 'DAMAGED_GOODS' | 'DAMAGED_PACKAGE' | 'LOST';
 
 interface CheckItem {
   id: string;
@@ -17,15 +18,23 @@ interface CheckItem {
   customer_name: string;
   pieces: number;
   actual_weight_kg: number;
-  status: ItemStatus;
+  deliveryStatus?: DeliveryStatus;
+  cargoStatus?: CargoStatus;
 }
 
-const STATUS_META: Record<ItemStatus, { label: string; color: string; bg: string; icon: string }> = {
-  PENDING:  { label: '待核对', color: colors.textSecondary, bg: colors.borderLight, icon: 'ellipse-outline' },
-  CHECKED:  { label: '已核对', color: colors.success,        bg: colors.successLight, icon: 'checkmark-circle' },
-  MISSING:  { label: '少件',   color: colors.danger,         bg: colors.dangerLight,  icon: 'alert-circle' },
-  DAMAGED:  { label: '破损',   color: colors.warning,        bg: colors.warningLight, icon: 'warning' },
-};
+const DELIVERY_OPTIONS: { value: DeliveryStatus; label: string }[] = [
+  { value: 'ARRIVED_WAREHOUSE', label: '到达仓库' },
+  { value: 'DIRECT_TO_CUSTOMER', label: '直送客户' },
+];
+
+const CARGO_OPTIONS: { value: CargoStatus; label: string; color: string }[] = [
+  { value: 'INTACT', label: '完好', color: colors.success },
+  { value: 'DAMAGED_GOODS', label: '货损', color: colors.danger },
+  { value: 'DAMAGED_PACKAGE', label: '包装损', color: colors.warning },
+  { value: 'LOST', label: '丢失', color: colors.danger },
+];
+
+const isItemComplete = (i: CheckItem) => !!i.deliveryStatus && !!i.cargoStatus;
 
 export default function DestInboundScreen() {
   const router = useRouter();
@@ -60,7 +69,6 @@ export default function DestInboundScreen() {
         customer_name: r.customer_name || '-',
         pieces: r.pieces || 0,
         actual_weight_kg: r.actual_weight_kg || 0,
-        status: 'PENDING' as ItemStatus,
       })));
     } catch (err: any) {
       Alert.alert('加载失败', err.message || '请重试');
@@ -71,10 +79,11 @@ export default function DestInboundScreen() {
 
   const stats = useMemo(() => {
     const total = items.length;
-    const checked = items.filter((i) => i.status === 'CHECKED').length;
-    const missing = items.filter((i) => i.status === 'MISSING').length;
-    const damaged = items.filter((i) => i.status === 'DAMAGED').length;
-    return { total, checked, missing, damaged, progress: total > 0 ? Math.round(checked / total * 100) : 0 };
+    const completed = items.filter(isItemComplete).length;
+    const intact = items.filter((i) => i.cargoStatus === 'INTACT').length;
+    const damaged = items.filter((i) => i.cargoStatus === 'DAMAGED_GOODS' || i.cargoStatus === 'DAMAGED_PACKAGE').length;
+    const lost = items.filter((i) => i.cargoStatus === 'LOST').length;
+    return { total, completed, intact, damaged, lost, progress: total > 0 ? Math.round(completed / total * 100) : 0 };
   }, [items]);
 
   const handleScan = () => {
@@ -89,12 +98,23 @@ export default function DestInboundScreen() {
       ]);
       return;
     }
-    setItems((prev) => prev.map((it, i) => i === idx ? { ...it, status: 'CHECKED' } : it));
+    // 扫码快速填入默认值（到达仓库+完好），仓管可手动改
+    setItems((prev) =>
+      prev.map((it, i) =>
+        i === idx
+          ? {
+              ...it,
+              deliveryStatus: it.deliveryStatus || 'ARRIVED_WAREHOUSE',
+              cargoStatus: it.cargoStatus || 'INTACT',
+            }
+          : it,
+      ),
+    );
     setScanInput('');
   };
 
-  const handleMark = (id: string, status: ItemStatus) => {
-    setItems((prev) => prev.map((it) => it.id === id ? { ...it, status } : it));
+  const updateItem = (id: string, patch: Partial<CheckItem>) => {
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
   };
 
   const handleTakePhoto = () => {
@@ -105,12 +125,16 @@ export default function DestInboundScreen() {
   const handleConfirm = async () => {
     if (!job) { Alert.alert('任务信息缺失'); return; }
 
-    const pendingCount = items.filter((i) => i.status === 'PENDING').length;
-    if (pendingCount > 0) {
-      Alert.alert('还有待核对', `尚有 ${pendingCount} 条运单未核对，确定结束？`, [
-        { text: '继续核对', style: 'cancel' },
-        { text: '确认结束', style: 'destructive', onPress: () => submit() },
-      ]);
+    const pending = items.filter((i) => !isItemComplete(i));
+    if (pending.length > 0) {
+      Alert.alert(
+        '还有待核对',
+        `尚有 ${pending.length} 条运单未填写送货状态或货物状态，确定结束？`,
+        [
+          { text: '继续核对', style: 'cancel' },
+          { text: '确认结束', style: 'destructive', onPress: () => submit() },
+        ],
+      );
       return;
     }
     submit();
@@ -119,16 +143,29 @@ export default function DestInboundScreen() {
   const submit = async () => {
     setSubmitting(true);
     try {
-      await jobApi.update(job.job_no || job.id, {
-        jobStatus: 'ARRIVED',
-        currentNode: 'WAREHOUSE_IN',
-        remark: remark || `任务入库 ${stats.checked}/${stats.total}, 少件${stats.missing}, 破损${stats.damaged}`,
+      const payloadItems = items
+        .filter((i) => isItemComplete(i))
+        .map((i) => ({
+          subOrderId: i.id,
+          trackingNo: i.sub_order_no,
+          deliveryStatus: i.deliveryStatus,
+          cargoStatus: i.cargoStatus,
+          pieces: i.pieces,
+          weightKg: i.actual_weight_kg,
+        }));
+      await warehouseApi.submitDestInbound(job.id || job.job_no, {
+        items: payloadItems,
+        remark: remark || undefined,
+        warehouseId: job.dest_warehouse_id || undefined,
       });
-      Alert.alert('入库完成', `本次入库 ${stats.checked} 条\n少件 ${stats.missing} · 破损 ${stats.damaged}`, [
-        { text: '确定', onPress: () => router.back() },
-      ]);
-    } catch (err: any) {
-      Alert.alert('提交失败', err.message || '请重试');
+      Alert.alert(
+        '入库完成',
+        `本次入库 ${stats.completed}/${stats.total}\n完好 ${stats.intact} · 破损 ${stats.damaged} · 丢失 ${stats.lost}`,
+        [{ text: '确定', onPress: () => router.back() }],
+      );
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '请重试';
+      Alert.alert('提交失败', message);
     } finally {
       setSubmitting(false);
     }
@@ -190,16 +227,16 @@ export default function DestInboundScreen() {
                 <Text style={styles.statLabel}>清单</Text>
               </View>
               <View style={styles.statItem}>
-                <Text style={[styles.statNum, { color: colors.success }]}>{stats.checked}</Text>
-                <Text style={styles.statLabel}>已核对</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={[styles.statNum, { color: colors.danger }]}>{stats.missing}</Text>
-                <Text style={styles.statLabel}>少件</Text>
+                <Text style={[styles.statNum, { color: colors.success }]}>{stats.intact}</Text>
+                <Text style={styles.statLabel}>完好</Text>
               </View>
               <View style={styles.statItem}>
                 <Text style={[styles.statNum, { color: colors.warning }]}>{stats.damaged}</Text>
                 <Text style={styles.statLabel}>破损</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={[styles.statNum, { color: colors.danger }]}>{stats.lost}</Text>
+                <Text style={styles.statLabel}>丢失</Text>
               </View>
             </View>
           </View>
@@ -233,44 +270,84 @@ export default function DestInboundScreen() {
               <Text style={styles.empty}>该任务暂无运单关联</Text>
             ) : (
               items.map((item) => {
-                const meta = STATUS_META[item.status];
+                const complete = isItemComplete(item);
+                const borderColor = complete ? colors.success : colors.textTertiary;
                 return (
-                  <View key={item.id} style={[styles.itemCard, { borderLeftColor: meta.color }]}>
+                  <View key={item.id} style={[styles.itemCard, { borderLeftColor: borderColor }]}>
                     <View style={styles.itemHeader}>
                       <Text style={styles.itemNo}>{item.sub_order_no}</Text>
-                      <View style={[styles.itemBadge, { backgroundColor: meta.bg }]}>
-                        <Text style={[styles.itemBadgeText, { color: meta.color }]}>{meta.label}</Text>
-                      </View>
+                      {complete && (
+                        <View style={[styles.itemBadge, { backgroundColor: colors.successLight }]}>
+                          <Text style={[styles.itemBadgeText, { color: colors.success }]}>已核对</Text>
+                        </View>
+                      )}
                     </View>
                     <Text style={styles.itemCustomer}>{item.customer_name}</Text>
                     <Text style={styles.itemInfo}>{item.pieces}件 · {item.actual_weight_kg}kg</Text>
-                    {item.status === 'PENDING' && (
-                      <View style={styles.itemActions}>
+
+                    {/* 送货状态 */}
+                    <Text style={styles.fieldLabel}>送货状态 *</Text>
+                    <View style={styles.chipRow}>
+                      {DELIVERY_OPTIONS.map((opt) => (
                         <TouchableOpacity
-                          style={[styles.markBtn, styles.markBtnCheck]}
-                          onPress={() => handleMark(item.id, 'CHECKED')}
+                          key={opt.value}
+                          style={[
+                            styles.chip,
+                            item.deliveryStatus === opt.value && {
+                              backgroundColor: colors.primary,
+                              borderColor: colors.primary,
+                            },
+                          ]}
+                          onPress={() => updateItem(item.id, { deliveryStatus: opt.value })}
                         >
-                          <Ionicons name="checkmark" size={14} color="#fff" />
-                          <Text style={styles.markBtnText}>已到</Text>
+                          <Text
+                            style={[
+                              styles.chipText,
+                              item.deliveryStatus === opt.value && { color: '#fff' },
+                            ]}
+                          >
+                            {opt.label}
+                          </Text>
                         </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    {/* 货物状态 */}
+                    <Text style={styles.fieldLabel}>货物状态 *</Text>
+                    <View style={styles.chipRow}>
+                      {CARGO_OPTIONS.map((opt) => (
                         <TouchableOpacity
-                          style={[styles.markBtn, styles.markBtnMissing]}
-                          onPress={() => handleMark(item.id, 'MISSING')}
+                          key={opt.value}
+                          style={[
+                            styles.chip,
+                            item.cargoStatus === opt.value && {
+                              backgroundColor: opt.color,
+                              borderColor: opt.color,
+                            },
+                          ]}
+                          onPress={() => updateItem(item.id, { cargoStatus: opt.value })}
                         >
-                          <Text style={[styles.markBtnText, { color: colors.danger }]}>少件</Text>
+                          <Text
+                            style={[
+                              styles.chipText,
+                              item.cargoStatus === opt.value && { color: '#fff' },
+                            ]}
+                          >
+                            {opt.label}
+                          </Text>
                         </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.markBtn, styles.markBtnDamaged]}
-                          onPress={() => handleMark(item.id, 'DAMAGED')}
-                        >
-                          <Text style={[styles.markBtnText, { color: colors.warning }]}>破损</Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                    {item.status !== 'PENDING' && (
+                      ))}
+                    </View>
+
+                    {complete && (
                       <TouchableOpacity
                         style={styles.resetBtn}
-                        onPress={() => handleMark(item.id, 'PENDING')}
+                        onPress={() =>
+                          updateItem(item.id, {
+                            deliveryStatus: undefined,
+                            cargoStatus: undefined,
+                          })
+                        }
                       >
                         <Text style={styles.resetBtnText}>重置</Text>
                       </TouchableOpacity>
@@ -321,7 +398,7 @@ export default function DestInboundScreen() {
           >
             <Ionicons name="checkmark-done" size={20} color="#fff" />
             <Text style={styles.confirmBtnText}>
-              {submitting ? '处理中...' : `确认入库 (${stats.checked}/${stats.total})`}
+              {submitting ? '处理中...' : `确认入库 (${stats.completed}/${stats.total})`}
             </Text>
           </TouchableOpacity>
         </View>
@@ -378,6 +455,10 @@ const styles = StyleSheet.create({
   itemCustomer: { fontSize: font.sm, color: colors.text, marginBottom: 2 },
   itemInfo: { fontSize: font.xs, color: colors.textSecondary },
   itemActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  fieldLabel: { fontSize: font.xs, color: colors.textSecondary, marginTop: spacing.sm, marginBottom: 6, fontWeight: '500' },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  chip: { paddingHorizontal: spacing.md, paddingVertical: 8, borderRadius: radius.full, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.card },
+  chipText: { fontSize: font.sm, color: colors.textSecondary, fontWeight: '500' },
   markBtn: { flex: 1, height: 32, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 4 },
   markBtnCheck: { backgroundColor: colors.success },
   markBtnMissing: { borderWidth: 1, borderColor: colors.danger, backgroundColor: colors.card },

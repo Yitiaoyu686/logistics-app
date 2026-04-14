@@ -689,6 +689,9 @@ export function createTables(): void {
   };
   ensureColumn('wms_inbound_item', 'goods_category', 'TEXT');
   ensureColumn('wms_inbound_item', 'photo_urls', 'TEXT');
+  // 到达国任务入库字段
+  ensureColumn('wms_inbound_item', 'delivery_status', 'TEXT');
+  ensureColumn('wms_inbound_item', 'cargo_status', 'TEXT');
   // wms_transfer 发车扩展字段
   ensureColumn('wms_transfer', 'shipping_no', 'TEXT');
   ensureColumn('wms_transfer', 'track_url', 'TEXT');

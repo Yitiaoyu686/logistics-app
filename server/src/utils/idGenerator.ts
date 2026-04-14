@@ -1,6 +1,41 @@
+import { getDb } from '../database/schema';
+
 const counters: Record<string, number> = {};
+// Bootstrap counters from existing DB rows so restarts do not collide
+const bootstrappedPrefixes = new Set<string>();
+const COUNTER_SOURCES: Record<string, { table: string; column: string }> = {
+  order: { table: 'oms_order', column: 'order_no' },
+  job: { table: 'tms_job', column: 'job_no' },
+  dpn: { table: 'pod_dpn', column: 'dpn_no' },
+  transfer: { table: 'wms_transfer', column: 'transfer_no' },
+  pickup: { table: 'pod_pickup', column: 'pickup_no' },
+  inbound: { table: 'wms_inbound_order', column: 'inbound_no' },
+  fee: { table: 'fin_fee', column: 'fee_no' },
+};
+
+function bootstrapCounter(prefix: string): void {
+  if (bootstrappedPrefixes.has(prefix)) return;
+  bootstrappedPrefixes.add(prefix);
+  const src = COUNTER_SOURCES[prefix];
+  if (!src) return;
+  try {
+    const rows = getDb().prepare(`SELECT ${src.column} AS v FROM ${src.table}`).all() as Array<{ v: string }>;
+    let max = 0;
+    for (const row of rows) {
+      const m = row.v && row.v.match(/(\d+)$/);
+      if (m) {
+        const n = Number(m[1]);
+        if (n > max) max = n;
+      }
+    }
+    counters[prefix] = max;
+  } catch {
+    // table may not exist yet during first boot; ignore
+  }
+}
 
 function nextSeq(prefix: string, digits: number = 5): string {
+  bootstrapCounter(prefix);
   counters[prefix] = (counters[prefix] || 0) + 1;
   return String(counters[prefix]).padStart(digits, '0');
 }

@@ -88,6 +88,74 @@ router.post('/inbounds', (req: Request, res: Response) => {
   res.json({ data: { id, inboundNo } });
 });
 
+// POST /api/v2/wms/dest-inbound/:jobId/submit — 到达国任务入库（按运单逐件）
+router.post('/dest-inbound/:jobId/submit', (req: Request, res: Response) => {
+  const db = getDb();
+  const jobId = req.params.jobId;
+  const b = req.body as {
+    items?: Array<{
+      subOrderId: string;
+      trackingNo?: string;
+      deliveryStatus: string;
+      cargoStatus: string;
+      pieces?: number;
+      weightKg?: number;
+    }>;
+    remark?: string;
+    warehouseId?: string;
+    operatorUserId?: string;
+  };
+
+  const job = db.prepare('SELECT * FROM tms_job WHERE id = ? OR job_no = ?').get(jobId, jobId) as any;
+  if (!job) { res.status(404).json({ error: 'Job not found' }); return; }
+
+  const cargoToCondition: Record<string, string> = {
+    INTACT: 'GOOD',
+    DAMAGED_GOODS: 'DAMAGED',
+    DAMAGED_PACKAGE: 'OPENED',
+    LOST: 'INCOMPLETE',
+  };
+
+  const inboundOrderId = uuid();
+  const inboundNo = generateInboundNo();
+  db.prepare("INSERT INTO wms_inbound_order (id, inbound_no, business_line, warehouse_id, source_type, inbound_status, inbound_at, operator_user_id, remark) VALUES (?,?,?,?,?,?,datetime('now'),?,?)").run(
+    inboundOrderId, inboundNo, job.business_line || 'SEA',
+    b.warehouseId || job.dest_warehouse_id || null,
+    'MANUAL', 'COMPLETED', b.operatorUserId || null, b.remark || null
+  );
+
+  const itemInsert = db.prepare(
+    'INSERT INTO wms_inbound_item (id, inbound_order_id, order_id, sub_order_id, tracking_no, pieces, gross_weight_kg, package_condition, delivery_status, cargo_status, item_status) VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+  );
+  const subOrderUpdate = db.prepare("UPDATE oms_sub_order SET sub_status='PENDING_DELIVERY', updated_at=datetime('now') WHERE id=?");
+
+  let received = 0, missing = 0, damaged = 0;
+  for (const it of b.items || []) {
+    const sub = db.prepare('SELECT order_id FROM oms_sub_order WHERE id = ?').get(it.subOrderId) as any;
+    itemInsert.run(
+      uuid(),
+      inboundOrderId,
+      sub?.order_id || null,
+      it.subOrderId,
+      it.trackingNo || null,
+      it.pieces || 1,
+      it.weightKg || 0,
+      cargoToCondition[it.cargoStatus] || 'GOOD',
+      it.deliveryStatus,
+      it.cargoStatus,
+      it.cargoStatus === 'LOST' ? 'ABNORMAL' : 'COMPLETED'
+    );
+    if (it.cargoStatus === 'LOST') missing++;
+    else if (it.cargoStatus !== 'INTACT') damaged++;
+    else received++;
+    subOrderUpdate.run(it.subOrderId);
+  }
+
+  db.prepare("UPDATE tms_job SET job_status='ARRIVED', current_node='WAREHOUSE_IN', ata=datetime('now'), updated_at=datetime('now') WHERE id=?").run(job.id);
+
+  res.json({ data: { inboundOrderId, inboundNo, received, missing, damaged, total: (b.items || []).length } });
+});
+
 // GET /api/warehouse/inbound — 入库记录列表
 router.get('/inbound', (req: Request, res: Response) => {
   const db = getDb();
