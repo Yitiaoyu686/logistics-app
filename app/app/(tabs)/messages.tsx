@@ -61,6 +61,8 @@ export default function MessagesScreen() {
 
   useFocusEffect(useCallback(() => {
     load();
+    const timer = setInterval(load, 15000);
+    return () => clearInterval(timer);
   }, []));
 
   const load = async () => {

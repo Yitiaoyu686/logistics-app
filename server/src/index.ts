@@ -9,6 +9,7 @@ import orderRoutes from './routes/orders';
 import warehouseRoutes from './routes/warehouse';
 import jobRoutes from './routes/jobs';
 import deliveryRoutes from './routes/delivery';
+import compatRoutes from './routes/compat';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -55,6 +56,9 @@ app.use('/api/delivery', deliveryRoutes);
 
 // Compatibility: system routes also mounted at /api root for Web client
 app.use('/api', systemRoutes);
+
+// Web 端旧接口兼容层
+app.use('/api', compatRoutes);
 
 // Start server
 app.listen(PORT, () => {

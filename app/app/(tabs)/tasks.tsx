@@ -31,14 +31,18 @@ export default function TasksScreen() {
   const [activeTab, setActiveTab] = useState('全部');
 
   useEffect(() => {
+    let timer: any = null;
     AsyncStorage.getItem('user').then((u) => {
       if (u) {
         const user = JSON.parse(u);
         setRole(user.role);
         setUserName(user.realName);
         loadTasks(user.role);
+        // 轮询：每 15 秒静默刷新任务流
+        timer = setInterval(() => loadTasks(user.role), 15000);
       }
     });
+    return () => { if (timer) clearInterval(timer); };
   }, []);
 
   const loadTasks = async (userRole: string) => {

@@ -52,17 +52,21 @@ export default function StockScreen() {
   const [selected, setSelected] = useState<StockItem | null>(null);
   const [editingLocation, setEditingLocation] = useState('');
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    const timer = setInterval(() => load(true), 15000);
+    return () => clearInterval(timer);
+  }, []);
 
-  const load = async () => {
-    setLoading(true);
+  const load = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await warehouseApi.getStock();
       setList(res.data || []);
     } catch (err: any) {
-      Alert.alert('加载失败', err.message || '请重试');
+      if (!silent) Alert.alert('加载失败', err.message || '请重试');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -145,7 +149,7 @@ export default function StockScreen() {
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.navTitle}>库存管理</Text>
-        <TouchableOpacity onPress={load} style={styles.navBtn}>
+        <TouchableOpacity onPress={() => load()} style={styles.navBtn}>
           <Ionicons name="refresh" size={20} color={colors.primary} />
         </TouchableOpacity>
       </View>
