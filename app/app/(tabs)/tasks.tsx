@@ -353,28 +353,6 @@ export default function TasksScreen() {
 
   const previewLabel = role === 'WAREHOUSE_CN' ? '📅 发运计划' : role === 'WAREHOUSE_US' ? '🚢 到港预告' : '🚢 运输进度';
 
-  // Stats
-  const statItems = role === 'WAREHOUSE_CN'
-    ? [
-        { label: '待入库', value: tasks.filter(t => t.type === 'inbound').length, color: colors.primary },
-        { label: '待装箱', value: tasks.filter(t => t.type === 'packing').length, color: colors.success },
-        { label: '调拨', value: tasks.filter(t => t.type === 'transfer').length, color: colors.info },
-        { label: '发运计划', value: tasks.filter(t => t.type === 'preview').length, color: colors.taskPreview },
-      ]
-    : role === 'WAREHOUSE_US'
-    ? [
-        { label: '待入库', value: tasks.filter(t => t.type === 'inbound').length, color: colors.primary },
-        { label: 'DPN', value: tasks.filter(t => t.type === 'dispatch').length, color: colors.info },
-        { label: '配送', value: tasks.filter(t => t.type === 'delivery').length, color: colors.danger },
-        { label: '到港预告', value: tasks.filter(t => t.type === 'preview').length, color: colors.taskPreview },
-      ]
-    : [
-        { label: '我的客户', value: salesStats.myCustomers, color: colors.primary },
-        { label: '未完成订单', value: salesStats.pendingOrders, color: colors.warning },
-        { label: '待收款', value: salesStats.unpaidOrders, color: colors.danger },
-        { label: '本月新增', value: salesStats.monthlyNew, color: colors.success },
-      ];
-
   return (
     <SafeAreaView style={styles.safe}>
       {/* Header */}
@@ -392,71 +370,7 @@ export default function TasksScreen() {
             </View>
           )}
         </View>
-
-        {/* Stats */}
-        <View style={styles.statsRow}>
-          {statItems.map((s) => (
-            <View key={s.label} style={styles.statCard}>
-              <Text style={[styles.statNum, { color: s.color }]}>{s.value}</Text>
-              <Text style={styles.statLabel}>{s.label}</Text>
-            </View>
-          ))}
-        </View>
       </View>
-
-      {/* Sales 快捷入口 */}
-      {role === 'SALES' && (
-        <View style={styles.quickActions}>
-          <Pressable style={styles.quickAction} onPress={() => router.push('/task/customer-create' as any)}>
-            <Text style={styles.quickActionIcon}>➕</Text>
-            <Text style={styles.quickActionLabel}>新建客户</Text>
-          </Pressable>
-          <Pressable style={styles.quickAction} onPress={() => router.push('/task/order-create' as any)}>
-            <Text style={styles.quickActionIcon}>📝</Text>
-            <Text style={styles.quickActionLabel}>新建订单</Text>
-          </Pressable>
-          <Pressable style={styles.quickAction} onPress={() => router.push('/task/quote' as any)}>
-            <Text style={styles.quickActionIcon}>💰</Text>
-            <Text style={styles.quickActionLabel}>运费试算</Text>
-          </Pressable>
-        </View>
-      )}
-
-      {/* WAREHOUSE_CN 快捷入口 */}
-      {role === 'WAREHOUSE_CN' && (
-        <View style={styles.quickActions}>
-          <Pressable style={styles.quickAction} onPress={() => router.push('/task/stock' as any)}>
-            <Text style={styles.quickActionIcon}>📋</Text>
-            <Text style={styles.quickActionLabel}>库存查询</Text>
-          </Pressable>
-          <Pressable style={styles.quickAction} onPress={() => router.push('/task/inbound' as any)}>
-            <Text style={styles.quickActionIcon}>📦</Text>
-            <Text style={styles.quickActionLabel}>扫码入库</Text>
-          </Pressable>
-          <Pressable style={styles.quickAction} onPress={() => router.push('/task/packing' as any)}>
-            <Text style={styles.quickActionIcon}>🏗</Text>
-            <Text style={styles.quickActionLabel}>装箱出库</Text>
-          </Pressable>
-        </View>
-      )}
-
-      {/* WAREHOUSE_US 快捷入口 */}
-      {role === 'WAREHOUSE_US' && (
-        <View style={styles.quickActions}>
-          <Pressable style={styles.quickAction} onPress={() => router.push('/task/dest-inbound' as any)}>
-            <Text style={styles.quickActionIcon}>📥</Text>
-            <Text style={styles.quickActionLabel}>任务入库</Text>
-          </Pressable>
-          <Pressable style={styles.quickAction} onPress={() => router.push('/task/dpn' as any)}>
-            <Text style={styles.quickActionIcon}>📄</Text>
-            <Text style={styles.quickActionLabel}>DPN管理</Text>
-          </Pressable>
-          <Pressable style={styles.quickAction} onPress={() => router.push('/task/delivery' as any)}>
-            <Text style={styles.quickActionIcon}>🚚</Text>
-            <Text style={styles.quickActionLabel}>配送签收</Text>
-          </Pressable>
-        </View>
-      )}
 
       {/* Preview Cards — 运营预告横向滑动 */}
       {previewTasks.length > 0 && (
