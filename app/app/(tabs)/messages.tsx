@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { notificationApi } from '../../lib/api';
+import OrderScreen from '../task/order';
 
 interface Notification {
   id: string;
@@ -60,11 +61,7 @@ export default function MessagesScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => {
-    // SALES 角色：订单 Tab 直接打开订单列表
-    if (userRole === 'SALES') {
-      router.replace('/task/order' as any);
-      return;
-    }
+    if (userRole === 'SALES') return; // 销售角色直接渲染订单列表
     load();
     const timer = setInterval(load, 15000);
     return () => clearInterval(timer);
@@ -164,6 +161,11 @@ export default function MessagesScreen() {
     { value: 'business', label: '业务',  count: withReadState.filter((n) => ['ORDER_PENDING', 'JOB_ARRIVED', 'JOB_DEPARTING', 'DPN_UPDATE', 'PICKUP_PENDING'].includes(n.type)).length },
     { value: 'alert',    label: '预警',  count: withReadState.filter((n) => n.type === 'UNMATCHED_PACKAGE' || n.color === 'danger' || n.color === 'warning').length },
   ];
+
+  // 销售角色：订单 Tab 直接渲染订单列表内容
+  if (userRole === 'SALES') {
+    return <OrderScreen embedded />;
+  }
 
   return (
     <SafeAreaView style={styles.safe}>

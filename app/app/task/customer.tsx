@@ -137,7 +137,11 @@ function DetailLine({ label, value, highlight }: DetailLineProps) {
   );
 }
 
-export default function CustomerScreen() {
+interface CustomerScreenProps {
+  embedded?: boolean;
+}
+
+export default function CustomerScreen({ embedded = false }: CustomerScreenProps = {}) {
   const router = useRouter();
   const [tab, setTab] = useState<PoolType>('PRIVATE');
   const [list, setList] = useState<CustomerListItem[]>([]);
@@ -308,9 +312,13 @@ export default function CustomerScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.navBar}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
-        </TouchableOpacity>
+        {embedded ? (
+          <View style={styles.navBtn} />
+        ) : (
+          <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}>
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </TouchableOpacity>
+        )}
         <Text style={styles.navTitle}>客户中心</Text>
         <TouchableOpacity onPress={() => router.push('/task/customer-create' as any)} style={styles.navBtn}>
           <Ionicons name="add-circle-outline" size={24} color={colors.primary} />

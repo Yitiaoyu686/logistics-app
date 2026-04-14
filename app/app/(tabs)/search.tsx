@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, TextInput, StyleSheet, SafeAreaView, TouchableOpacity, FlatList } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
+import CustomerScreen from '../task/customer';
 
 interface MenuItem {
   icon: string;
@@ -25,19 +26,23 @@ export default function SearchScreen() {
   const router = useRouter();
   const [keyword, setKeyword] = useState('');
   const [role, setRole] = useState('');
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem('user').then((u) => {
       if (u) setRole(JSON.parse(u).role);
+      setLoaded(true);
     });
   }, []);
 
-  useFocusEffect(useCallback(() => {
-    // SALES 角色：客户 Tab 直接打开客户中心
-    if (role === 'SALES') {
-      router.replace('/task/customer' as any);
-    }
-  }, [role]));
+  if (!loaded) {
+    return <SafeAreaView style={styles.safe} />;
+  }
+
+  // 销售角色：客户 Tab 直接渲染客户中心内容
+  if (role === 'SALES') {
+    return <CustomerScreen embedded />;
+  }
 
   return (
     <SafeAreaView style={styles.safe}>

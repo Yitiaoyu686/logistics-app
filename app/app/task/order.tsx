@@ -90,7 +90,11 @@ function getProgressIndex(status: string): number {
   return order.indexOf(status);
 }
 
-export default function OrderScreen() {
+interface OrderScreenProps {
+  embedded?: boolean;
+}
+
+export default function OrderScreen({ embedded = false }: OrderScreenProps = {}) {
   const router = useRouter();
   const [list, setList] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -175,9 +179,13 @@ export default function OrderScreen() {
     <SafeAreaView style={styles.safe}>
       {/* Nav */}
       <View style={styles.navBar}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
-        </TouchableOpacity>
+        {embedded ? (
+          <View style={styles.navBtn} />
+        ) : (
+          <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}>
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
+          </TouchableOpacity>
+        )}
         <Text style={styles.navTitle}>订单查询</Text>
         <Text style={styles.navExtra}>{filtered.length} 单</Text>
       </View>
