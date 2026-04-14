@@ -250,4 +250,272 @@ router.put('/notifications/:id/read', (_req: Request, res: Response) => {
   res.json({ data: { success: true } });
 });
 
+// POST /api/notifications — 创建通知
+router.post('/notifications', (_req: Request, res: Response) => {
+  res.json({ data: { id: `n-${Date.now()}`, success: true } });
+});
+
+// ============================================================
+// 客户详情相关 GET 接口
+// ============================================================
+
+// GET /api/v2/oms/customers/:id/line-profiles
+router.get('/v2/oms/customers/:id/line-profiles', (_req: Request, res: Response) => {
+  // Demo: 返回空数组，UI 会显示"无线路档案"
+  res.json({ data: [] });
+});
+
+// GET /api/v2/oms/customers/:id/pool-logs — 客户公海池日志
+router.get('/v2/oms/customers/:id/pool-logs', (_req: Request, res: Response) => {
+  res.json({ data: [] });
+});
+
+// PUT /api/v2/oms/customers/:id/line-profiles/:businessLine
+router.put('/v2/oms/customers/:id/line-profiles/:businessLine', (_req: Request, res: Response) => {
+  res.json({ data: { success: true } });
+});
+
+// ============================================================
+// 仓库相关 GET 详情
+// ============================================================
+
+// GET /api/warehouse/inbound/:id
+router.get('/warehouse/inbound/:id', (req: Request, res: Response) => {
+  const db = getDb();
+  const row = db.prepare(`
+    SELECT io.*, ii.tracking_no, ii.pieces as item_pieces, ii.gross_weight_kg,
+      ii.length_cm, ii.width_cm, ii.height_cm, ii.package_condition, ii.location_code
+    FROM wms_inbound_order io
+    LEFT JOIN wms_inbound_item ii ON ii.inbound_order_id = io.id
+    WHERE io.id = ? OR io.inbound_no = ?
+    LIMIT 1
+  `).get(req.params.id, req.params.id);
+  if (!row) { res.json({ data: null }); return; }
+  res.json({ data: row });
+});
+
+// GET /api/warehouse/stock/:subOrderNo — 按子单号查库存
+router.get('/warehouse/stock/:subOrderNo', (req: Request, res: Response) => {
+  const db = getDb();
+  const row = db.prepare(`
+    SELECT s.*, o.order_no, o.customer_name, so.sub_order_no
+    FROM wms_stock s
+    LEFT JOIN oms_sub_order so ON so.id = s.sub_order_id
+    LEFT JOIN oms_order o ON o.id = s.order_id
+    WHERE so.sub_order_no = ? OR s.id = ?
+    LIMIT 1
+  `).get(req.params.subOrderNo, req.params.subOrderNo);
+  if (!row) { res.json({ data: null }); return; }
+  res.json({ data: row });
+});
+
+// GET /api/warehouse/stock/item/:id
+router.get('/warehouse/stock/item/:id', (req: Request, res: Response) => {
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM wms_stock WHERE id = ?').get(req.params.id);
+  res.json({ data: row || null });
+});
+
+// GET /api/warehouse/units/:id
+router.get('/warehouse/units/:id', (req: Request, res: Response) => {
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM tms_shipping_unit WHERE id = ? OR unit_no = ?').get(req.params.id, req.params.id);
+  res.json({ data: row || null });
+});
+
+// GET /api/warehouse/returns (list) + detail
+router.get('/warehouse/returns', (_req: Request, res: Response) => {
+  res.json({ data: [] });
+});
+router.get('/warehouse/returns/:id', (_req: Request, res: Response) => {
+  res.json({ data: null });
+});
+
+// GET /api/warehouse/no-order-express/:id
+router.get('/warehouse/no-order-express/:id', (req: Request, res: Response) => {
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM wms_unmatched_package WHERE id = ?').get(req.params.id);
+  res.json({ data: row || null });
+});
+
+// GET /api/v2/wms/unmatched-packages/:id/recommendations — 智能匹配推荐
+router.get('/v2/wms/unmatched-packages/:id/recommendations', (_req: Request, res: Response) => {
+  // Demo: 返回所有 PENDING_INBOUND 订单作为候选
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT o.id, o.order_no, o.customer_name, o.total_declared_pieces, o.total_declared_weight_kg
+    FROM oms_order o WHERE o.order_status = 'PENDING_INBOUND' LIMIT 10
+  `).all();
+  res.json({ data: rows });
+});
+
+// ============================================================
+// 系统管理 GET 扩展
+// ============================================================
+
+// GET /api/system/warehouses/:id
+router.get('/system/warehouses/:id', (req: Request, res: Response) => {
+  const db = getDb();
+  const row = db.prepare('SELECT * FROM md_warehouse WHERE id = ?').get(req.params.id);
+  res.json({ data: row || null });
+});
+
+// GET /api/system/warehouses/user/:userId
+router.get('/system/warehouses/user/:userId', (_req: Request, res: Response) => {
+  const db = getDb();
+  const rows = db.prepare('SELECT * FROM md_warehouse ORDER BY created_at').all();
+  res.json({ data: rows });
+});
+
+// GET /api/system/user-sites/:userId
+router.get('/system/user-sites/:userId', (_req: Request, res: Response) => {
+  res.json({ data: [] });
+});
+
+// GET /api/system/rbac/users/:userId/roles
+router.get('/system/rbac/users/:userId/roles', (req: Request, res: Response) => {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT r.* FROM sys_role r
+    JOIN sys_user_role ur ON ur.role_id = r.id
+    WHERE ur.user_id = ?
+  `).all(req.params.userId);
+  res.json({ data: rows });
+});
+
+// GET /api/system/freight-rates
+router.get('/system/freight-rates', (_req: Request, res: Response) => {
+  res.json({ data: [] });
+});
+
+// GET /api/system/base-data
+router.get('/system/base-data', (_req: Request, res: Response) => {
+  res.json({ data: [] });
+});
+
+// GET /api/system/base-data/options
+router.get('/system/base-data/options', (_req: Request, res: Response) => {
+  res.json({ data: {} });
+});
+
+// ============================================================
+// 财务 commission
+// ============================================================
+
+// GET /api/finance/commission/rules
+router.get('/finance/commission/rules', (_req: Request, res: Response) => {
+  res.json({ data: [] });
+});
+
+// GET /api/finance/commission/bonus
+router.get('/finance/commission/bonus', (_req: Request, res: Response) => {
+  res.json({ data: { baseBonus: 0, rules: [] } });
+});
+
+// ============================================================
+// 写操作 stub — 统一返回 success
+// 这些接口 Demo 场景下不强制做完整实现，只需 UI 调用时不报错
+// ============================================================
+
+const stubSuccess = (_req: Request, res: Response) => {
+  res.json({ data: { success: true, id: `stub-${Date.now()}` } });
+};
+
+// 订单
+router.post('/v2/oms/orders/:id/approve-return', stubSuccess);
+router.post('/v2/oms/orders/:id/reject-return', stubSuccess);
+router.put('/v2/oms/orders/:id', stubSuccess);
+router.post('/v2/oms/customers/:id/claim', stubSuccess);
+router.post('/v2/oms/customers/:id/release', stubSuccess);
+router.post('/v2/oms/customers/:id/transfer', stubSuccess);
+
+// 入库 / 库存 / 装箱 / 调拨 / 退运 / 无单 写操作
+router.post('/warehouse/inbound/:id/cancel', stubSuccess);
+router.put('/warehouse/inbound/:id', stubSuccess);
+router.delete('/warehouse/inbound/:id', stubSuccess);
+router.put('/warehouse/stock/:id', stubSuccess);
+router.put('/warehouse/stock/:id/status', stubSuccess);
+router.post('/warehouse/stock/:id/return', stubSuccess);
+router.delete('/warehouse/stock/:id', stubSuccess);
+router.post('/warehouse/units/:id/load', stubSuccess);
+router.post('/warehouse/units/:id/seal', stubSuccess);
+router.put('/warehouse/units/:id', stubSuccess);
+router.delete('/warehouse/units/:id', stubSuccess);
+router.post('/warehouse/returns', stubSuccess);
+router.put('/warehouse/returns/:id', stubSuccess);
+router.delete('/warehouse/returns/:id', stubSuccess);
+router.put('/warehouse/no-order-express/:id', stubSuccess);
+router.delete('/warehouse/no-order-express/:id', stubSuccess);
+router.put('/v2/wms/unmatched-packages/:id', stubSuccess);
+router.delete('/v2/wms/unmatched-packages/:id', stubSuccess);
+router.post('/v2/wms/unmatched-packages/:id/match', stubSuccess);
+
+// Job 写操作
+router.post('/jobs/:jobNo/bind-units', stubSuccess);
+router.post('/jobs/:jobNo/unbind-units', stubSuccess);
+router.put('/jobs/:jobNo/origin-phase', stubSuccess);
+router.put('/jobs/:jobNo/dest-phase', stubSuccess);
+router.delete('/jobs/:jobNo', stubSuccess);
+
+// 配送 / DPN / 自提
+router.post('/delivery', stubSuccess);
+router.put('/delivery/:id', stubSuccess);
+router.post('/delivery/:id/assign', stubSuccess);
+router.post('/delivery/:id/sign', stubSuccess);
+router.post('/v2/pod/dpns/draft', stubSuccess);
+router.post('/v2/pod/delivery-tasks', stubSuccess);
+router.post('/v2/pod/dpns/:id/return-to-warehouse', stubSuccess);
+
+// 财务
+router.post('/fees', stubSuccess);
+router.post('/fees/bootstrap', stubSuccess);
+router.put('/fees/:id', stubSuccess);
+router.post('/fees/:id/approve', stubSuccess);
+router.post('/fees/:id/reject', stubSuccess);
+router.post('/fees/:id/pay', stubSuccess);
+router.post('/fees/:id/cancel', stubSuccess);
+router.post('/v2/finance/fees', stubSuccess);
+router.post('/v2/finance/payments/confirm', stubSuccess);
+
+router.post('/finance/commission/rules', stubSuccess);
+router.put('/finance/commission/rules/:id', stubSuccess);
+router.delete('/finance/commission/rules/:id', stubSuccess);
+router.put('/finance/commission/bonus', stubSuccess);
+
+// 系统管理写操作
+router.post('/system/base-data', stubSuccess);
+router.put('/system/base-data/:id', stubSuccess);
+router.delete('/system/base-data/:id', stubSuccess);
+router.post('/system/countries/:countryId/cities', stubSuccess);
+router.put('/system/countries/:countryId/cities/:cityId', stubSuccess);
+router.delete('/system/countries/:countryId/cities/:cityId', stubSuccess);
+router.post('/system/freight-rates', stubSuccess);
+router.put('/system/freight-rates/:id', stubSuccess);
+router.delete('/system/freight-rates/:id', stubSuccess);
+router.post('/system/exchange-rates/currencies', stubSuccess);
+router.put('/system/exchange-rates/currencies/:id', stubSuccess);
+router.delete('/system/exchange-rates/currencies/:id', stubSuccess);
+router.post('/system/exchange-rates/currencies/:currencyCode/rates', stubSuccess);
+router.post('/system/exchange-rates/refresh-live', stubSuccess);
+router.post('/system/rbac/permissions', stubSuccess);
+router.put('/system/rbac/permissions/:id', stubSuccess);
+router.delete('/system/rbac/permissions/:id', stubSuccess);
+router.post('/system/workflows', stubSuccess);
+router.put('/system/workflows/:id', stubSuccess);
+router.put('/system/workflows/:id/status', stubSuccess);
+router.delete('/system/workflows/:id', stubSuccess);
+router.put('/system/user-sites/:userId', stubSuccess);
+router.put('/system/rbac/users/:userId/roles', stubSuccess);
+router.put('/system/sites/:id', stubSuccess);
+router.delete('/system/sites/:id', stubSuccess);
+router.put('/system/countries/:id', stubSuccess);
+router.delete('/system/countries/:id', stubSuccess);
+
+// 工作流实例
+router.post('/v2/workflow/instances', stubSuccess);
+router.post('/v2/workflow/tasks/:taskId/action', stubSuccess);
+
+// Auth 重置密码
+router.post('/auth/users/:id/reset-password', stubSuccess);
+
 export default router;
