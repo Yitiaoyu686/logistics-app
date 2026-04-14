@@ -4,7 +4,7 @@ import {
   SafeAreaView, Alert, ActivityIndicator, Modal, KeyboardAvoidingView, Platform,
   RefreshControl,
 } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { warehouseApi, customerApi } from '../../lib/api';
@@ -44,6 +44,7 @@ const EXPRESS_COMPANIES = ['顺丰', '韵达', '圆通', '中通', '申通', '�
 
 export default function NoOrderExpressScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ id?: string; action?: string }>();
   const [list, setList] = useState<UnmatchedPackage[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -70,6 +71,14 @@ export default function NoOrderExpressScreen() {
   useFocusEffect(useCallback(() => {
     load();
   }, []));
+
+  // 从任务流跳进来：直接打开匹配弹窗
+  useEffect(() => {
+    if (params.id && params.action === 'match' && list.length > 0) {
+      const target = list.find((u) => u.id === params.id);
+      if (target) openMatch(target);
+    }
+  }, [params.id, params.action, list]);
 
   const load = async () => {
     setLoading(true);

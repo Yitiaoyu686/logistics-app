@@ -91,24 +91,31 @@ export default function TasksScreen() {
           });
         }
 
-        // 调拨
+        // 调拨 — 按状态显示对应操作按钮，点击直达操作弹窗
         const transfers = await warehouseApi.getTransfers();
-        for (const t of (transfers.data || []).filter((t: any) => t.transfer_status !== 'CANCELLED')) {
-          const statusMap: Record<string, string> = { PENDING: '待发运', IN_TRANSIT: '运输中', ARRIVED: '已到达', RECEIVED: '已签收' };
+        for (const t of (transfers.data || []).filter((t: any) => t.transfer_status !== 'CANCELLED' && t.transfer_status !== 'RECEIVED')) {
+          const statusMap: Record<string, string> = { PENDING: '待发运', IN_TRANSIT: '运输中', ARRIVED: '已到达' };
+          // 按状态决定显示的操作按钮
+          const actions: { label: string; color: string; route?: string; params?: Record<string, any> }[] = [];
+          if (t.transfer_status === 'PENDING') {
+            actions.push({ label: '执行发车', color: colors.primary, route: '/task/transfer', params: { id: t.id, action: 'dispatch' } });
+          } else if (t.transfer_status === 'IN_TRANSIT') {
+            actions.push({ label: '确认到达', color: colors.primary, route: '/task/transfer', params: { id: t.id, action: 'arrive' } });
+          } else if (t.transfer_status === 'ARRIVED') {
+            actions.push({ label: '确认入库', color: colors.success, route: '/task/transfer', params: { id: t.id, action: 'receive' } });
+          }
           items.push({
             id: `transfer-${t.id}`, type: 'transfer', icon: '📋',
             title: `调拨${statusMap[t.transfer_status] || t.transfer_status}`,
             subtitle: t.transfer_no,
             detail: `${t.from_warehouse_name || ''} → ${t.to_warehouse_name || ''} · ${t.total_pieces}件/${t.total_weight_kg}kg`,
             status: statusMap[t.transfer_status] || t.transfer_status, statusColor: t.transfer_status === 'PENDING' ? colors.warning : colors.info,
-            actions: [
-              { label: '管理', color: colors.primary, route: '/task/transfer' },
-            ],
+            actions,
             borderColor: colors.taskTransfer,
           });
         }
 
-        // 无单快递
+        // 无单快递 — 卡片直接显示"匹配订单"按钮，点击直达匹配弹窗
         const unmatched = await warehouseApi.getUnmatched();
         for (const u of (unmatched.data || []).filter((u: any) => u.status === 'PENDING')) {
           items.push({
@@ -118,7 +125,7 @@ export default function TasksScreen() {
             status: '待匹配', statusColor: colors.warning,
             time: formatTime(u.created_at),
             actions: [
-              { label: '匹配', color: colors.warning, route: '/task/no-order-express' },
+              { label: '匹配订单', color: colors.warning, route: '/task/no-order-express', params: { id: u.id, action: 'match' } },
             ],
             borderColor: colors.taskOrphan,
           });

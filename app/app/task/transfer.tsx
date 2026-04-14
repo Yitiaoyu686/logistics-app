@@ -4,7 +4,7 @@ import {
   SafeAreaView, Alert, ActivityIndicator, Modal, KeyboardAvoidingView, Platform,
   RefreshControl,
 } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { warehouseApi } from '../../lib/api';
@@ -52,6 +52,7 @@ type ActionMode = 'dispatch' | 'arrive' | 'receive';
 
 export default function TransferScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ id?: string; action?: ActionMode }>();
   const [list, setList] = useState<TransferItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -71,6 +72,14 @@ export default function TransferScreen() {
   useFocusEffect(useCallback(() => {
     load();
   }, []));
+
+  // 从任务流跳进来：直接打开对应操作弹窗
+  useEffect(() => {
+    if (params.id && params.action && list.length > 0) {
+      const target = list.find((t) => t.id === params.id);
+      if (target) openAction(target, params.action as ActionMode);
+    }
+  }, [params.id, params.action, list]);
 
   const load = async () => {
     setLoading(true);
