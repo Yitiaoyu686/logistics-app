@@ -268,6 +268,22 @@ const NODE_TO_SUB_STATUS: Record<string, string> = {
   SIGNED: 'DELIVERED',
 };
 
+// 主订单状态映射（取节点对应的最高态）
+const NODE_TO_ORDER_STATUS: Record<string, string> = {
+  WAREHOUSE_OUT: 'PENDING_DEPARTURE',
+  CUSTOMS_EXPORT: 'PENDING_DEPARTURE',
+  CUSTOMS_INSPECT: 'PENDING_DEPARTURE',
+  CUSTOMS_RELEASE: 'PENDING_DEPARTURE',
+  DEPARTURE: 'DEPARTED',
+  IN_TRANSIT: 'IN_TRANSIT',
+  ARRIVAL: 'ARRIVED',
+  CUSTOMS_IMPORT: 'CUSTOMS_CLEARANCE',
+  CUSTOMS_INSPECT_IMP: 'CUSTOMS_CLEARANCE',
+  CUSTOMS_CLEARED: 'CUSTOMS_CLEARANCE',
+  WAREHOUSE_IN: 'PENDING_DELIVERY',
+  SIGNED: 'DELIVERED',
+};
+
 export function advanceNode(
   db: Database.Database,
   payload: AdvanceNodePayload
@@ -315,6 +331,21 @@ export function advanceNode(
        SET sub_status=?, updated_at=datetime('now')
        WHERE id IN (SELECT sub_order_id FROM tms_job_order_rel WHERE job_id=?)`
     ).run(newSubStatus, payload.jobId);
+  }
+
+  // 同步主订单状态（取节点对应的最高态）
+  const newOrderStatus = NODE_TO_ORDER_STATUS[payload.nodeCode];
+  if (newOrderStatus) {
+    db.prepare(
+      `UPDATE oms_order
+       SET order_status=?, updated_at=datetime('now')
+       WHERE id IN (
+         SELECT DISTINCT so.order_id
+         FROM tms_job_order_rel rel
+         JOIN oms_sub_order so ON so.id = rel.sub_order_id
+         WHERE rel.job_id = ?
+       )`
+    ).run(newOrderStatus, payload.jobId);
   }
 
   return { eventId };

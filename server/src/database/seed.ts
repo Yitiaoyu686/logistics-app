@@ -1,5 +1,10 @@
 import { getDb } from './schema';
 import { createCustomerRecord, type CustomerCreatePayload } from './customerRepo';
+import { createOrder } from './orderRepo';
+import { createJob, bindSubOrders, sealUnit, advanceNode } from './jobRepo';
+import { createInbound, createDestInbound } from './warehouseRepo';
+import { createDeliveryDpn, createTransferDpn } from './dpnRepo';
+import { recordFee, recordPayment } from './feeRepo';
 import bcrypt from 'bcryptjs';
 
 function uuid(): string {
@@ -635,97 +640,547 @@ export function seedDatabase(): void {
   }
 
   // ============================================================
-  // 5. 订单（6条主单 + 子单 + 包裹）
+  // 5. JOB 池 — 物流公司订舱后创建（先于订单装箱）
+  // ============================================================
+  // job-sea-completed   COMPLETED (历史)        GZ→LOS  → 链路 A 主角
+  // job-sea-arrived     CLEARED   (待 DPN)      GZ→LOS  → 链路 C 站点调拨
+  // job-sea-intransit   IN_TRANSIT             SZ→LOS  → 链路 B 在途
+  // job-sea-departed    DEPARTED               HKG→LOS
+  // job-sea-loading     LOADING   (装箱中)      GZ→LOS
+  // job-sea-planned-1   PLANNED                GZ→LOS
+  // job-sea-planned-2   PLANNED                SZ→LOS
+  // job-air-loading     LOADING                GZ→LOS AIR (3 集装号)
   // ============================================================
 
-  const orders = [
-    { id: 'ord-1', no: 'S-20260320990003', entry: 'A1B001', line: 'SEA', cust: 'cust-1', cust_name: 'Web联调客户-S1836', route: 'CAN.CHN→LOS.NGA', status: 'INBOUND', pieces: 2, weight: 12.5, consignee: 'Ada Nwosu', consignee_phone: '+234-903-832-1727' },
-    { id: 'ord-2', no: 'S-20260320000005', entry: 'A1B002', line: 'SEA', cust: 'cust-2', cust_name: 'Web联调客户-S1836-2', route: 'SZ.CN→LOS.NGA', status: 'INBOUND', pieces: 1, weight: 5.2, consignee: 'Emeka Eze', consignee_phone: '+234-810-554-7820' },
-    { id: 'ord-3', no: 'S-20260320000001', entry: 'C2D001', line: 'SEA', cust: 'cust-3', cust_name: '联调航海客户PSea-2', route: 'GZ.CN→LOS.NGA', status: 'PENDING_INBOUND', pieces: 2, weight: 8.0, consignee: 'Kwame Asante', consignee_phone: '+234-701-234-5678' },
-    { id: 'ord-4', no: 'S-20260320000002', entry: 'E3F001', line: 'SEA', cust: 'cust-4', cust_name: '联调综合客户P1-2026', route: 'GZ.CN→LOS.NGA', status: 'DEPARTED', pieces: 2, weight: 15.0, consignee: 'Amina Yusuf', consignee_phone: '+234-803-555-2001' },
-    { id: 'ord-5', no: 'S-20260320000003', entry: 'G4H001', line: 'SEA', cust: 'cust-5', cust_name: '深圳旺达贸易', route: 'GZ.CN→LOS.NGA', status: 'ARRIVED', pieces: 3, weight: 25.0, consignee: 'Amina Yusuf', consignee_phone: '+234-803-555-2001' },
-    { id: 'ord-6', no: 'S-20260320000004', entry: 'J5K001', line: 'SEA', cust: 'cust-6', cust_name: '广州金辉国际', route: 'GZ.CN→LOS.NGA', status: 'PENDING_INBOUND', pieces: 5, weight: 30.0, consignee: 'Temi Balogun', consignee_phone: '+234-805-330-1001' },
+  const jobSeaCompleted = createJob(db, {
+    id: 'job-sea-completed',
+    jobNo: 'S-JOB260225001',
+    businessLine: 'SEA',
+    routeCode: 'route-gz-los-sea',
+    originPort: 'CAN', destPort: 'LOS',
+    carrierName: '马士基', vesselVoyage: 'MAERSK SENTOSA / 250E',
+    billNo: 'MBL260225001', containerType: '40HQ', cargoType: 'GENERAL',
+    serviceType: 'EXPRESS',
+    etd: '2026-02-25', eta: '2026-03-22',
+    remark: '链路A：已完成',
+    createdBy: 'user-opscn1', createdAt: '2026-02-20 09:00:00',
+    units: [{ unitNo: 'MSKU1234567', containerType: '40HQ', sealNo: 'SL-200225-A1' }],
+  });
+
+  const jobSeaArrived = createJob(db, {
+    id: 'job-sea-arrived',
+    jobNo: 'S-JOB260315002',
+    businessLine: 'SEA',
+    routeCode: 'route-gz-los-sea',
+    originPort: 'CAN', destPort: 'LOS',
+    carrierName: '马士基', vesselVoyage: 'MAERSK ESSEX / 312E',
+    billNo: 'MBL260315002', containerType: '40HQ', cargoType: 'GENERAL',
+    serviceType: 'EXPRESS',
+    etd: '2026-03-15', eta: '2026-04-10',
+    remark: '链路C：已到达，待 DPN 调拨',
+    createdBy: 'user-opscn1', createdAt: '2026-03-10 10:00:00',
+    units: [{ unitNo: 'MSKU2345678', containerType: '40HQ', sealNo: 'SL-260315-B1' }],
+  });
+
+  const jobSeaInTransit = createJob(db, {
+    id: 'job-sea-intransit',
+    jobNo: 'S-JOB260401003',
+    businessLine: 'SEA',
+    routeCode: 'route-sz-los-sea',
+    originPort: 'SZX', destPort: 'LOS',
+    carrierName: '中远海运', vesselVoyage: 'COSCO PRIDE / 415W',
+    billNo: 'COSU260401003', containerType: '40HQ', cargoType: 'GENERAL',
+    serviceType: 'EXPRESS',
+    etd: '2026-04-01', eta: '2026-04-25',
+    remark: '链路B：在途',
+    createdBy: 'user-opscn1', createdAt: '2026-03-26 11:00:00',
+    units: [{ unitNo: 'COSU3456789', containerType: '40HQ', sealNo: 'SL-260401-C1' }],
+  });
+
+  const jobSeaDeparted = createJob(db, {
+    id: 'job-sea-departed',
+    jobNo: 'S-JOB260410004',
+    businessLine: 'SEA',
+    routeCode: 'route-hkg-los-sea',
+    originPort: 'HKG', destPort: 'LOS',
+    carrierName: '马士基', vesselVoyage: 'MAERSK HORIZON / 418E',
+    billNo: 'MBL260410004', containerType: '40HQ', cargoType: 'GENERAL',
+    serviceType: 'EXPRESS',
+    etd: '2026-04-10', eta: '2026-05-05',
+    remark: '已起运 - 在途较新',
+    createdBy: 'user-opscn1', createdAt: '2026-04-05 09:00:00',
+    units: [{ unitNo: 'EMCU4567890', containerType: '40HQ', sealNo: 'SL-260410-D1' }],
+  });
+
+  const jobSeaLoading = createJob(db, {
+    id: 'job-sea-loading',
+    jobNo: 'S-JOB260422005',
+    businessLine: 'SEA',
+    routeCode: 'route-gz-los-sea',
+    originPort: 'CAN', destPort: 'LOS',
+    carrierName: '中远海运', vesselVoyage: 'COSCO ATLANTIC / 502W',
+    containerType: '40HQ', cargoType: 'GENERAL',
+    serviceType: 'EXPRESS',
+    etd: '2026-04-22', eta: '2026-05-18',
+    remark: '装箱中',
+    createdBy: 'user-opscn1', createdAt: '2026-04-12 10:00:00',
+    units: [{ unitNo: 'EISU5678901', containerType: '40HQ' }],
+  });
+
+  const jobSeaPlanned1 = createJob(db, {
+    id: 'job-sea-planned-1',
+    jobNo: 'S-JOB260428006',
+    businessLine: 'SEA',
+    routeCode: 'route-gz-los-sea',
+    originPort: 'CAN', destPort: 'LOS',
+    carrierName: '马士基', vesselVoyage: 'MAERSK NEWPORT / 510E',
+    containerType: '40HQ', cargoType: 'GENERAL',
+    serviceType: 'EXPRESS',
+    etd: '2026-04-28', eta: '2026-05-25',
+    remark: '已订舱，待装箱',
+    createdBy: 'user-opscn1', createdAt: '2026-04-14 14:00:00',
+    units: [{ unitNo: 'MSKU6789012', containerType: '40HQ' }],
+  });
+
+  const jobSeaPlanned2 = createJob(db, {
+    id: 'job-sea-planned-2',
+    jobNo: 'S-JOB260503007',
+    businessLine: 'SEA',
+    routeCode: 'route-sz-los-sea',
+    originPort: 'SZX', destPort: 'LOS',
+    carrierName: '中远海运', vesselVoyage: 'COSCO BRILLIANCE / 518W',
+    containerType: '40GP', cargoType: 'GENERAL',
+    serviceType: 'STANDARD',
+    etd: '2026-05-03', eta: '2026-05-28',
+    remark: '已订舱，待装箱',
+    createdBy: 'user-opscn1', createdAt: '2026-04-15 09:00:00',
+    units: [{ unitNo: 'COSU7890123', containerType: '40GP' }],
+  });
+
+  const jobAirLoading = createJob(db, {
+    id: 'job-air-loading',
+    jobNo: 'A-JOB260420008',
+    businessLine: 'AIR',
+    routeCode: 'route-gz-los-air',
+    originPort: 'CAN', destPort: 'LOS',
+    carrierName: '埃塞俄比亚航空', flightNo: 'ET 605',
+    containerType: 'AIR_PALLET', cargoType: 'GENERAL',
+    serviceType: 'EXPRESS',
+    etd: '2026-04-20', eta: '2026-04-28',
+    remark: '空运 - 多集装号',
+    createdBy: 'user-opscn1', createdAt: '2026-04-14 11:00:00',
+    units: [
+      { unitNo: 'PMC-001', unitType: 'PALLET', maxWeightKg: 1500, maxVolumeCbm: 12 },
+      { unitNo: 'PMC-002', unitType: 'PALLET', maxWeightKg: 1500, maxVolumeCbm: 12 },
+      { unitNo: 'AKE-003', unitType: 'PALLET', maxWeightKg: 1200, maxVolumeCbm: 10 },
+    ],
+  });
+
+  // ============================================================
+  // 6. 订单池 — 12 个订单分布到 9 个客户
+  // ============================================================
+
+  const ord1 = createOrder(db, {
+    id: 'ord-cust1-completed',
+    businessLine: 'SEA',
+    serviceType: 'LCL_SEA',
+    customerId: 'cust-1', customerName: '深圳市臻诚跨境贸易有限公司', customerCode: 'A1B0',
+    salesUserId: 'user-sales1',
+    routeCode: 'route-gz-los-sea',
+    paymentMethod: 'T/T', paymentStatus: 'PAID',
+    senderName: '张铭轩', senderPhone: '13800001111',
+    senderAddress: '深圳市南山区科技园南区数字大厦18楼1806室',
+    consigneeName: 'Ada Nwosu', consigneePhone: '+234-903-832-1727',
+    consigneeAddress: '23 Allen Avenue, Ikeja, Lagos',
+    consigneeCountry: '尼日利亚', consigneeCity: '拉各斯',
+    remark: '链路A：已完成全链路',
+    createdBy: 'user-sales1', createdAt: '2026-02-22 09:30:00',
+    items: [
+      { trackingNo: 'SF1100001', expressCompany: '顺丰', goodsName: '蓝牙耳机', goodsCategory: 'ELECTRONICS', cargoType: 'GENERAL', declaredWeightKg: 8, pieces: 2, lengthCm: 35, widthCm: 25, heightCm: 15, declaredValue: 280 },
+      { trackingNo: 'SF1100002', expressCompany: '顺丰', goodsName: '智能手表', goodsCategory: 'ELECTRONICS', cargoType: 'GENERAL', declaredWeightKg: 4, pieces: 1, lengthCm: 30, widthCm: 20, heightCm: 12, declaredValue: 350 },
+    ],
+  });
+
+  const ord2 = createOrder(db, {
+    id: 'ord-cust1-pending',
+    businessLine: 'SEA',
+    serviceType: 'LCL_SEA',
+    customerId: 'cust-1', customerName: '深圳市臻诚跨境贸易有限公司', customerCode: 'A1B0',
+    salesUserId: 'user-sales1',
+    routeCode: 'route-gz-los-sea',
+    paymentMethod: 'T/T', paymentStatus: 'UNPAID',
+    senderName: '张铭轩', senderPhone: '13800001111',
+    senderAddress: '深圳市南山区科技园南区数字大厦18楼1806室',
+    consigneeName: 'Ada Nwosu', consigneePhone: '+234-903-832-1727',
+    consigneeAddress: '23 Allen Avenue, Ikeja, Lagos',
+    consigneeCountry: '尼日利亚', consigneeCity: '拉各斯',
+    remark: '客户刚下单，快递还没到仓',
+    createdBy: 'user-sales1', createdAt: '2026-04-14 16:00:00',
+    items: [
+      { trackingNo: 'SF1300001', expressCompany: '顺丰', goodsName: '电子配件', goodsCategory: 'ELECTRONICS', cargoType: 'GENERAL', declaredWeightKg: 5, pieces: 1, lengthCm: 30, widthCm: 25, heightCm: 18, declaredValue: 200 },
+    ],
+  });
+
+  const ord3 = createOrder(db, {
+    id: 'ord-cust2-inbound',
+    businessLine: 'SEA',
+    serviceType: 'LCL_SEA',
+    customerId: 'cust-2', customerName: '广州海通进出口有限公司', customerCode: 'A1B1',
+    salesUserId: 'user-sales1',
+    routeCode: 'route-gz-los-sea',
+    paymentMethod: '月结 30 天', paymentStatus: 'UNPAID',
+    senderName: '李慧敏', senderPhone: '13800002222',
+    senderAddress: '广州市白云区机场路 1128 号海通大厦 9 楼',
+    consigneeName: 'Emeka Eze', consigneePhone: '+234-810-554-7820',
+    consigneeAddress: 'Plot 45, Garki District, Abuja',
+    consigneeCountry: '尼日利亚', consigneeCity: '阿布贾',
+    remark: '已入库待装箱',
+    createdBy: 'user-sales1', createdAt: '2026-04-08 10:00:00',
+    items: [
+      { trackingNo: 'YT1300003', expressCompany: '韵达', goodsName: '家居用品', goodsCategory: 'DAILY_USE', cargoType: 'GENERAL', declaredWeightKg: 12, pieces: 3, lengthCm: 50, widthCm: 40, heightCm: 30, declaredValue: 180 },
+    ],
+  });
+
+  const ord4 = createOrder(db, {
+    id: 'ord-cust2-completed',
+    businessLine: 'SEA',
+    serviceType: 'LCL_SEA',
+    customerId: 'cust-2', customerName: '广州海通进出口有限公司', customerCode: 'A1B1',
+    salesUserId: 'user-sales1',
+    routeCode: 'route-gz-los-sea',
+    paymentMethod: '月结 30 天', paymentStatus: 'PAID',
+    senderName: '李慧敏', senderPhone: '13800002222',
+    senderAddress: '广州市白云区机场路 1128 号海通大厦 9 楼',
+    consigneeName: 'Emeka Eze', consigneePhone: '+234-810-554-7820',
+    consigneeAddress: 'Plot 45, Garki District, Abuja',
+    consigneeCountry: '尼日利亚', consigneeCity: '阿布贾',
+    remark: '链路A 配角：和 ord1 装在同一柜',
+    createdBy: 'user-sales1', createdAt: '2026-02-23 14:00:00',
+    items: [
+      { trackingNo: 'YT1100003', expressCompany: '韵达', goodsName: '美妆护肤', goodsCategory: 'BEAUTY', cargoType: 'GENERAL', declaredWeightKg: 6, pieces: 2, lengthCm: 40, widthCm: 30, heightCm: 20, declaredValue: 320 },
+    ],
+  });
+
+  const ord5 = createOrder(db, {
+    id: 'ord-cust3-loading',
+    businessLine: 'SEA',
+    serviceType: 'LCL_SEA',
+    customerId: 'cust-3', customerName: '义乌锦沪国际物流有限公司', customerCode: 'C2D0',
+    salesUserId: 'user-sales1',
+    routeCode: 'route-gz-los-sea',
+    paymentMethod: 'T/T', paymentStatus: 'UNPAID',
+    senderName: '王俊凯', senderPhone: '13800003333',
+    senderAddress: '浙江省义乌市国际商贸城四区 B-2033',
+    consigneeName: 'Kwame Asante', consigneePhone: '+234-701-234-5678',
+    consigneeAddress: 'East Legon, Accra',
+    consigneeCountry: '加纳', consigneeCity: '阿克拉',
+    remark: '装箱中',
+    createdBy: 'user-sales1', createdAt: '2026-04-10 09:30:00',
+    items: [
+      { trackingNo: 'ZT1300005', expressCompany: '中通', goodsName: '小家电', goodsCategory: 'ELECTRONICS', cargoType: 'GENERAL', declaredWeightKg: 18, pieces: 4, lengthCm: 60, widthCm: 45, heightCm: 35, declaredValue: 420 },
+      { trackingNo: 'ZT1300006', expressCompany: '中通', goodsName: '小家电', goodsCategory: 'ELECTRONICS', cargoType: 'GENERAL', declaredWeightKg: 12, pieces: 2, lengthCm: 50, widthCm: 40, heightCm: 30, declaredValue: 280 },
+    ],
+  });
+
+  const ord6 = createOrder(db, {
+    id: 'ord-cust4-intransit-1',
+    businessLine: 'SEA',
+    serviceType: 'LCL_SEA',
+    customerId: 'cust-4', customerName: '东莞恒通电子科技有限公司', customerCode: 'E3F0',
+    salesUserId: 'user-sales1',
+    routeCode: 'route-sz-los-sea',
+    paymentMethod: 'T/T 50% 预付', paymentStatus: 'PARTIAL',
+    senderName: '赵思琪', senderPhone: '13800004444',
+    senderAddress: '东莞市长安镇上沙第三工业区恒通路 8 号',
+    consigneeName: 'Amina Yusuf', consigneePhone: '+234-803-555-2001',
+    consigneeAddress: '15 Awolowo Way, Ikeja, Lagos',
+    consigneeCountry: '尼日利亚', consigneeCity: '拉各斯',
+    remark: '链路B 主角：在途',
+    createdBy: 'user-sales1', createdAt: '2026-03-25 10:00:00',
+    items: [
+      { trackingNo: 'SF1200001', expressCompany: '顺丰', goodsName: '电子主板', goodsCategory: 'ELECTRONICS', cargoType: 'GENERAL', declaredWeightKg: 25, pieces: 5, lengthCm: 60, widthCm: 40, heightCm: 30, declaredValue: 1200 },
+    ],
+  });
+
+  const ord7 = createOrder(db, {
+    id: 'ord-cust4-intransit-2',
+    businessLine: 'SEA',
+    serviceType: 'LCL_SEA',
+    customerId: 'cust-4', customerName: '东莞恒通电子科技有限公司', customerCode: 'E3F0',
+    salesUserId: 'user-sales1',
+    routeCode: 'route-sz-los-sea',
+    paymentMethod: 'T/T', paymentStatus: 'PAID',
+    senderName: '赵思琪', senderPhone: '13800004444',
+    senderAddress: '东莞市长安镇上沙第三工业区恒通路 8 号',
+    consigneeName: 'Amina Yusuf', consigneePhone: '+234-803-555-2001',
+    consigneeAddress: '15 Awolowo Way, Ikeja, Lagos',
+    consigneeCountry: '尼日利亚', consigneeCity: '拉各斯',
+    remark: '链路B 配角：和 ord6 同柜',
+    createdBy: 'user-sales1', createdAt: '2026-03-25 14:30:00',
+    items: [
+      { trackingNo: 'SF1200002', expressCompany: '顺丰', goodsName: '充电器', goodsCategory: 'ELECTRONICS', cargoType: 'GENERAL', declaredWeightKg: 8, pieces: 2, lengthCm: 35, widthCm: 25, heightCm: 18, declaredValue: 220 },
+    ],
+  });
+
+  const ord8 = createOrder(db, {
+    id: 'ord-cust5-pending-delivery',
+    businessLine: 'SEA',
+    serviceType: 'LCL_SEA',
+    customerId: 'cust-5', customerName: '深圳旺达跨境贸易有限公司', customerCode: 'G4H0',
+    salesUserId: 'user-sales1',
+    routeCode: 'route-gz-los-sea',
+    paymentMethod: 'T/T', paymentStatus: 'PAID',
+    senderName: '钱立文', senderPhone: '13800005555',
+    senderAddress: '深圳市福田区华强北路赛格广场 28 楼',
+    consigneeName: 'Hassan Ibrahim', consigneePhone: '+234-810-998-7700',
+    consigneeAddress: 'Plot 12, Wuse 2, Abuja',
+    consigneeCountry: '尼日利亚', consigneeCity: '阿布贾',
+    remark: '链路C：到达后需 DPN 转运到阿布贾',
+    createdBy: 'user-sales1', createdAt: '2026-03-12 11:00:00',
+    items: [
+      { trackingNo: 'YD1200004', expressCompany: '韵达', goodsName: '日用百货', goodsCategory: 'DAILY_USE', cargoType: 'GENERAL', declaredWeightKg: 28, pieces: 6, lengthCm: 70, widthCm: 50, heightCm: 40, declaredValue: 380 },
+    ],
+  });
+
+  const ord9 = createOrder(db, {
+    id: 'ord-cust5-delivering',
+    businessLine: 'SEA',
+    serviceType: 'LCL_SEA',
+    customerId: 'cust-5', customerName: '深圳旺达跨境贸易有限公司', customerCode: 'G4H0',
+    salesUserId: 'user-sales1',
+    routeCode: 'route-gz-los-sea',
+    paymentMethod: 'T/T', paymentStatus: 'PAID',
+    senderName: '钱立文', senderPhone: '13800005555',
+    senderAddress: '深圳市福田区华强北路赛格广场 28 楼',
+    consigneeName: 'Amina Yusuf', consigneePhone: '+234-803-555-2001',
+    consigneeAddress: '15 Awolowo Way, Ikeja, Lagos',
+    consigneeCountry: '尼日利亚', consigneeCity: '拉各斯',
+    remark: '链路C 配角：本站直接配送',
+    createdBy: 'user-sales1', createdAt: '2026-03-12 15:00:00',
+    items: [
+      { trackingNo: 'YD1200005', expressCompany: '韵达', goodsName: '电子配件', goodsCategory: 'ELECTRONICS', cargoType: 'GENERAL', declaredWeightKg: 10, pieces: 2, lengthCm: 40, widthCm: 30, heightCm: 25, declaredValue: 300 },
+    ],
+  });
+
+  const ord10 = createOrder(db, {
+    id: 'ord-cust6-departed',
+    businessLine: 'SEA',
+    serviceType: 'LCL_SEA',
+    customerId: 'cust-6', customerName: '广州金辉国际贸易有限公司', customerCode: 'J5K0',
+    salesUserId: 'user-sales1',
+    routeCode: 'route-hkg-los-sea',
+    paymentMethod: 'L/C', paymentStatus: 'PAID',
+    senderName: '孙佳怡', senderPhone: '13800006666',
+    senderAddress: '广州市越秀区环市东路 348 号广东国际大厦 32 楼',
+    consigneeName: 'Temi Balogun', consigneePhone: '+234-805-330-1001',
+    consigneeAddress: 'Lekki Phase 1, Lagos',
+    consigneeCountry: '尼日利亚', consigneeCity: '拉各斯',
+    remark: '已起运',
+    createdBy: 'user-sales1', createdAt: '2026-04-04 11:00:00',
+    items: [
+      { trackingNo: 'STO1200006', expressCompany: '申通', goodsName: '家居家具', goodsCategory: 'DAILY_USE', cargoType: 'GENERAL', declaredWeightKg: 35, pieces: 4, lengthCm: 80, widthCm: 60, heightCm: 50, declaredValue: 580 },
+    ],
+  });
+
+  const ord11 = createOrder(db, {
+    id: 'ord-cust3-air-loading',
+    businessLine: 'AIR',
+    serviceType: 'AIR_STD',
+    customerId: 'cust-3', customerName: '义乌锦沪国际物流有限公司', customerCode: 'C2D0',
+    salesUserId: 'user-sales1',
+    routeCode: 'route-gz-los-air',
+    paymentMethod: 'T/T', paymentStatus: 'PAID',
+    senderName: '王俊凯', senderPhone: '13800003333',
+    senderAddress: '浙江省义乌市国际商贸城四区 B-2033',
+    consigneeName: 'Kwame Asante', consigneePhone: '+234-701-234-5678',
+    consigneeAddress: 'East Legon, Accra',
+    consigneeCountry: '加纳', consigneeCity: '阿克拉',
+    remark: '空运订单 - 装入空运 JOB',
+    createdBy: 'user-sales1', createdAt: '2026-04-12 14:00:00',
+    items: [
+      { trackingNo: 'YT1300010', expressCompany: '韵达', goodsName: '电子样品', goodsCategory: 'ELECTRONICS', cargoType: 'GENERAL', declaredWeightKg: 6, pieces: 1, lengthCm: 30, widthCm: 20, heightCm: 15, declaredValue: 480 },
+    ],
+  });
+
+  const ord12 = createOrder(db, {
+    id: 'ord-cust9-inbound',
+    businessLine: 'SEA',
+    serviceType: 'LCL_SEA',
+    customerId: 'cust-9', customerName: '佛山雅居家具出口有限公司', customerCode: 'R9S0',
+    salesUserId: null as any,
+    routeCode: 'route-gz-los-sea',
+    paymentMethod: 'T/T', paymentStatus: 'UNPAID',
+    senderName: '郑楚彤', senderPhone: '13800009999',
+    senderAddress: '佛山市顺德区龙江镇家具大道 168 号',
+    consigneeName: 'Lagos Furniture Mart', consigneePhone: '+234-801-234-5566',
+    consigneeAddress: '88 Adetokunbo Ademola Street, Victoria Island, Lagos',
+    consigneeCountry: '尼日利亚', consigneeCity: '拉各斯',
+    remark: '公海客户 - 已入库等待装箱',
+    createdBy: 'user-sales1', createdAt: '2026-04-09 11:30:00',
+    items: [
+      { trackingNo: 'SF1300012', expressCompany: '顺丰', goodsName: '木制家具', goodsCategory: 'OTHER', cargoType: 'GENERAL', declaredWeightKg: 45, pieces: 3, lengthCm: 120, widthCm: 80, heightCm: 60, declaredValue: 850 },
+    ],
+  });
+
+  // ============================================================
+  // 7. 入库 — 除 ord2 外都已入库
+  // ============================================================
+
+  const inboundList: Array<{ orderId: string; subOrderId: string; warehouseId: string; trackingNo: string; pieces: number; weightKg: number; lengthCm: number; widthCm: number; heightCm: number; locationCode: string; goodsCategory: string; inboundAt: string }> = [
+    // ord1 (链路 A)
+    { orderId: ord1.id, subOrderId: ord1.subOrderIds[0], warehouseId: 'wh-gz', trackingNo: 'SF1100001', pieces: 2, weightKg: 8.2, lengthCm: 35, widthCm: 25, heightCm: 15, locationCode: 'A-01-01', goodsCategory: 'ELECTRONICS', inboundAt: '2026-02-24 10:30:00' },
+    { orderId: ord1.id, subOrderId: ord1.subOrderIds[1], warehouseId: 'wh-gz', trackingNo: 'SF1100002', pieces: 1, weightKg: 4.1, lengthCm: 30, widthCm: 20, heightCm: 12, locationCode: 'A-01-02', goodsCategory: 'ELECTRONICS', inboundAt: '2026-02-24 10:35:00' },
+    // ord3 入库待装箱
+    { orderId: ord3.id, subOrderId: ord3.subOrderIds[0], warehouseId: 'wh-gz', trackingNo: 'YT1300003', pieces: 3, weightKg: 12.5, lengthCm: 50, widthCm: 40, heightCm: 30, locationCode: 'A-02-05', goodsCategory: 'DAILY_USE', inboundAt: '2026-04-10 14:20:00' },
+    // ord4 (链路 A 配角)
+    { orderId: ord4.id, subOrderId: ord4.subOrderIds[0], warehouseId: 'wh-gz', trackingNo: 'YT1100003', pieces: 2, weightKg: 6.3, lengthCm: 40, widthCm: 30, heightCm: 20, locationCode: 'A-01-03', goodsCategory: 'BEAUTY', inboundAt: '2026-02-24 16:00:00' },
+    // ord5 装箱中
+    { orderId: ord5.id, subOrderId: ord5.subOrderIds[0], warehouseId: 'wh-gz', trackingNo: 'ZT1300005', pieces: 4, weightKg: 18.5, lengthCm: 60, widthCm: 45, heightCm: 35, locationCode: 'B-02-01', goodsCategory: 'ELECTRONICS', inboundAt: '2026-04-12 09:15:00' },
+    { orderId: ord5.id, subOrderId: ord5.subOrderIds[1], warehouseId: 'wh-gz', trackingNo: 'ZT1300006', pieces: 2, weightKg: 12.2, lengthCm: 50, widthCm: 40, heightCm: 30, locationCode: 'B-02-02', goodsCategory: 'ELECTRONICS', inboundAt: '2026-04-12 09:20:00' },
+    // ord6 链路 B
+    { orderId: ord6.id, subOrderId: ord6.subOrderIds[0], warehouseId: 'wh-sz', trackingNo: 'SF1200001', pieces: 5, weightKg: 25.3, lengthCm: 60, widthCm: 40, heightCm: 30, locationCode: 'SZ-A-08', goodsCategory: 'ELECTRONICS', inboundAt: '2026-03-28 10:30:00' },
+    // ord7 链路 B 配角
+    { orderId: ord7.id, subOrderId: ord7.subOrderIds[0], warehouseId: 'wh-sz', trackingNo: 'SF1200002', pieces: 2, weightKg: 8.1, lengthCm: 35, widthCm: 25, heightCm: 18, locationCode: 'SZ-A-09', goodsCategory: 'ELECTRONICS', inboundAt: '2026-03-28 10:45:00' },
+    // ord8 链路 C
+    { orderId: ord8.id, subOrderId: ord8.subOrderIds[0], warehouseId: 'wh-gz', trackingNo: 'YD1200004', pieces: 6, weightKg: 28.7, lengthCm: 70, widthCm: 50, heightCm: 40, locationCode: 'A-03-01', goodsCategory: 'DAILY_USE', inboundAt: '2026-03-13 15:00:00' },
+    // ord9 链路 C 配角
+    { orderId: ord9.id, subOrderId: ord9.subOrderIds[0], warehouseId: 'wh-gz', trackingNo: 'YD1200005', pieces: 2, weightKg: 10.4, lengthCm: 40, widthCm: 30, heightCm: 25, locationCode: 'A-03-02', goodsCategory: 'ELECTRONICS', inboundAt: '2026-03-13 15:10:00' },
+    // ord10 已起运
+    { orderId: ord10.id, subOrderId: ord10.subOrderIds[0], warehouseId: 'wh-gz', trackingNo: 'STO1200006', pieces: 4, weightKg: 35.2, lengthCm: 80, widthCm: 60, heightCm: 50, locationCode: 'B-01-01', goodsCategory: 'OTHER', inboundAt: '2026-04-06 11:00:00' },
+    // ord11 空运
+    { orderId: ord11.id, subOrderId: ord11.subOrderIds[0], warehouseId: 'wh-gz', trackingNo: 'YT1300010', pieces: 1, weightKg: 6.1, lengthCm: 30, widthCm: 20, heightCm: 15, locationCode: 'AIR-01', goodsCategory: 'ELECTRONICS', inboundAt: '2026-04-13 09:00:00' },
+    // ord12 等装箱
+    { orderId: ord12.id, subOrderId: ord12.subOrderIds[0], warehouseId: 'wh-gz', trackingNo: 'SF1300012', pieces: 3, weightKg: 45.8, lengthCm: 120, widthCm: 80, heightCm: 60, locationCode: 'B-04-01', goodsCategory: 'OTHER', inboundAt: '2026-04-10 13:00:00' },
   ];
-
-  const insertOrder = db.prepare(`INSERT INTO oms_order (id, order_no, warehouse_entry_no, business_line, customer_id, customer_name, sales_user_id, route_code, order_status, total_declared_pieces, total_declared_weight_kg, consignee_name, consignee_phone, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-
-  for (const o of orders) {
-    insertOrder.run(o.id, o.no, o.entry, o.line, o.cust, o.cust_name, 'user-sales1', o.route, o.status, o.pieces, o.weight, o.consignee, o.consignee_phone, now);
+  for (const ib of inboundList) {
+    createInbound(db, {
+      businessLine: 'SEA',
+      warehouseId: ib.warehouseId,
+      orderId: ib.orderId,
+      subOrderId: ib.subOrderId,
+      trackingNo: ib.trackingNo,
+      pieces: ib.pieces,
+      grossWeightKg: ib.weightKg,
+      lengthCm: ib.lengthCm,
+      widthCm: ib.widthCm,
+      heightCm: ib.heightCm,
+      packageCondition: 'GOOD',
+      goodsCategory: ib.goodsCategory,
+      locationCode: ib.locationCode,
+      operatorUserId: 'user-whcn1',
+      inboundAt: ib.inboundAt,
+    });
   }
 
-  // 子单
-  const insertSub = db.prepare('INSERT INTO oms_sub_order (id, sub_order_no, order_id, line_no, business_line, sub_status, route_code, pieces, actual_weight_kg, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-
-  const subOrders = [
-    { id: 'sub-1-1', no: 'S-20260320990003-01', order_id: 'ord-1', line: 1, status: 'INBOUND', route: 'CAN.CHN→LOS.NGA', pieces: 1, weight: 6.5 },
-    { id: 'sub-1-2', no: 'S-20260320990003-02', order_id: 'ord-1', line: 2, status: 'PENDING_INBOUND', route: 'CAN.CHN→LOS.NGA', pieces: 1, weight: 6.0 },
-    { id: 'sub-2-1', no: 'S-20260320000005-01', order_id: 'ord-2', line: 1, status: 'INBOUND', route: 'SZ.CN→LOS.NGA', pieces: 1, weight: 5.2 },
-    { id: 'sub-3-1', no: 'S-20260320000001-01', order_id: 'ord-3', line: 1, status: 'PENDING_INBOUND', route: 'GZ.CN→LOS.NGA', pieces: 1, weight: 4.0 },
-    { id: 'sub-3-2', no: 'S-20260320000001-02', order_id: 'ord-3', line: 2, status: 'PENDING_INBOUND', route: 'GZ.CN→LOS.NGA', pieces: 1, weight: 4.0 },
-    { id: 'sub-4-1', no: 'S-20260320000002-01', order_id: 'ord-4', line: 1, status: 'IN_TRANSIT', route: 'GZ.CN→LOS.NGA', pieces: 2, weight: 15.0, },
-    { id: 'sub-5-1', no: 'S-20260320000003-01', order_id: 'ord-5', line: 1, status: 'ARRIVED', route: 'GZ.CN→LOS.NGA', pieces: 3, weight: 25.0 },
-    { id: 'sub-6-1', no: 'S-20260320000004-01', order_id: 'ord-6', line: 1, status: 'PENDING_INBOUND', route: 'GZ.CN→LOS.NGA', pieces: 3, weight: 18.0 },
-    { id: 'sub-6-2', no: 'S-20260320000004-02', order_id: 'ord-6', line: 2, status: 'PENDING_INBOUND', route: 'GZ.CN→LOS.NGA', pieces: 2, weight: 12.0 },
-  ];
-
-  for (const s of subOrders) {
-    insertSub.run(s.id, s.no, s.order_id, s.line, 'SEA', s.status, s.route, s.pieces, s.weight, now);
-  }
-
-  // 初始包裹
-  db.exec(`
-    INSERT INTO oms_package_initial (id, order_id, line_no, express_company, tracking_no, goods_name, goods_category, pieces, declared_weight_kg) VALUES
-    ('pkg-i-1', 'ord-1', 1, '顺丰', 'SF1234567890', '电子产品', 'ELECTRONICS', 1, 6.5),
-    ('pkg-i-2', 'ord-1', 2, '韵达', 'YT2603210001', '服装鞋帽', 'APPAREL', 1, 6.0),
-    ('pkg-i-3', 'ord-2', 1, '圆通', 'YT2603210002', '日用品', 'DAILY_USE', 1, 5.2),
-    ('pkg-i-4', 'ord-3', 1, '中通', 'ZT2603210001', '电子产品', 'ELECTRONICS', 1, 4.0),
-    ('pkg-i-5', 'ord-3', 2, '申通', 'ST2603210001', '美妆个护', 'BEAUTY', 1, 4.0),
-    ('pkg-i-6', 'ord-4', 1, '顺丰', 'SF2603210002', '机械配件', 'MACHINE_PARTS', 2, 15.0),
-    ('pkg-i-7', 'ord-5', 1, '顺丰', 'SF2603210003', '电子产品', 'ELECTRONICS', 3, 25.0),
-    ('pkg-i-8', 'ord-6', 1, '韵达', 'YD2603210003', '服装鞋帽', 'APPAREL', 3, 18.0),
-    ('pkg-i-9', 'ord-6', 2, '中通', 'ZT2603210004', '日用品', 'DAILY_USE', 2, 12.0);
-  `);
-
   // ============================================================
-  // 5.5 WMS 库存（已入库的子单 → 在库/已装箱/已出库）
+  // 8. 装箱 — 把已入库子单装入对应 JOB
   // ============================================================
 
-  db.exec(`
-    INSERT INTO wms_stock (id, business_line, warehouse_id, order_id, sub_order_id, stock_status, pieces, gross_weight_kg, volume_cbm, location_code, created_at) VALUES
-    ('stk-1', 'SEA', 'wh-gz', 'ord-1', 'sub-1-1', 'IN_STOCK',  1, 6.5,  0.045, 'A-01-03',  '${now}'),
-    ('stk-2', 'SEA', 'wh-gz', 'ord-2', 'sub-2-1', 'IN_STOCK',  1, 5.2,  0.030, 'A-02-01',  '${now}'),
-    ('stk-3', 'SEA', 'wh-gz', 'ord-4', 'sub-4-1', 'PACKED',    2, 15.0, 0.120, 'B-03-05',  '${now}'),
-    ('stk-4', 'SEA', 'wh-gz', 'ord-5', 'sub-5-1', 'OUTBOUND',  3, 25.0, 0.180, 'C-01-02',  '${now}'),
-    ('stk-5', 'SEA', 'wh-sz', 'ord-2', 'sub-2-1', 'IN_STOCK',  1, 5.2,  0.030, 'SZ-A-12',  '${now}'),
-    ('stk-6', 'SEA', 'wh-gz', 'ord-1', 'sub-1-2', 'ALLOCATED', 1, 6.0,  0.040, 'A-01-04',  '${now}'),
-    ('stk-7', 'SEA', 'wh-gz', 'ord-6', 'sub-6-1', 'IN_STOCK',  3, 18.0, 0.140, 'A-04-02',  '${now}'),
-    ('stk-8', 'SEA', 'wh-gz', 'ord-6', 'sub-6-2', 'IN_STOCK',  2, 12.0, 0.090, 'A-04-03',  '${now}');
-  `);
+  // job-sea-completed (40HQ MSKU1234567) 装 ord1 + ord4
+  bindSubOrders(db, {
+    jobId: jobSeaCompleted.id,
+    unitId: jobSeaCompleted.unitIds[0],
+    subOrderIds: [...ord1.subOrderIds, ...ord4.subOrderIds],
+  });
+  sealUnit(db, jobSeaCompleted.unitIds[0], 'SL-200225-A1');
+
+  // job-sea-arrived (40HQ MSKU2345678) 装 ord8 + ord9
+  bindSubOrders(db, {
+    jobId: jobSeaArrived.id,
+    unitId: jobSeaArrived.unitIds[0],
+    subOrderIds: [...ord8.subOrderIds, ...ord9.subOrderIds],
+  });
+  sealUnit(db, jobSeaArrived.unitIds[0], 'SL-260315-B1');
+
+  // job-sea-intransit (40HQ COSU3456789) 装 ord6 + ord7
+  bindSubOrders(db, {
+    jobId: jobSeaInTransit.id,
+    unitId: jobSeaInTransit.unitIds[0],
+    subOrderIds: [...ord6.subOrderIds, ...ord7.subOrderIds],
+  });
+  sealUnit(db, jobSeaInTransit.unitIds[0], 'SL-260401-C1');
+
+  // job-sea-departed (40HQ EMCU4567890) 装 ord10
+  bindSubOrders(db, {
+    jobId: jobSeaDeparted.id,
+    unitId: jobSeaDeparted.unitIds[0],
+    subOrderIds: ord10.subOrderIds,
+  });
+  sealUnit(db, jobSeaDeparted.unitIds[0], 'SL-260410-D1');
+
+  // job-sea-loading (40HQ EISU5678901) 装 ord5 (装箱中，未封箱)
+  bindSubOrders(db, {
+    jobId: jobSeaLoading.id,
+    unitId: jobSeaLoading.unitIds[0],
+    subOrderIds: ord5.subOrderIds,
+  });
+
+  // job-air-loading: 把 ord11 装入第一个集装号 PMC-001
+  bindSubOrders(db, {
+    jobId: jobAirLoading.id,
+    unitId: jobAirLoading.unitIds[0],
+    subOrderIds: ord11.subOrderIds,
+  });
 
   // ============================================================
-  // 6. TMS 任务（10条 JOB，对齐 Web 起运国办数据）
+  // 9. 节点推进 — 写 tracking_event 历史
   // ============================================================
 
-  db.exec(`
-    INSERT INTO tms_job (id, job_no, business_line, route_code, origin_port, dest_port, carrier_name, bill_no, container_no, container_type, cargo_type, service_type, job_status, current_node, total_pieces, total_weight_kg, etd, eta, created_by, created_at) VALUES
-    ('job-1', 'S-JOB26030001', 'SEA', 'CAN.CHN→LOS.NGN', 'CAN', 'LOS', '马士基', 'MBL202603210001', 'CSLU2185436', '40HQ', 'GENERAL', 'EXPRESS', 'ARRIVED', 'ARRIVAL', 38, 1820, '2026-03-10', '2026-04-03', 'user-opscn1', '${now}'),
-    ('job-2', 'S-JOB26030002', 'SEA', 'HKG.CHN→LOS.NGN', 'HKG', 'LOS', '中远海运', 'MBL202603210002', 'CSLU2185436', '40GP', 'GENERAL', 'EXPRESS', 'ARRIVED', 'ARRIVAL', 25, 1200, '2026-03-12', '2026-04-05', 'user-opscn1', '${now}'),
-    ('job-3', 'S-JOB26030003', 'SEA', 'CAN.CHN→LOS.NGN', 'CAN', 'LOS', '马士基', NULL, 'EGLV5678901', '40HQ', 'SENSITIVE', 'EXPRESS', 'CUSTOMS_EXPORT', 'CUSTOMS_EXPORT', 30, 1500, '2026-04-15', '2026-05-10', 'user-opscn1', '${now}'),
-    ('job-4', 'S-JOB26030004', 'SEA', 'CAN.CHN→LOS.NGN', 'CAN', 'LOS', '马士基', NULL, 'HLXU7890412', '40HQ', 'GENERAL', 'EXPRESS', 'LOADING', 'WAREHOUSE_IN', 20, 980, '2026-04-20', '2026-05-15', 'user-opscn1', '${now}'),
-    ('job-5', 'S-JOB26030005', 'SEA', 'HKG.CHN→LOS.NGN', 'HKG', 'LOS', '中远海运', NULL, 'TCLU9012345', '40HQ', 'GENERAL', 'EXPRESS', 'IN_TRANSIT', 'IN_TRANSIT', 35, 1650, '2026-03-28', '2026-04-18', 'user-opscn1', '${now}'),
-    ('job-6', 'S-JOB26030007', 'SEA', 'SZX.CHN→LOS.NGN', 'SZX', 'LOS', '中远海运', NULL, 'TRLU1234567', '40GP', 'SENSITIVE', 'EXPRESS', 'IN_TRANSIT', 'CUSTOMS_IMPORT', 22, 1100, '2026-03-25', '2026-04-14', 'user-opscn1', '${now}'),
-    ('job-7', 'S-JOB26030008', 'SEA', 'CAN.CHN→LOS.NGN', 'CAN', 'LOS', '马士基', NULL, 'BMOU2345678', '40HQ', 'GENERAL', 'EXPRESS', 'CUSTOMS_EXPORT', 'CUSTOMS_EXPORT', 45, 2100, '2026-04-15', '2026-05-10', 'user-opscn1', '${now}'),
-    ('job-8', 'S-JOB26030010', 'SEA', 'HKG.CHN→LOS.NGN', 'HKG', 'LOS', '中远海运', NULL, 'SEGU5678901', '40GP', 'SENSITIVE', 'EXPRESS', 'DEPARTED', 'DEPARTURE', 28, 1350, '2026-04-08', '2026-05-02', 'user-opscn1', '${now}'),
-    ('job-9', 'S-JOB26040001', 'SEA', 'CAN.CHN→LOS.NGN', 'CAN', 'LOS', NULL, NULL, 'CSLU1234567', '40HQ', 'GENERAL', 'EXPRESS', 'LOADING', 'WAREHOUSE_IN', 45, 1200, '2026-04-20', '2026-05-15', 'user-opscn1', '${now}'),
-    ('job-10', 'S-JOB26040002', 'SEA', 'SZX.CHN→LOS.NGN', 'SZX', 'LOS', '马士基', NULL, 'MSKU7654321', '40GP', 'GENERAL', 'EXPRESS', 'LOADING', 'WAREHOUSE_IN', 28, 470, '2026-04-12', '2026-05-08', 'user-opscn1', '${now}');
-  `);
+  const advanceWith = (jobId: string, events: Array<[string, string, string, string]>) => {
+    for (const [code, name, eventTime, location] of events) {
+      advanceNode(db, {
+        jobId, nodeCode: code, nodeName: name, eventTime, location,
+        operatorUserId: 'user-opscn1',
+      });
+    }
+  };
 
-  // 装箱单元
-  db.exec(`
-    INSERT INTO tms_shipping_unit (id, unit_no, business_line, unit_type, container_type, warehouse_id, job_id, route_code, unit_status, max_weight_kg, max_volume_cbm, current_weight_kg, current_volume_cbm) VALUES
-    ('unit-1', 'CSLU1234567', 'SEA', 'CONTAINER', '40HQ', 'wh-gz', 'job-9', 'CAN.CHN→LOS.NGN', 'LOADING', 26000, 67.5, 1200, 38.5),
-    ('unit-2', 'MSKU7654321', 'SEA', 'CONTAINER', '40GP', 'wh-sz', 'job-10', 'SZX.CHN→LOS.NGN', 'LOADING', 21000, 33.0, 470, 28.2);
-  `);
+  // job-sea-completed: 12 节点全完成
+  advanceWith(jobSeaCompleted.id, [
+    ['WAREHOUSE_OUT',     '已离库',     '2026-02-25 08:00:00', '广州总仓'],
+    ['CUSTOMS_EXPORT',    '出口报关',   '2026-02-25 14:00:00', '黄埔海关'],
+    ['CUSTOMS_RELEASE',   '海关放行',   '2026-02-26 10:00:00', '黄埔海关'],
+    ['DEPARTURE',         '已起运',     '2026-02-27 06:00:00', '广州黄埔港'],
+    ['IN_TRANSIT',        '在途运输',   '2026-03-01 12:00:00', '南海'],
+    ['ARRIVAL',           '已到港',     '2026-03-21 09:00:00', '拉各斯港'],
+    ['CUSTOMS_IMPORT',    '进口申报',   '2026-03-21 15:00:00', 'Apapa Customs'],
+    ['CUSTOMS_CLEARED',   '进口放行',   '2026-03-23 11:00:00', 'Apapa Customs'],
+    ['WAREHOUSE_IN',      '到达入仓',   '2026-03-24 16:00:00', '拉各斯主仓'],
+    ['SIGNED',            '已签收',     '2026-03-26 14:00:00', 'Customer'],
+  ]);
+
+  // job-sea-arrived: 到 WAREHOUSE_IN，等待 DPN
+  advanceWith(jobSeaArrived.id, [
+    ['WAREHOUSE_OUT',     '已离库',     '2026-03-15 08:00:00', '广州总仓'],
+    ['CUSTOMS_EXPORT',    '出口报关',   '2026-03-15 14:30:00', '黄埔海关'],
+    ['CUSTOMS_RELEASE',   '海关放行',   '2026-03-16 11:00:00', '黄埔海关'],
+    ['DEPARTURE',         '已起运',     '2026-03-17 06:00:00', '广州黄埔港'],
+    ['IN_TRANSIT',        '在途运输',   '2026-03-19 12:00:00', '南海'],
+    ['ARRIVAL',           '已到港',     '2026-04-09 09:00:00', '拉各斯港'],
+    ['CUSTOMS_IMPORT',    '进口申报',   '2026-04-09 15:00:00', 'Apapa Customs'],
+    ['CUSTOMS_CLEARED',   '进口放行',   '2026-04-11 11:00:00', 'Apapa Customs'],
+    ['WAREHOUSE_IN',      '到达入仓',   '2026-04-12 16:00:00', '拉各斯主仓'],
+  ]);
+
+  // job-sea-intransit: 到 IN_TRANSIT
+  advanceWith(jobSeaInTransit.id, [
+    ['WAREHOUSE_OUT',     '已离库',     '2026-04-01 08:00:00', '深圳集货区'],
+    ['CUSTOMS_EXPORT',    '出口报关',   '2026-04-01 14:00:00', '深圳海关'],
+    ['CUSTOMS_RELEASE',   '海关放行',   '2026-04-02 11:00:00', '深圳海关'],
+    ['DEPARTURE',         '已起运',     '2026-04-03 06:00:00', '盐田港'],
+    ['IN_TRANSIT',        '在途运输',   '2026-04-05 12:00:00', '南海'],
+  ]);
+
+  // job-sea-departed: 到 DEPARTURE
+  advanceWith(jobSeaDeparted.id, [
+    ['WAREHOUSE_OUT',     '已离库',     '2026-04-10 08:00:00', '广州总仓'],
+    ['CUSTOMS_EXPORT',    '出口报关',   '2026-04-10 14:00:00', '黄埔海关'],
+    ['CUSTOMS_RELEASE',   '海关放行',   '2026-04-11 11:00:00', '黄埔海关'],
+    ['DEPARTURE',         '已起运',     '2026-04-12 06:00:00', '香港葵青港'],
+  ]);
+  // job-sea-loading 没有节点（还在装箱中）
+  // job-sea-planned-* 没有节点
+  // job-air-loading 没有节点
 
   // ============================================================
   // 7. 调拨（3条，对齐 Web 调拨管理数据）
@@ -751,24 +1206,292 @@ export function seedDatabase(): void {
   `);
 
   // ============================================================
-  // 8. DPN 末端配送（对齐 Web 到达国数据）
+  // 10. 到达国任务入库 — 链路 A（已完成）& 链路 C（已到达）
   // ============================================================
 
-  db.exec(`
-    INSERT INTO pod_dpn (id, dpn_no, business_line, dpn_type, from_site, to_site, dpn_status, total_orders, total_pieces, total_weight_kg, created_by, created_at) VALUES
-    ('dpn-1', 'DPN-20260320-9901', 'SEA', 'DELIVERY', '广州起运站', '拉各斯新到达站', 'PENDING_DISPATCH', 6, 6, 180, 'user-opsus1', '${now}'),
-    ('dpn-2', 'DPN-20260320-9901-dup', 'SEA', 'DELIVERY', '广州起运站', '拉各斯新到达站', 'IN_TRANSIT', 6, 4, 120, 'user-opsus1', '${now}'),
-    ('dpn-3', 'DPN-20260320-1561', 'SEA', 'TRANSFER', '1111111111', '1111111111', 'PENDING_BIND', 0, 0, 0, 'user-opsus1', '${now}'),
-    ('dpn-4', 'DPN-20260320-0960', 'SEA', 'TRANSFER', '1111111111111111111', '1111111111111111111', 'PENDING_BIND', 0, 0, 0, 'user-opsus1', '${now}');
+  // job-sea-completed 已签收，但仍需先生成到达入库记录
+  createDestInbound(db, {
+    jobId: jobSeaCompleted.id,
+    warehouseId: 'wh-los',
+    operatorUserId: 'user-whus1',
+    inboundAt: '2026-03-24 16:30:00',
+    items: [
+      ...ord1.subOrderIds.map((sid) => ({ subOrderId: sid, cargoStatus: 'INTACT' as const })),
+      ...ord4.subOrderIds.map((sid) => ({ subOrderId: sid, cargoStatus: 'INTACT' as const })),
+    ],
+  });
 
-    INSERT INTO pod_delivery_task (id, dpn_id, task_no, sub_order_no, recipient_name, recipient_phone, recipient_address, service_type, task_status, driver_name, driver_phone, created_at) VALUES
-    ('dt-1', 'dpn-1', 'S-20260320990001-01', 'S-20260320990001', 'Amina Yusuf', '+234 803 555 2001', '15 Awolowo Way, Ikeja, Lagos', 'DELIVERY', 'IN_TRANSIT', 'Ibrahim Musa', '+234-803-555-4001', '${now}'),
-    ('dt-2', 'dpn-1', 'S-20260321990001-01', 'S-20260321990001', 'Temi Balogun', '+234 805 330 1001', 'Lekki Phase 1, Lagos', 'DELIVERY', 'PENDING', NULL, NULL, '${now}');
+  // job-sea-arrived 入库（链路 C，等待 DPN）
+  createDestInbound(db, {
+    jobId: jobSeaArrived.id,
+    warehouseId: 'wh-los',
+    operatorUserId: 'user-whus1',
+    inboundAt: '2026-04-12 16:30:00',
+    items: [
+      ...ord8.subOrderIds.map((sid) => ({ subOrderId: sid, cargoStatus: 'INTACT' as const })),
+      ...ord9.subOrderIds.map((sid) => ({ subOrderId: sid, cargoStatus: 'INTACT' as const })),
+    ],
+  });
 
-    INSERT INTO pod_pickup (id, pickup_no, dpn_id, sub_order_no, tracking_no, recipient_name, recipient_phone, pickup_station, pickup_code, pieces, weight_kg, notify_status, created_at) VALUES
-    ('pk-1', 'P-20260411-0901', 'dpn-1', 'S-202603190041-01', 'SF2603190041', 'Ada Nwosu', '+234 903 832 1727', 'IKEJ STA', '891234', 2, 8.5, 'NOTIFIED', '${now}'),
-    ('pk-2', 'P-20260410-0902', 'dpn-2', 'A-202603190042-01', 'YT2603190042', 'Emeka Eze', '+234 810 554 7820', 'ABUJ STA', '567890', 1, 3.2, 'PICKED_UP', '${now}');
-  `);
+  // ============================================================
+  // 11. POD 末端配送 — DPN
+  // ============================================================
+
+  // 链路 A 完成态：本站直接配送给客户，已签收
+  createDeliveryDpn(db, {
+    id: 'dpn-completed',
+    businessLine: 'SEA',
+    warehouseId: 'wh-los',
+    fromSite: 'IKEJ STA',
+    toSite: '客户家',
+    customerId: 'cust-1',
+    recipientName: 'Ada Nwosu',
+    recipientPhone: '+234-903-832-1727',
+    recipientAddress: '23 Allen Avenue, Ikeja, Lagos',
+    recipientCountry: '尼日利亚',
+    recipientCity: '拉各斯',
+    deliveryMethod: 'DELIVERY',
+    status: 'SIGNED',
+    driverName: 'Ibrahim Musa',
+    driverPhone: '+234-803-555-4001',
+    plateNo: 'LAG-218-AB',
+    dispatchTime: '2026-03-25 09:00:00',
+    arrivalTime: '2026-03-26 13:00:00',
+    remark: '链路A：本站配送，已签收',
+    createdBy: 'user-opsus1',
+    createdAt: '2026-03-24 17:00:00',
+    subOrderIds: [...ord1.subOrderIds, ...ord4.subOrderIds],
+    deliveryTasks: [
+      {
+        recipientName: 'Ada Nwosu',
+        recipientPhone: '+234-903-832-1727',
+        recipientAddress: '23 Allen Avenue, Ikeja, Lagos',
+        taskStatus: 'SIGNED',
+        signedBy: 'Ada Nwosu',
+        signedAt: '2026-03-26 14:00:00',
+        codAmount: 0,
+      },
+    ],
+  });
+
+  // 链路 C-1 (DPN 站点调拨)：拉各斯主仓 → 阿布贾卫星 — ord8
+  createTransferDpn(db, {
+    id: 'dpn-transfer-abv',
+    businessLine: 'SEA',
+    fromSite: 'IKEJ STA',
+    toSite: 'ABV STA',
+    fromWarehouseId: 'wh-los',
+    toWarehouseId: 'wh-abv',
+    status: 'PENDING_DISPATCH',
+    driverName: 'Chukwu Obi',
+    driverPhone: '+234-803-555-3001',
+    plateNo: 'ABV-446-CD',
+    remark: '链路C：调拨到阿布贾卫星站',
+    createdBy: 'user-opsus1',
+    createdAt: '2026-04-13 10:00:00',
+    subOrderIds: ord8.subOrderIds,
+  });
+
+  // 链路 C-2：本站配送给 ord9 客户（与调拨平行）
+  createDeliveryDpn(db, {
+    id: 'dpn-delivering',
+    businessLine: 'SEA',
+    warehouseId: 'wh-los',
+    fromSite: 'IKEJ STA',
+    toSite: '客户家',
+    customerId: 'cust-5',
+    recipientName: 'Amina Yusuf',
+    recipientPhone: '+234-803-555-2001',
+    recipientAddress: '15 Awolowo Way, Ikeja, Lagos',
+    recipientCountry: '尼日利亚',
+    recipientCity: '拉各斯',
+    deliveryMethod: 'DELIVERY',
+    status: 'IN_TRANSIT',
+    driverName: 'Ibrahim Musa',
+    driverPhone: '+234-803-555-4001',
+    plateNo: 'LAG-218-AB',
+    dispatchTime: '2026-04-13 14:00:00',
+    remark: '链路C 配角：本站配送中',
+    createdBy: 'user-opsus1',
+    createdAt: '2026-04-13 09:30:00',
+    subOrderIds: ord9.subOrderIds,
+    deliveryTasks: [
+      {
+        recipientName: 'Amina Yusuf',
+        recipientPhone: '+234-803-555-2001',
+        recipientAddress: '15 Awolowo Way, Ikeja, Lagos',
+        taskStatus: 'IN_TRANSIT',
+      },
+    ],
+  });
+
+  // ============================================================
+  // 12. 财务 — 应收/应付/付款
+  // ============================================================
+
+  // 链路 A (ord1+ord4) 已完成 → 应收 + 应付都已结清
+  recordFee(db, {
+    businessLine: 'SEA', feeLevel: 'ORDER',
+    relatedId: ord1.id, relatedNo: ord1.orderNo,
+    feeItemCode: 'FREIGHT', feeDirection: 'RECEIVABLE',
+    amount: 4800, currencyCode: 'CNY',
+    counterpartyName: '深圳市臻诚跨境贸易有限公司',
+    feeStatus: 'PAID',
+    description: '运费 - GZ→LOS 海运 LCL',
+    createdBy: 'user-fin1',
+    createdAt: '2026-02-26 09:00:00',
+  });
+  const oceanFreight1 = recordFee(db, {
+    businessLine: 'SEA', feeLevel: 'JOB',
+    relatedId: jobSeaCompleted.id, relatedNo: jobSeaCompleted.jobNo,
+    feeItemCode: 'OCEAN_FREIGHT', feeDirection: 'PAYABLE',
+    amount: 18000, currencyCode: 'CNY',
+    counterpartyName: '马士基',
+    feeStatus: 'PAID',
+    description: '海运费 - 40HQ MSKU1234567',
+    createdBy: 'user-fin1',
+    createdAt: '2026-02-27 10:00:00',
+  });
+  recordPayment(db, {
+    relatedFeeId: oceanFreight1.id,
+    paymentType: 'OUTBOUND',
+    amount: 18000, currencyCode: 'CNY',
+    paymentMethod: '银行转账',
+    paymentTime: '2026-03-05 14:00:00',
+    remark: '付马士基 2 月海运费',
+    createdAt: '2026-03-05 14:00:00',
+  });
+  recordFee(db, {
+    businessLine: 'SEA', feeLevel: 'JOB',
+    relatedId: jobSeaCompleted.id, relatedNo: jobSeaCompleted.jobNo,
+    feeItemCode: 'TRUCKING', feeDirection: 'PAYABLE',
+    amount: 1200, currencyCode: 'CNY',
+    counterpartyName: '广州顺达拖车',
+    feeStatus: 'PAID',
+    description: '拖车费 - 黄埔港',
+    createdBy: 'user-fin1',
+    createdAt: '2026-02-28 10:00:00',
+  });
+  recordFee(db, {
+    businessLine: 'SEA', feeLevel: 'JOB',
+    relatedId: jobSeaCompleted.id, relatedNo: jobSeaCompleted.jobNo,
+    feeItemCode: 'CUSTOMS_EXPORT', feeDirection: 'PAYABLE',
+    amount: 800, currencyCode: 'CNY',
+    counterpartyName: '广州外代',
+    feeStatus: 'PAID',
+    description: '出口报关费',
+    createdBy: 'user-fin1',
+    createdAt: '2026-02-28 11:00:00',
+  });
+
+  // ord4 应收
+  recordFee(db, {
+    businessLine: 'SEA', feeLevel: 'ORDER',
+    relatedId: ord4.id, relatedNo: ord4.orderNo,
+    feeItemCode: 'FREIGHT', feeDirection: 'RECEIVABLE',
+    amount: 3600, currencyCode: 'CNY',
+    counterpartyName: '广州海通进出口有限公司',
+    feeStatus: 'PAID',
+    description: '运费 - GZ→LOS',
+    createdBy: 'user-fin1',
+    createdAt: '2026-02-27 09:00:00',
+  });
+
+  // 链路 B (ord6+ord7 在途)：应收已收，应付待付
+  recordFee(db, {
+    businessLine: 'SEA', feeLevel: 'ORDER',
+    relatedId: ord6.id, relatedNo: ord6.orderNo,
+    feeItemCode: 'FREIGHT', feeDirection: 'RECEIVABLE',
+    amount: 6800, currencyCode: 'CNY',
+    counterpartyName: '东莞恒通电子科技有限公司',
+    feeStatus: 'APPROVED',
+    description: '运费 - SZ→LOS 在途',
+    createdBy: 'user-fin1',
+    createdAt: '2026-04-02 10:00:00',
+  });
+  recordFee(db, {
+    businessLine: 'SEA', feeLevel: 'JOB',
+    relatedId: jobSeaInTransit.id, relatedNo: jobSeaInTransit.jobNo,
+    feeItemCode: 'OCEAN_FREIGHT', feeDirection: 'PAYABLE',
+    amount: 19500, currencyCode: 'CNY',
+    counterpartyName: '中远海运',
+    feeStatus: 'APPROVED',
+    description: '海运费 - 40HQ COSU3456789',
+    createdBy: 'user-fin1',
+    createdAt: '2026-04-03 11:00:00',
+  });
+
+  // 链路 C (ord8+ord9): 应收已结清
+  recordFee(db, {
+    businessLine: 'SEA', feeLevel: 'ORDER',
+    relatedId: ord8.id, relatedNo: ord8.orderNo,
+    feeItemCode: 'FREIGHT', feeDirection: 'RECEIVABLE',
+    amount: 7200, currencyCode: 'CNY',
+    counterpartyName: '深圳旺达跨境贸易有限公司',
+    feeStatus: 'PAID',
+    description: '运费 - GZ→LOS 待 DPN 转运到 ABV',
+    createdBy: 'user-fin1',
+    createdAt: '2026-03-13 10:00:00',
+  });
+  recordFee(db, {
+    businessLine: 'SEA', feeLevel: 'ORDER',
+    relatedId: ord9.id, relatedNo: ord9.orderNo,
+    feeItemCode: 'FREIGHT', feeDirection: 'RECEIVABLE',
+    amount: 3200, currencyCode: 'CNY',
+    counterpartyName: '深圳旺达跨境贸易有限公司',
+    feeStatus: 'PAID',
+    description: '运费 - GZ→LOS 本站配送',
+    createdBy: 'user-fin1',
+    createdAt: '2026-03-13 10:30:00',
+  });
+  recordFee(db, {
+    businessLine: 'SEA', feeLevel: 'JOB',
+    relatedId: jobSeaArrived.id, relatedNo: jobSeaArrived.jobNo,
+    feeItemCode: 'OCEAN_FREIGHT', feeDirection: 'PAYABLE',
+    amount: 18500, currencyCode: 'CNY',
+    counterpartyName: '马士基',
+    feeStatus: 'PAID',
+    description: '海运费 - 40HQ MSKU2345678',
+    createdBy: 'user-fin1',
+    createdAt: '2026-03-18 09:00:00',
+  });
+  recordFee(db, {
+    businessLine: 'SEA', feeLevel: 'DPN',
+    relatedId: 'dpn-transfer-abv',
+    feeItemCode: 'LAST_MILE', feeDirection: 'PAYABLE',
+    amount: 850, currencyCode: 'NGN', fxRate: 0.0047,
+    counterpartyName: '阿布贾本地拖车',
+    feeStatus: 'DRAFT',
+    description: '末端派送费 - IKEJ→ABV',
+    createdBy: 'user-fin1',
+    createdAt: '2026-04-13 11:00:00',
+  });
+
+  // ord5 (装箱中) 应收待审批
+  recordFee(db, {
+    businessLine: 'SEA', feeLevel: 'ORDER',
+    relatedId: ord5.id, relatedNo: ord5.orderNo,
+    feeItemCode: 'FREIGHT', feeDirection: 'RECEIVABLE',
+    amount: 5600, currencyCode: 'CNY',
+    counterpartyName: '义乌锦沪国际物流有限公司',
+    feeStatus: 'PENDING_APPROVAL',
+    description: '运费 - GZ→LOS 装箱中',
+    createdBy: 'user-sales1',
+    createdAt: '2026-04-13 14:00:00',
+  });
+
+  // ord10 (DEPARTED) 应付驳回
+  recordFee(db, {
+    businessLine: 'SEA', feeLevel: 'ORDER',
+    relatedId: ord10.id, relatedNo: ord10.orderNo,
+    feeItemCode: 'INSURANCE', feeDirection: 'RECEIVABLE',
+    amount: 380, currencyCode: 'CNY',
+    counterpartyName: '广州金辉国际贸易有限公司',
+    feeStatus: 'REJECTED',
+    description: '保险费 - 客户拒付',
+    createdBy: 'user-sales1',
+    createdAt: '2026-04-08 14:00:00',
+  });
 
   // ============================================================
   // 9. 无单快递（2条）

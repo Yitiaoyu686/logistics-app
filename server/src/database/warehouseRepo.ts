@@ -263,7 +263,8 @@ export function createDestInbound(
       CARGO_TO_CONDITION[cargo] || 'GOOD',
       it.deliveryStatus || 'PENDING_DELIVERY',
       cargo,
-      cargo === 'LOST' ? 'ABNORMAL' : 'COMPLETED'
+      cargo === 'LOST' ? 'ABNORMAL' : 'COMPLETED',
+      inboundAt
     );
     insertStock.run(
       uuid(),
