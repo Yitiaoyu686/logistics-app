@@ -118,13 +118,115 @@ export function seedDatabase(): void {
     ('route-gz-abv-sea', 'CN', 'GZ', 'NGA', 'ABV', 'SEA', '30-40天', 700),
     ('route-hkg-acc-sea', 'CN', 'HKG', 'GHA', 'ACC', 'SEA', '25-35天', 700);
 
-    INSERT INTO md_fee_item (id, code, name, direction) VALUES
-    ('fi-freight', 'FREIGHT', '运费', 'RECEIVABLE'),
-    ('fi-first-weight', 'FIRST_WEIGHT', '首重', 'RECEIVABLE'),
-    ('fi-cont-weight', 'CONTINUATION_WEIGHT', '续重', 'RECEIVABLE'),
-    ('fi-customs-imp', 'CUSTOMS_IMPORT', '进口报关费', 'PAYABLE'),
-    ('fi-last-mile', 'LAST_MILE', '到门费用', 'PAYABLE'),
-    ('fi-discount', 'FREIGHT_DISCOUNT', '运费折扣', 'RECEIVABLE');
+    INSERT INTO md_fee_item (id, code, name, name_en, direction) VALUES
+    -- 应收（向客户收）
+    ('fi-freight',         'FREIGHT',             '运费',         'Freight',                 'RECEIVABLE'),
+    ('fi-first-weight',    'FIRST_WEIGHT',        '首重',         'First Weight',            'RECEIVABLE'),
+    ('fi-cont-weight',     'CONTINUATION_WEIGHT', '续重',         'Continuation Weight',     'RECEIVABLE'),
+    ('fi-discount',        'FREIGHT_DISCOUNT',    '运费折扣',     'Freight Discount',        'RECEIVABLE'),
+    ('fi-insurance',       'INSURANCE',           '保险费',       'Insurance',               'RECEIVABLE'),
+    ('fi-handling',        'HANDLING',            '操作费',       'Handling Fee',            'RECEIVABLE'),
+    -- 应付（付供应商）
+    ('fi-ocean-freight',   'OCEAN_FREIGHT',       '海运费',       'Ocean Freight',           'PAYABLE'),
+    ('fi-air-freight',     'AIR_FREIGHT',         '空运费',       'Air Freight',             'PAYABLE'),
+    ('fi-trucking',        'TRUCKING',            '拖车费',       'Trucking',                'PAYABLE'),
+    ('fi-customs-exp',     'CUSTOMS_EXPORT',      '出口报关费',   'Export Customs',          'PAYABLE'),
+    ('fi-customs-imp',     'CUSTOMS_IMPORT',      '进口报关费',   'Import Customs',          'PAYABLE'),
+    ('fi-clearance',       'CLEARANCE',           '清关费',       'Customs Clearance',       'PAYABLE'),
+    ('fi-fuel-surcharge',  'FUEL_SURCHARGE',      '燃油附加费',   'Fuel Surcharge',          'PAYABLE'),
+    ('fi-warehousing',     'WAREHOUSING',         '仓租费',       'Warehousing',             'PAYABLE'),
+    ('fi-last-mile',       'LAST_MILE',           '末端派送费',   'Last Mile Delivery',      'PAYABLE'),
+    ('fi-doc-fee',         'DOC_FEE',             '单证费',       'Documentation Fee',       'PAYABLE');
+
+    -- ============================================================
+    -- 物流节点模板 (md_logistics_node)
+    -- 海运起运国 5 节点 + 到达国 7 节点
+    -- 空运起运国 4 节点 + 到达国 6 节点
+    -- ============================================================
+
+    -- 4 条海运线路（GZ→LOS / SZX→LOS / HKG→LOS / GZ→ABV / HKG→ACC）共用一份节点定义
+    INSERT INTO md_logistics_node (id, route_id, node_code, node_name, node_name_en, node_type, sort_order, is_required) VALUES
+    -- route-gz-los-sea
+    ('ln-gzlos-01','route-gz-los-sea','WAREHOUSE_OUT','已离库','Departed Warehouse','WAREHOUSE_OUT',1,1),
+    ('ln-gzlos-02','route-gz-los-sea','CUSTOMS_EXPORT','出口报关','Export Customs Filing','CUSTOMS_EXPORT',2,1),
+    ('ln-gzlos-03','route-gz-los-sea','CUSTOMS_INSPECT','海关查验','Customs Inspection','CUSTOMS_EXPORT',3,0),
+    ('ln-gzlos-04','route-gz-los-sea','CUSTOMS_RELEASE','海关放行','Customs Released','CUSTOMS_EXPORT',4,1),
+    ('ln-gzlos-05','route-gz-los-sea','DEPARTURE','已起运','Vessel Departed','DEPARTURE',5,1),
+    ('ln-gzlos-06','route-gz-los-sea','IN_TRANSIT','在途运输','In Transit','IN_TRANSIT',6,1),
+    ('ln-gzlos-07','route-gz-los-sea','ARRIVAL','已到港','Arrived at Port','ARRIVAL',7,1),
+    ('ln-gzlos-08','route-gz-los-sea','CUSTOMS_IMPORT','进口申报','Import Filing','CUSTOMS_IMPORT',8,1),
+    ('ln-gzlos-09','route-gz-los-sea','CUSTOMS_INSPECT_IMP','进口查验','Import Inspection','CUSTOMS_IMPORT',9,0),
+    ('ln-gzlos-10','route-gz-los-sea','CUSTOMS_CLEARED','进口放行','Import Cleared','CUSTOMS_IMPORT',10,1),
+    ('ln-gzlos-11','route-gz-los-sea','WAREHOUSE_IN','到达入仓','Arrived at Warehouse','WAREHOUSE_IN',11,1),
+    ('ln-gzlos-12','route-gz-los-sea','SIGNED','已签收','Delivered','SIGNED',12,1),
+
+    -- route-sz-los-sea
+    ('ln-szlos-01','route-sz-los-sea','WAREHOUSE_OUT','已离库','Departed Warehouse','WAREHOUSE_OUT',1,1),
+    ('ln-szlos-02','route-sz-los-sea','CUSTOMS_EXPORT','出口报关','Export Customs Filing','CUSTOMS_EXPORT',2,1),
+    ('ln-szlos-03','route-sz-los-sea','CUSTOMS_INSPECT','海关查验','Customs Inspection','CUSTOMS_EXPORT',3,0),
+    ('ln-szlos-04','route-sz-los-sea','CUSTOMS_RELEASE','海关放行','Customs Released','CUSTOMS_EXPORT',4,1),
+    ('ln-szlos-05','route-sz-los-sea','DEPARTURE','已起运','Vessel Departed','DEPARTURE',5,1),
+    ('ln-szlos-06','route-sz-los-sea','IN_TRANSIT','在途运输','In Transit','IN_TRANSIT',6,1),
+    ('ln-szlos-07','route-sz-los-sea','ARRIVAL','已到港','Arrived at Port','ARRIVAL',7,1),
+    ('ln-szlos-08','route-sz-los-sea','CUSTOMS_IMPORT','进口申报','Import Filing','CUSTOMS_IMPORT',8,1),
+    ('ln-szlos-09','route-sz-los-sea','CUSTOMS_INSPECT_IMP','进口查验','Import Inspection','CUSTOMS_IMPORT',9,0),
+    ('ln-szlos-10','route-sz-los-sea','CUSTOMS_CLEARED','进口放行','Import Cleared','CUSTOMS_IMPORT',10,1),
+    ('ln-szlos-11','route-sz-los-sea','WAREHOUSE_IN','到达入仓','Arrived at Warehouse','WAREHOUSE_IN',11,1),
+    ('ln-szlos-12','route-sz-los-sea','SIGNED','已签收','Delivered','SIGNED',12,1),
+
+    -- route-hkg-los-sea
+    ('ln-hklos-01','route-hkg-los-sea','WAREHOUSE_OUT','已离库','Departed Warehouse','WAREHOUSE_OUT',1,1),
+    ('ln-hklos-02','route-hkg-los-sea','CUSTOMS_EXPORT','出口报关','Export Customs Filing','CUSTOMS_EXPORT',2,1),
+    ('ln-hklos-03','route-hkg-los-sea','CUSTOMS_INSPECT','海关查验','Customs Inspection','CUSTOMS_EXPORT',3,0),
+    ('ln-hklos-04','route-hkg-los-sea','CUSTOMS_RELEASE','海关放行','Customs Released','CUSTOMS_EXPORT',4,1),
+    ('ln-hklos-05','route-hkg-los-sea','DEPARTURE','已起运','Vessel Departed','DEPARTURE',5,1),
+    ('ln-hklos-06','route-hkg-los-sea','IN_TRANSIT','在途运输','In Transit','IN_TRANSIT',6,1),
+    ('ln-hklos-07','route-hkg-los-sea','ARRIVAL','已到港','Arrived at Port','ARRIVAL',7,1),
+    ('ln-hklos-08','route-hkg-los-sea','CUSTOMS_IMPORT','进口申报','Import Filing','CUSTOMS_IMPORT',8,1),
+    ('ln-hklos-09','route-hkg-los-sea','CUSTOMS_INSPECT_IMP','进口查验','Import Inspection','CUSTOMS_IMPORT',9,0),
+    ('ln-hklos-10','route-hkg-los-sea','CUSTOMS_CLEARED','进口放行','Import Cleared','CUSTOMS_IMPORT',10,1),
+    ('ln-hklos-11','route-hkg-los-sea','WAREHOUSE_IN','到达入仓','Arrived at Warehouse','WAREHOUSE_IN',11,1),
+    ('ln-hklos-12','route-hkg-los-sea','SIGNED','已签收','Delivered','SIGNED',12,1),
+
+    -- route-gz-abv-sea
+    ('ln-gzabv-01','route-gz-abv-sea','WAREHOUSE_OUT','已离库','Departed Warehouse','WAREHOUSE_OUT',1,1),
+    ('ln-gzabv-02','route-gz-abv-sea','CUSTOMS_EXPORT','出口报关','Export Customs Filing','CUSTOMS_EXPORT',2,1),
+    ('ln-gzabv-03','route-gz-abv-sea','CUSTOMS_INSPECT','海关查验','Customs Inspection','CUSTOMS_EXPORT',3,0),
+    ('ln-gzabv-04','route-gz-abv-sea','CUSTOMS_RELEASE','海关放行','Customs Released','CUSTOMS_EXPORT',4,1),
+    ('ln-gzabv-05','route-gz-abv-sea','DEPARTURE','已起运','Vessel Departed','DEPARTURE',5,1),
+    ('ln-gzabv-06','route-gz-abv-sea','IN_TRANSIT','在途运输','In Transit','IN_TRANSIT',6,1),
+    ('ln-gzabv-07','route-gz-abv-sea','ARRIVAL','已到港','Arrived at Port','ARRIVAL',7,1),
+    ('ln-gzabv-08','route-gz-abv-sea','CUSTOMS_IMPORT','进口申报','Import Filing','CUSTOMS_IMPORT',8,1),
+    ('ln-gzabv-09','route-gz-abv-sea','CUSTOMS_INSPECT_IMP','进口查验','Import Inspection','CUSTOMS_IMPORT',9,0),
+    ('ln-gzabv-10','route-gz-abv-sea','CUSTOMS_CLEARED','进口放行','Import Cleared','CUSTOMS_IMPORT',10,1),
+    ('ln-gzabv-11','route-gz-abv-sea','WAREHOUSE_IN','到达入仓','Arrived at Warehouse','WAREHOUSE_IN',11,1),
+    ('ln-gzabv-12','route-gz-abv-sea','SIGNED','已签收','Delivered','SIGNED',12,1),
+
+    -- route-hkg-acc-sea
+    ('ln-hkacc-01','route-hkg-acc-sea','WAREHOUSE_OUT','已离库','Departed Warehouse','WAREHOUSE_OUT',1,1),
+    ('ln-hkacc-02','route-hkg-acc-sea','CUSTOMS_EXPORT','出口报关','Export Customs Filing','CUSTOMS_EXPORT',2,1),
+    ('ln-hkacc-03','route-hkg-acc-sea','CUSTOMS_INSPECT','海关查验','Customs Inspection','CUSTOMS_EXPORT',3,0),
+    ('ln-hkacc-04','route-hkg-acc-sea','CUSTOMS_RELEASE','海关放行','Customs Released','CUSTOMS_EXPORT',4,1),
+    ('ln-hkacc-05','route-hkg-acc-sea','DEPARTURE','已起运','Vessel Departed','DEPARTURE',5,1),
+    ('ln-hkacc-06','route-hkg-acc-sea','IN_TRANSIT','在途运输','In Transit','IN_TRANSIT',6,1),
+    ('ln-hkacc-07','route-hkg-acc-sea','ARRIVAL','已到港','Arrived at Port','ARRIVAL',7,1),
+    ('ln-hkacc-08','route-hkg-acc-sea','CUSTOMS_IMPORT','进口申报','Import Filing','CUSTOMS_IMPORT',8,1),
+    ('ln-hkacc-09','route-hkg-acc-sea','CUSTOMS_INSPECT_IMP','进口查验','Import Inspection','CUSTOMS_IMPORT',9,0),
+    ('ln-hkacc-10','route-hkg-acc-sea','CUSTOMS_CLEARED','进口放行','Import Cleared','CUSTOMS_IMPORT',10,1),
+    ('ln-hkacc-11','route-hkg-acc-sea','WAREHOUSE_IN','到达入仓','Arrived at Warehouse','WAREHOUSE_IN',11,1),
+    ('ln-hkacc-12','route-hkg-acc-sea','SIGNED','已签收','Delivered','SIGNED',12,1),
+
+    -- route-gz-los-air (空运：少海关查验环节，多预配舱节点)
+    ('ln-gzlosair-01','route-gz-los-air','WAREHOUSE_OUT','已离库','Departed Warehouse','WAREHOUSE_OUT',1,1),
+    ('ln-gzlosair-02','route-gz-los-air','CUSTOMS_EXPORT','出口报关','Export Customs Filing','CUSTOMS_EXPORT',2,1),
+    ('ln-gzlosair-03','route-gz-los-air','CUSTOMS_RELEASE','海关放行','Customs Released','CUSTOMS_EXPORT',3,1),
+    ('ln-gzlosair-04','route-gz-los-air','DEPARTURE','航班起飞','Flight Departed','DEPARTURE',4,1),
+    ('ln-gzlosair-05','route-gz-los-air','IN_TRANSIT','在途运输','In Transit','IN_TRANSIT',5,1),
+    ('ln-gzlosair-06','route-gz-los-air','ARRIVAL','航班抵达','Flight Arrived','ARRIVAL',6,1),
+    ('ln-gzlosair-07','route-gz-los-air','CUSTOMS_IMPORT','进口申报','Import Filing','CUSTOMS_IMPORT',7,1),
+    ('ln-gzlosair-08','route-gz-los-air','CUSTOMS_CLEARED','进口放行','Import Cleared','CUSTOMS_IMPORT',8,1),
+    ('ln-gzlosair-09','route-gz-los-air','WAREHOUSE_IN','到达入仓','Arrived at Warehouse','WAREHOUSE_IN',9,1),
+    ('ln-gzlosair-10','route-gz-los-air','SIGNED','已签收','Delivered','SIGNED',10,1);
 
     INSERT INTO fx_rate (id, from_currency, to_currency, rate, rate_date, is_latest) VALUES
     ('fx-eur', 'EUR', 'CNY', 7.6923, '2026-03-20', 1),
