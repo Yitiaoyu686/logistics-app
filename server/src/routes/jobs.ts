@@ -105,6 +105,37 @@ router.put('/:jobNo', (req: Request, res: Response) => {
   res.json({ data: { jobNo: req.params.jobNo } });
 });
 
+// POST /api/v2/tms/shipping-units — 创建集装号
+router.post('/shipping-units', (req: Request, res: Response) => {
+  const db = getDb();
+  const b = req.body;
+  const id = uuid();
+  const unitNo = b.unitNo || `U-${Date.now()}`;
+
+  db.prepare(
+    "INSERT INTO tms_shipping_unit (id, unit_no, business_line, unit_type, container_type, seal_no, job_id, route_code, unit_status, max_weight_kg, max_volume_cbm) VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+  ).run(
+    id, unitNo,
+    b.businessLine || 'SEA',
+    b.unitType || 'CONTAINER',
+    b.containerType || null,
+    b.sealNo || null,
+    b.jobId || null,
+    b.routeCode || null,
+    'EMPTY',
+    Number(b.maxWeightKg) || 0,
+    Number(b.maxVolumeCbm) || 0,
+  );
+
+  // 如果关联了 job，同步把 container_no 写到 tms_job（方便列表展示）
+  if (b.jobId) {
+    db.prepare("UPDATE tms_job SET container_no = COALESCE(container_no, ?), updated_at = datetime('now') WHERE id = ?")
+      .run(unitNo, b.jobId);
+  }
+
+  res.json({ data: { id, unitNo } });
+});
+
 // POST /api/v2/tms/tracking-events — 创建跟踪事件
 router.post('/tracking-events', (req: Request, res: Response) => {
   const db = getDb();

@@ -214,6 +214,22 @@ export default function TasksScreen() {
           });
         }
 
+        // 常驻快捷入口：新建 DPN
+        items.push({
+          id: 'dpn-create-entry',
+          type: 'dispatch',
+          icon: '➕',
+          title: '新建 DPN',
+          subtitle: '创建派送运单',
+          detail: '目的站点 / 派送方式 / ETA，创建后直接绑运单',
+          status: '快捷',
+          statusColor: colors.primary,
+          actions: [
+            { label: '开始', color: colors.primary, route: '/task/dpn-create' },
+          ],
+          borderColor: colors.taskDispatch,
+        });
+
         // DPN
         const dpns = await deliveryApi.getDpns();
         for (const d of (dpns.data || []).filter((d: any) => !['SIGNED', 'CANCELLED'].includes(d.dpn_status)).slice(0, 5)) {

@@ -50,6 +50,14 @@ const STATUS_META: Record<TransferStatus, { label: string; color: string; bg: st
 
 type ActionMode = 'dispatch' | 'arrive' | 'receive';
 
+interface BoundItem {
+  subOrderNo: string;
+  trackingNo?: string;
+  pieces: number;
+  weightKg: number;
+  local?: boolean;
+}
+
 export default function TransferScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string; action?: ActionMode }>();
@@ -68,6 +76,12 @@ export default function TransferScreen() {
   const [driverPhone, setDriverPhone] = useState('');
   const [plateNo, setPlateNo] = useState('');
   const [arrivalRemark, setArrivalRemark] = useState('');
+
+  // 绑运单
+  const [bindTarget, setBindTarget] = useState<TransferItem | null>(null);
+  const [bindScanInput, setBindScanInput] = useState('');
+  const [bindItems, setBindItems] = useState<BoundItem[]>([]);
+  const [bindSubmitting, setBindSubmitting] = useState(false);
 
   // 创建调拨单
   const [createVisible, setCreateVisible] = useState(false);
@@ -121,6 +135,67 @@ export default function TransferScreen() {
     setDriverPhone('');
     setPlateNo('');
     setArrivalRemark('');
+  };
+
+  const openBind = (item: TransferItem) => {
+    setBindTarget(item);
+    setBindScanInput('');
+    // 从后端加载已有的绑定运单
+    warehouseApi.getTransferDetail(item.id)
+      .then((r) => {
+        const existing = (r.data?.items || []).map((i: any) => ({
+          subOrderNo: i.sub_order_no,
+          trackingNo: i.tracking_no,
+          pieces: i.pieces || 1,
+          weightKg: i.weight_kg || 0,
+          local: false,
+        }));
+        setBindItems(existing);
+      })
+      .catch(() => setBindItems([]));
+  };
+
+  const handleBindAdd = () => {
+    const code = bindScanInput.trim();
+    if (!code) { Alert.alert('请输入或扫描运单号'); return; }
+    if (bindItems.some((i) => i.subOrderNo === code || i.trackingNo === code)) {
+      Alert.alert('已存在', `${code} 已在清单中`);
+      return;
+    }
+    setBindItems((prev) => [...prev, { subOrderNo: code, trackingNo: code, pieces: 1, weightKg: 0, local: true }]);
+    setBindScanInput('');
+  };
+
+  const handleBindRemove = (no: string) => {
+    setBindItems((prev) => prev.filter((i) => i.subOrderNo !== no));
+  };
+
+  const handleBindSubmit = async () => {
+    if (!bindTarget) return;
+    const newItems = bindItems.filter((i) => i.local);
+    if (newItems.length === 0) {
+      Alert.alert('没有新增运单', '扫码或输入运单号后再提交');
+      return;
+    }
+    setBindSubmitting(true);
+    try {
+      for (const it of newItems) {
+        await warehouseApi.addTransferItem(bindTarget.id, {
+          subOrderNo: it.subOrderNo,
+          trackingNo: it.trackingNo,
+          pieces: it.pieces,
+          weightKg: it.weightKg,
+        });
+      }
+      Alert.alert('绑定成功', `已添加 ${newItems.length} 条运单到 ${bindTarget.transfer_no}`, [
+        { text: '确定', onPress: () => { setBindTarget(null); setBindItems([]); load(); } },
+      ]);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '请重试';
+      Alert.alert('绑定失败', message);
+    } finally {
+      setBindSubmitting(false);
+    }
   };
 
   const handleCreate = async () => {
@@ -222,12 +297,20 @@ export default function TransferScreen() {
 
         <View style={styles.cardActions}>
           {item.transfer_status === 'PENDING' && (
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.actionBtnPrimary]}
-              onPress={() => openAction(item, 'dispatch')}
-            >
-              <Text style={styles.actionBtnText}>执行发车</Text>
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.primary }]}
+                onPress={() => openBind(item)}
+              >
+                <Text style={[styles.actionBtnText, { color: colors.primary }]}>绑运单</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.actionBtnPrimary]}
+                onPress={() => openAction(item, 'dispatch')}
+              >
+                <Text style={styles.actionBtnText}>执行发车</Text>
+              </TouchableOpacity>
+            </>
           )}
           {item.transfer_status === 'IN_TRANSIT' && (
             <TouchableOpacity
@@ -380,6 +463,120 @@ export default function TransferScreen() {
                     {actionMode === 'dispatch' && '确认发车'}
                     {actionMode === 'arrive' && '确认到达'}
                     {actionMode === 'receive' && '确认入库'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* 绑运单 Modal */}
+      <Modal
+        visible={!!bindTarget}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setBindTarget(null)}
+      >
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+          <View style={styles.modalMask}>
+            <View style={styles.modalSheet}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>🔗 绑运单到调拨单</Text>
+                <TouchableOpacity onPress={() => setBindTarget(null)}>
+                  <Ionicons name="close" size={24} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              {bindTarget && (
+                <>
+                  <View style={styles.infoCard}>
+                    <Text style={styles.infoTitle}>{bindTarget.transfer_no}</Text>
+                    <Text style={styles.infoLine}>{bindTarget.from_warehouse_name} → {bindTarget.to_warehouse_name}</Text>
+                  </View>
+
+                  <View style={styles.formItem}>
+                    <Text style={styles.formLabel}>扫码或输入运单号</Text>
+                    <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                      <TextInput
+                        style={[styles.input, { flex: 1 }]}
+                        value={bindScanInput}
+                        onChangeText={setBindScanInput}
+                        placeholder="如：S-20260320000001-01"
+                        placeholderTextColor={colors.textTertiary}
+                        onSubmitEditing={handleBindAdd}
+                      />
+                      <TouchableOpacity
+                        style={{
+                          backgroundColor: colors.primary,
+                          paddingHorizontal: spacing.lg,
+                          borderRadius: radius.md,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                        onPress={handleBindAdd}
+                      >
+                        <Text style={{ color: '#fff', fontWeight: '600' }}>添加</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <Text style={styles.formLabel}>清单 ({bindItems.length})</Text>
+                  <ScrollView style={{ maxHeight: 240, marginBottom: spacing.md }}>
+                    {bindItems.length === 0 ? (
+                      <Text style={{ textAlign: 'center', color: colors.textTertiary, paddingVertical: spacing.lg }}>
+                        暂无绑定运单
+                      </Text>
+                    ) : (
+                      bindItems.map((it) => (
+                        <View
+                          key={it.subOrderNo}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            padding: spacing.md,
+                            backgroundColor: it.local ? colors.successLight : colors.card,
+                            borderRadius: radius.md,
+                            marginBottom: spacing.xs,
+                            borderLeftWidth: 3,
+                            borderLeftColor: it.local ? colors.success : colors.border,
+                          }}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: font.sm, fontFamily: font.mono, fontWeight: '600', color: colors.text }}>
+                              {it.subOrderNo}
+                              {it.local && (
+                                <Text style={{ fontSize: font.xs, color: colors.success }}> · 新增</Text>
+                              )}
+                            </Text>
+                            {!it.local && (
+                              <Text style={{ fontSize: font.xs, color: colors.textSecondary }}>
+                                {it.pieces}件 · {it.weightKg}kg
+                              </Text>
+                            )}
+                          </View>
+                          {it.local && (
+                            <TouchableOpacity onPress={() => handleBindRemove(it.subOrderNo)}>
+                              <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      ))
+                    )}
+                  </ScrollView>
+                </>
+              )}
+
+              <TouchableOpacity
+                style={[styles.submitBtn, bindSubmitting && styles.btnDisabled]}
+                onPress={handleBindSubmit}
+                disabled={bindSubmitting}
+              >
+                {bindSubmitting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.submitBtnText}>
+                    保存（新增 {bindItems.filter((i) => i.local).length} 条）
                   </Text>
                 )}
               </TouchableOpacity>

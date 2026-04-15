@@ -410,7 +410,43 @@ router.post('/no-order-express', (req: Request, res: Response) => {
 // ============================================================
 
 router.get('/returns', (req: Request, res: Response) => {
-  res.json({ data: [] });
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT s.*, o.order_no, o.customer_name, o.route_code, so.sub_order_no
+    FROM wms_stock s
+    LEFT JOIN oms_order o ON o.id = s.order_id
+    LEFT JOIN oms_sub_order so ON so.id = s.sub_order_id
+    WHERE s.stock_status = 'RETURNED'
+    ORDER BY s.updated_at DESC NULLS LAST, s.created_at DESC
+  `).all();
+  res.json({ data: rows });
+});
+
+// POST /api/warehouse/stock/:id/return — 申请退运
+router.post('/stock/:id/return', (req: Request, res: Response) => {
+  const db = getDb();
+  const stockId = req.params.id;
+  const b = req.body as { reason?: string; recipientName?: string; recipientPhone?: string; recipientAddress?: string };
+
+  const stock = db.prepare('SELECT * FROM wms_stock WHERE id = ?').get(stockId) as any;
+  if (!stock) { res.status(404).json({ error: 'Stock not found' }); return; }
+
+  const remark = [
+    b.reason ? `原因: ${b.reason}` : null,
+    b.recipientName ? `收件人: ${b.recipientName}` : null,
+    b.recipientPhone ? `电话: ${b.recipientPhone}` : null,
+    b.recipientAddress ? `地址: ${b.recipientAddress}` : null,
+  ].filter(Boolean).join(' | ');
+
+  db.prepare("UPDATE wms_stock SET stock_status='RETURNED', updated_at=datetime('now') WHERE id=?").run(stockId);
+  if (stock.sub_order_id) {
+    db.prepare("UPDATE oms_sub_order SET sub_status='RETURN_APPLIED', updated_at=datetime('now') WHERE id=?").run(stock.sub_order_id);
+  }
+  // 记录备注到 inbound_order 以便追溯
+  db.prepare("UPDATE wms_inbound_order SET remark = COALESCE(remark, '') || ? WHERE sub_order_id = ?")
+    .run(`\n[退运] ${remark}`, stock.sub_order_id);
+
+  res.json({ data: { id: stockId, status: 'RETURNED' } });
 });
 
 export default router;

@@ -53,6 +53,13 @@ export default function StockScreen() {
   const [status, setStatus] = useState<StockStatus | 'ALL'>('ALL');
   const [selected, setSelected] = useState<StockItem | null>(null);
   const [editingLocation, setEditingLocation] = useState('');
+  // 退运
+  const [returnOpen, setReturnOpen] = useState(false);
+  const [returnReason, setReturnReason] = useState('');
+  const [returnRecipient, setReturnRecipient] = useState('');
+  const [returnPhone, setReturnPhone] = useState('');
+  const [returnAddress, setReturnAddress] = useState('');
+  const [returnSubmitting, setReturnSubmitting] = useState(false);
 
   useEffect(() => {
     load();
@@ -117,6 +124,40 @@ export default function StockScreen() {
     if (!selected) return;
     Alert.alert('打印中', `正在补打面单：${selected.sub_order_no}\n已发送到蓝牙打印机`);
     setSelected(null);
+  };
+
+  const openReturnDialog = () => {
+    setReturnReason('');
+    setReturnRecipient('');
+    setReturnPhone('');
+    setReturnAddress('');
+    setReturnOpen(true);
+  };
+
+  const submitReturn = async () => {
+    if (!selected) return;
+    if (!returnReason.trim()) { Alert.alert('请填写退运原因'); return; }
+    setReturnSubmitting(true);
+    try {
+      await warehouseApi.applyReturn(selected.id, {
+        reason: returnReason,
+        recipientName: returnRecipient || undefined,
+        recipientPhone: returnPhone || undefined,
+        recipientAddress: returnAddress || undefined,
+      });
+      Alert.alert('已提交退运', `${selected.sub_order_no} 已进入退运流程`, [
+        { text: '确定', onPress: () => {
+          setReturnOpen(false);
+          setSelected(null);
+          load();
+        }},
+      ]);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '请重试';
+      Alert.alert('提交失败', message);
+    } finally {
+      setReturnSubmitting(false);
+    }
   };
 
   const renderItem = ({ item }: { item: StockItem }) => {
@@ -299,8 +340,176 @@ export default function StockScreen() {
                     <Text style={[styles.actionText, { color: '#fff' }]}>保存库位</Text>
                   </TouchableOpacity>
                 </View>
+                {selected.stock_status === 'IN_STOCK' && !isDestination && (
+                  <TouchableOpacity
+                    style={{
+                      marginTop: spacing.md,
+                      height: 44,
+                      borderWidth: 1,
+                      borderColor: colors.warning,
+                      borderRadius: radius.md,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexDirection: 'row',
+                      gap: 6,
+                      backgroundColor: colors.warningLight,
+                    }}
+                    onPress={openReturnDialog}
+                  >
+                    <Ionicons name="return-down-back-outline" size={18} color={colors.warning} />
+                    <Text style={{ color: colors.warning, fontSize: font.md, fontWeight: '600' }}>申请退运</Text>
+                  </TouchableOpacity>
+                )}
               </ScrollView>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* 退运 Modal */}
+      <Modal
+        visible={returnOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setReturnOpen(false)}
+      >
+        <View style={styles.modalMask}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>↩️ 申请退运</Text>
+              <TouchableOpacity onPress={() => setReturnOpen(false)}>
+                <Ionicons name="close" size={24} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {selected && (
+              <ScrollView>
+                <View
+                  style={{
+                    backgroundColor: colors.card,
+                    borderRadius: radius.md,
+                    padding: spacing.md,
+                    marginBottom: spacing.md,
+                    borderLeftWidth: 3,
+                    borderLeftColor: colors.warning,
+                  }}
+                >
+                  <Text style={{ fontSize: font.sm, fontFamily: font.mono, fontWeight: '700', color: colors.primary }}>
+                    {selected.sub_order_no}
+                  </Text>
+                  <Text style={{ fontSize: font.xs, color: colors.textSecondary, marginTop: 2 }}>
+                    {selected.customer_name} · {selected.pieces}件 · {selected.gross_weight_kg}kg
+                  </Text>
+                </View>
+
+                <View style={{ marginBottom: spacing.md }}>
+                  <Text style={{ fontSize: font.sm, color: colors.textSecondary, marginBottom: 6 }}>退运原因 *</Text>
+                  <TextInput
+                    style={{
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      borderRadius: radius.md,
+                      paddingHorizontal: spacing.md,
+                      paddingVertical: spacing.sm,
+                      minHeight: 72,
+                      fontSize: font.md,
+                      color: colors.text,
+                      backgroundColor: colors.card,
+                      textAlignVertical: 'top',
+                    }}
+                    value={returnReason}
+                    onChangeText={setReturnReason}
+                    placeholder="如：客户取消、货物损坏、地址错误..."
+                    placeholderTextColor={colors.textTertiary}
+                    multiline
+                  />
+                </View>
+
+                <View style={{ marginBottom: spacing.md }}>
+                  <Text style={{ fontSize: font.sm, color: colors.textSecondary, marginBottom: 6 }}>退回收件人</Text>
+                  <TextInput
+                    style={{
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      borderRadius: radius.md,
+                      paddingHorizontal: spacing.md,
+                      height: 44,
+                      fontSize: font.md,
+                      color: colors.text,
+                      backgroundColor: colors.card,
+                    }}
+                    value={returnRecipient}
+                    onChangeText={setReturnRecipient}
+                    placeholder="默认为原发件人"
+                    placeholderTextColor={colors.textTertiary}
+                  />
+                </View>
+
+                <View style={{ marginBottom: spacing.md }}>
+                  <Text style={{ fontSize: font.sm, color: colors.textSecondary, marginBottom: 6 }}>联系电话</Text>
+                  <TextInput
+                    style={{
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      borderRadius: radius.md,
+                      paddingHorizontal: spacing.md,
+                      height: 44,
+                      fontSize: font.md,
+                      color: colors.text,
+                      backgroundColor: colors.card,
+                    }}
+                    value={returnPhone}
+                    onChangeText={setReturnPhone}
+                    placeholder="选填"
+                    placeholderTextColor={colors.textTertiary}
+                    keyboardType="phone-pad"
+                  />
+                </View>
+
+                <View style={{ marginBottom: spacing.lg }}>
+                  <Text style={{ fontSize: font.sm, color: colors.textSecondary, marginBottom: 6 }}>退回地址</Text>
+                  <TextInput
+                    style={{
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      borderRadius: radius.md,
+                      paddingHorizontal: spacing.md,
+                      paddingVertical: spacing.sm,
+                      minHeight: 60,
+                      fontSize: font.md,
+                      color: colors.text,
+                      backgroundColor: colors.card,
+                      textAlignVertical: 'top',
+                    }}
+                    value={returnAddress}
+                    onChangeText={setReturnAddress}
+                    placeholder="选填"
+                    placeholderTextColor={colors.textTertiary}
+                    multiline
+                  />
+                </View>
+              </ScrollView>
+            )}
+
+            <TouchableOpacity
+              style={[
+                {
+                  height: 52,
+                  borderRadius: radius.lg,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: colors.warning,
+                  marginTop: spacing.sm,
+                },
+                returnSubmitting && { opacity: 0.6 },
+              ]}
+              onPress={submitReturn}
+              disabled={returnSubmitting}
+            >
+              <Text style={{ color: '#fff', fontSize: font.lg, fontWeight: '600' }}>
+                {returnSubmitting ? '提交中...' : '提交退运申请'}
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

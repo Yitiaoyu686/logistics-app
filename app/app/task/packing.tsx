@@ -29,6 +29,16 @@ export default function PackingScreen() {
   const [scanInput, setScanInput] = useState('');
   const [addedOrders, setAddedOrders] = useState<any[]>([]);
 
+  // 集装号
+  const [unitDialogOpen, setUnitDialogOpen] = useState(false);
+  const [unitNo, setUnitNo] = useState('');
+  const [containerType, setContainerType] = useState('40HQ');
+  const [sealNo, setSealNo] = useState('');
+  const [unitMaxWeight, setUnitMaxWeight] = useState('26000');
+  const [creatingUnit, setCreatingUnit] = useState(false);
+  const [labelVisible, setLabelVisible] = useState(false);
+  const [createdUnit, setCreatedUnit] = useState<{ id: string; unitNo: string } | null>(null);
+
   // 执行出库表单
   const [recipientName, setRecipientName] = useState('');
   const [recipientPhone, setRecipientPhone] = useState('');
@@ -74,6 +84,36 @@ export default function PackingScreen() {
       Alert.alert('加载失败', err.message || '无法加载任务信息');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateUnit = async () => {
+    if (!job) { Alert.alert('任务信息缺失'); return; }
+    if (!unitNo.trim()) { Alert.alert('请填写集装号'); return; }
+    setCreatingUnit(true);
+    try {
+      const res = await jobApi.createShippingUnit({
+        unitNo,
+        businessLine: job.business_line,
+        unitType: 'CONTAINER',
+        containerType,
+        sealNo: sealNo || undefined,
+        jobId: job.id,
+        routeCode: job.route_code,
+        maxWeightKg: Number(unitMaxWeight) || 0,
+      });
+      setCreatedUnit({ id: res.data?.id, unitNo: res.data?.unitNo });
+      setUnitDialogOpen(false);
+      Alert.alert('创建成功', `集装号 ${res.data?.unitNo} 已创建`, [
+        { text: '打印箱唛', onPress: () => setLabelVisible(true) },
+        { text: '继续添加', style: 'cancel' },
+      ]);
+      loadJob(job.job_no || job.id);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '请重试';
+      Alert.alert('创建失败', message);
+    } finally {
+      setCreatingUnit(false);
     }
   };
 
@@ -206,6 +246,57 @@ export default function PackingScreen() {
 
           {mode === 'add-order' ? (
             <>
+              {/* 集装号 — 先创建集装号再添加订单 */}
+              <View style={styles.section}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={styles.sectionTitle}>📦 集装号</Text>
+                  {(!job?.container_no && !createdUnit) && (
+                    <TouchableOpacity
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 4,
+                        paddingHorizontal: spacing.md,
+                        paddingVertical: 6,
+                        backgroundColor: colors.primaryLight,
+                        borderRadius: radius.md,
+                      }}
+                      onPress={() => setUnitDialogOpen(true)}
+                    >
+                      <Ionicons name="add-circle-outline" size={16} color={colors.primary} />
+                      <Text style={{ fontSize: font.sm, color: colors.primary, fontWeight: '600' }}>创建集装号</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                {(job?.container_no || createdUnit) ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm }}>
+                    <Ionicons name="cube-outline" size={20} color={colors.primary} />
+                    <Text style={{ flex: 1, fontSize: font.md, color: colors.text, fontFamily: font.mono, fontWeight: '600' }}>
+                      {createdUnit?.unitNo || job?.container_no}
+                    </Text>
+                    <TouchableOpacity
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 4,
+                        paddingHorizontal: spacing.md,
+                        paddingVertical: 6,
+                        backgroundColor: colors.primary,
+                        borderRadius: radius.md,
+                      }}
+                      onPress={() => setLabelVisible(true)}
+                    >
+                      <Ionicons name="print-outline" size={16} color="#fff" />
+                      <Text style={{ fontSize: font.sm, color: '#fff', fontWeight: '600' }}>打印箱唛</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <Text style={{ fontSize: font.xs, color: colors.textTertiary, marginTop: spacing.sm }}>
+                    请先创建集装号
+                  </Text>
+                )}
+              </View>
+
               {/* 扫码添加 */}
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>扫码添加订单</Text>
@@ -306,6 +397,184 @@ export default function PackingScreen() {
             </TouchableOpacity>
           )}
         </View>
+
+        {/* 创建集装号 Modal */}
+        <Modal
+          visible={unitDialogOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setUnitDialogOpen(false)}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalSheet}>
+              <Text style={styles.modalTitle}>创建集装号</Text>
+
+              <Text style={styles.formLabel}>集装号 *</Text>
+              <TextInput
+                style={[styles.input, { marginBottom: spacing.md }]}
+                value={unitNo}
+                onChangeText={setUnitNo}
+                placeholder="如：CSLU2185436"
+                placeholderTextColor={colors.textTertiary}
+                autoCapitalize="characters"
+              />
+
+              <Text style={styles.formLabel}>柜型</Text>
+              <View style={{ flexDirection: 'row', gap: spacing.xs, marginBottom: spacing.md, flexWrap: 'wrap' }}>
+                {['20GP', '40GP', '40HQ', '45HQ', 'LCL'].map((t) => (
+                  <TouchableOpacity
+                    key={t}
+                    style={{
+                      paddingHorizontal: spacing.md,
+                      paddingVertical: spacing.sm,
+                      borderRadius: radius.full,
+                      borderWidth: 1,
+                      borderColor: containerType === t ? colors.primary : colors.border,
+                      backgroundColor: containerType === t ? colors.primary : colors.card,
+                    }}
+                    onPress={() => setContainerType(t)}
+                  >
+                    <Text
+                      style={{
+                        fontSize: font.sm,
+                        color: containerType === t ? '#fff' : colors.textSecondary,
+                        fontWeight: containerType === t ? '600' : '400',
+                      }}
+                    >
+                      {t}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.formLabel}>封条号</Text>
+              <TextInput
+                style={[styles.input, { marginBottom: spacing.md }]}
+                value={sealNo}
+                onChangeText={setSealNo}
+                placeholder="选填"
+                placeholderTextColor={colors.textTertiary}
+              />
+
+              <Text style={styles.formLabel}>载重上限 (kg)</Text>
+              <TextInput
+                style={[styles.input, { marginBottom: spacing.lg }]}
+                value={unitMaxWeight}
+                onChangeText={setUnitMaxWeight}
+                keyboardType="numeric"
+                placeholder="26000"
+                placeholderTextColor={colors.textTertiary}
+              />
+
+              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                <TouchableOpacity
+                  style={{
+                    flex: 1,
+                    height: 48,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    borderRadius: radius.md,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  onPress={() => setUnitDialogOpen(false)}
+                >
+                  <Text style={{ color: colors.textSecondary, fontSize: font.md }}>取消</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.btnPrimary, { flex: 1, height: 48 }, creatingUnit && { opacity: 0.6 }]}
+                  onPress={handleCreateUnit}
+                  disabled={creatingUnit}
+                >
+                  <Text style={styles.btnPrimaryText}>{creatingUnit ? '创建中...' : '创建'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* 箱唛预览 Modal */}
+        <Modal
+          visible={labelVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setLabelVisible(false)}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={[styles.modalSheet, { paddingVertical: spacing.xl }]}>
+              <Text style={styles.modalTitle}>📋 箱唛预览</Text>
+
+              <View
+                style={{
+                  borderWidth: 2,
+                  borderColor: colors.text,
+                  padding: spacing.lg,
+                  marginBottom: spacing.lg,
+                  backgroundColor: '#fff',
+                }}
+              >
+                <Text style={{ fontSize: font.xxl, fontWeight: '800', textAlign: 'center', marginBottom: spacing.sm }}>
+                  {job?.route_code || '-'}
+                </Text>
+                <View style={{ height: 1, backgroundColor: colors.text, marginVertical: spacing.sm }} />
+                <Text style={{ fontSize: font.lg, fontFamily: font.mono, fontWeight: '700', textAlign: 'center' }}>
+                  {createdUnit?.unitNo || job?.container_no || '-'}
+                </Text>
+                <Text style={{ fontSize: font.sm, textAlign: 'center', color: colors.textSecondary, marginTop: 4 }}>
+                  JOB: {job?.job_no || '-'}
+                </Text>
+                <View style={{ height: 1, backgroundColor: colors.text, marginVertical: spacing.sm }} />
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <View>
+                    <Text style={{ fontSize: font.xs, color: colors.textSecondary }}>承运人</Text>
+                    <Text style={{ fontSize: font.sm, fontWeight: '600' }}>{job?.carrier_name || '-'}</Text>
+                  </View>
+                  <View>
+                    <Text style={{ fontSize: font.xs, color: colors.textSecondary }}>ETD</Text>
+                    <Text style={{ fontSize: font.sm, fontWeight: '600' }}>{job?.etd || '-'}</Text>
+                  </View>
+                </View>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.sm }}>
+                  <View>
+                    <Text style={{ fontSize: font.xs, color: colors.textSecondary }}>件数</Text>
+                    <Text style={{ fontSize: font.sm, fontWeight: '600' }}>{job?.total_pieces || 0}</Text>
+                  </View>
+                  <View>
+                    <Text style={{ fontSize: font.xs, color: colors.textSecondary }}>重量</Text>
+                    <Text style={{ fontSize: font.sm, fontWeight: '600' }}>{job?.total_weight_kg || 0} kg</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                <TouchableOpacity
+                  style={{
+                    flex: 1,
+                    height: 48,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    borderRadius: radius.md,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                  onPress={() => setLabelVisible(false)}
+                >
+                  <Text style={{ color: colors.textSecondary, fontSize: font.md }}>关闭</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.btnPrimary, { flex: 1, height: 48 }]}
+                  onPress={() => {
+                    Alert.alert('🖨 打印', '箱唛已发送到蓝牙打印机', [
+                      { text: '确定', onPress: () => setLabelVisible(false) },
+                    ]);
+                  }}
+                >
+                  <Text style={styles.btnPrimaryText}>打印</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
         {/* 承运方选择 */}
         <Modal

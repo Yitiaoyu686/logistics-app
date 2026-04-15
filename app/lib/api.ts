@@ -59,6 +59,7 @@ export const jobApi = {
   get: (jobNo: string) => api.get(`/jobs/${jobNo}`),
   update: (jobNo: string, data: any) => api.put(`/jobs/${jobNo}`, data),
   addEvent: (data: any) => api.post('/v2/tms/tracking-events', data),
+  createShippingUnit: (data: any) => api.post('/v2/tms/shipping-units', data),
 };
 
 // Orders
@@ -123,12 +124,14 @@ export const warehouseApi = {
   createInbound: (data: any) => api.post('/v2/wms/inbounds', data),
   submitDestInbound: (jobId: string, data: any) => api.post(`/v2/wms/dest-inbound/${jobId}/submit`, data),
   getReturns: () => api.get('/warehouse/returns'),
+  applyReturn: (stockId: string, data: any) => api.post(`/warehouse/stock/${stockId}/return`, data),
 };
 
 // DPN & Delivery
 export const deliveryApi = {
   getDpns: () => api.get('/v2/pod/dpns'),
   getDpn: (id: string) => api.get(`/v2/pod/dpns/${id}`),
+  createDpn: (data: any) => api.post('/v2/pod/dpns', data),
   updateDpn: (id: string, data: any) => api.put(`/v2/pod/dpns/${id}`, data),
   bindSubOrders: (id: string, subOrderIds: string[]) => api.post(`/v2/pod/dpns/${id}/bind-sub-orders`, { subOrderIds }),
   getDeliveryTasks: () => api.get('/v2/pod/delivery-tasks'),
