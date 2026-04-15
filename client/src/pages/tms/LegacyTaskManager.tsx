@@ -43,6 +43,7 @@ import {
 import dayjs, { Dayjs } from 'dayjs';
 import type { LegacyContainer, LegacyTask, LegacyJob, LegacyOrderItem } from './taskManagerLegacyData';
 import { LEGACY_TASKS } from './taskManagerLegacyData';
+import { jobApi } from '../../api';
 
 const { Option } = Select;
 const { Text } = Typography;
@@ -396,6 +397,246 @@ function cloneTasks(businessMode: LegacyBusinessMode = 'ALL'): MutableLegacyTask
   });
 }
 
+// ============================================================
+// 后端 → LegacyTask 形状映射
+// ============================================================
+
+// 后端节点 code → 前端节点 code（前端用旧 code，后端用新规范）
+const BACKEND_NODE_CODE_TO_LEGACY: Record<string, { code: string; name: string }> = {
+  WAREHOUSE_OUT: { code: 'WAREHOUSE_OUT', name: '已离库' },
+  CUSTOMS_EXPORT: { code: 'CUSTOMS_EXPORT', name: '出口报关' },
+  CUSTOMS_INSPECT: { code: 'CUSTOMS_CHECK', name: '海关查验' },
+  CUSTOMS_RELEASE: { code: 'CUSTOMS_RELEASE', name: '海关放行' },
+  DEPARTURE: { code: 'DEPARTURE', name: '已起运' },
+  ARRIVAL: { code: 'ARRIVAL', name: '已到港' },
+  CUSTOMS_IMPORT: { code: 'IMPORT_CUSTOMS_DECLARE', name: '进口申报' },
+  CUSTOMS_INSPECT_IMP: { code: 'IMPORT_CUSTOMS_CHECK', name: '进口查验' },
+  CUSTOMS_CLEARED: { code: 'IMPORT_CUSTOMS_RELEASE', name: '进口放行' },
+  WAREHOUSE_IN: { code: 'DEST_WAREHOUSE_IN', name: '到达入仓' },
+  SIGNED: { code: 'SIGNED', name: '已签收' },
+};
+
+// 后端 job_status → LegacyTask.status
+function mapBackendJobStatus(backendStatus: string): TaskStatus {
+  if (backendStatus === 'PLANNED') return 'PENDING';
+  if (backendStatus === 'COMPLETED') return 'COMPLETED';
+  if (backendStatus === 'CANCELLED') return 'SUSPENDED';
+  return 'IN_PROGRESS';
+}
+
+// 后端 cargo_type → cargoFilter
+function mapBackendCargoType(cargoType: string | null | undefined): CargoFilter {
+  if (cargoType === 'SENSITIVE') return 'NON_GENERAL';
+  return 'GENERAL';
+}
+
+interface BackendJobDetail {
+  id: string;
+  job_no: string;
+  business_line: string;
+  route_code?: string;
+  origin_port?: string;
+  dest_port?: string;
+  carrier_name?: string;
+  vessel_voyage?: string;
+  flight_no?: string;
+  bill_no?: string;
+  container_no?: string;
+  container_type?: string;
+  cargo_type?: string;
+  service_type?: string;
+  job_status: string;
+  current_node?: string;
+  total_pieces?: number;
+  total_weight_kg?: number;
+  total_volume_cbm?: number;
+  etd?: string;
+  eta?: string;
+  atd?: string;
+  ata?: string;
+  remark?: string;
+  trucking_company?: string;
+  driver_name?: string;
+  driver_phone?: string;
+  plate_no?: string;
+  query_phone?: string;
+  shipping_no?: string;
+  created_at: string;
+  updated_at?: string;
+  // 详情接口附加
+  relations?: Array<{
+    sub_order_id: string;
+    sub_order_no: string;
+    sub_status: string;
+    pieces: number;
+    actual_weight_kg: number;
+    order_no: string;
+    customer_name: string;
+    shipping_unit_id?: string;
+  }>;
+  events?: Array<{
+    id: string;
+    node_code: string;
+    node_name: string;
+    event_time: string;
+    location?: string;
+    remark?: string;
+  }>;
+  units?: Array<{
+    id: string;
+    unit_no: string;
+    container_type?: string;
+    unit_status: string;
+    current_weight_kg?: number;
+    current_volume_cbm?: number;
+    seal_no?: string;
+  }>;
+}
+
+function backendJobToLegacyTask(job: BackendJobDetail): MutableLegacyTask {
+  const businessLine = (job.business_line || 'SEA').toUpperCase();
+  const prefix = businessLine === 'AIR' ? 'A' : 'S';
+  const taskId = /^[AS]-/.test(job.job_no) ? job.job_no : `${prefix}-${job.job_no}`;
+
+  // 构造 completedNodes（来自 events）
+  const completedNodes: LegacyNodeRecord[] = (job.events || [])
+    .map((ev) => {
+      const mapped = BACKEND_NODE_CODE_TO_LEGACY[ev.node_code];
+      if (!mapped) return null;
+      return {
+        nodeCode: mapped.code,
+        nodeName: mapped.name,
+        date: ev.event_time,
+        remark: ev.remark || undefined,
+        updatedAt: ev.event_time,
+      } as LegacyNodeRecord;
+    })
+    .filter((x): x is LegacyNodeRecord => x !== null);
+
+  // 构造 containers（来自 units），把 relations 按 unit 分组
+  const relsByUnit: Record<string, NonNullable<BackendJobDetail['relations']>> = {};
+  for (const rel of job.relations || []) {
+    const key = rel.shipping_unit_id || '__UNASSIGNED__';
+    if (!relsByUnit[key]) relsByUnit[key] = [];
+    relsByUnit[key].push(rel);
+  }
+
+  const routeName = (job.route_code || '').replace(/^route-/, '').toUpperCase();
+  const serviceTypeUI: LegacyJob['serviceType'] = (job.service_type as any) === 'STANDARD' ? 'STANDARD' : 'EXPRESS';
+
+  const containers: MutableLegacyContainer[] = (job.units || []).map((u, idx) => {
+    const unitRels = relsByUnit[u.id] || [];
+    const orders: LegacyOrderItem[] = unitRels.map((rel, i) => ({
+      seq: i + 1,
+      orderNo: rel.sub_order_no,
+      thirdPartyTracking: '-',
+      city: '-',
+      salesPerson: '-',
+      userName: rel.customer_name || '-',
+      goodsName: '-',
+      description: rel.order_no,
+      pieces: rel.pieces || 0,
+      volumeCbm: 0,
+      volumeWeightKgs: 0,
+      grossWeightKgs: rel.actual_weight_kg || 0,
+    }));
+    const totalPieces = orders.reduce((s, o) => s + o.pieces, 0);
+    const totalWeight = orders.reduce((s, o) => s + o.grossWeightKgs, 0);
+    return {
+      id: u.id,
+      containerNo: u.unit_no,
+      routeName,
+      serviceType: serviceTypeUI === 'EXPRESS' ? '特快' : '普快',
+      orders,
+      pieces: totalPieces,
+      volumeCbm: u.current_volume_cbm || 0,
+      volumeWeightKgs: 0,
+      grossWeightKgs: u.current_weight_kg || totalWeight,
+      nodeProgress: { completedNodes },
+    };
+  });
+
+  // 如果一个 container 都没有，建一个空的（让 status 计算不崩）
+  if (containers.length === 0) {
+    containers.push({
+      id: `EMPTY-${job.id}`,
+      containerNo: job.container_no || '-',
+      routeName,
+      serviceType: serviceTypeUI === 'EXPRESS' ? '特快' : '普快',
+      orders: [],
+      pieces: 0,
+      volumeCbm: 0,
+      volumeWeightKgs: 0,
+      grossWeightKgs: 0,
+      nodeProgress: { completedNodes },
+    });
+  }
+
+  const legacyJob: MutableLegacyJob = {
+    id: job.id,
+    jobNo: taskId,
+    stationName: '-',
+    routeId: job.route_code || '',
+    routeName,
+    serviceType: serviceTypeUI,
+    originPort: job.origin_port || '',
+    transitPort: '',
+    destPort: job.dest_port || '',
+    cargoFilter: mapBackendCargoType(job.cargo_type),
+    weightKg: job.total_weight_kg || 0,
+    pieces: job.total_pieces || 0,
+    volumeCbm: job.total_volume_cbm || 0,
+    executeDate: job.etd || job.created_at?.substring(0, 10) || '',
+    blNo: job.bill_no,
+    carrier: job.carrier_name,
+    vesselVoyage: job.vessel_voyage,
+    containerNo: job.container_no,
+    containerType: job.container_type,
+    serviceMode: businessLine === 'SEA' ? 'LCL' : 'AIR',
+    etd: job.etd,
+    eta: job.eta,
+    flightNo: job.flight_no,
+    containers,
+  };
+
+  return {
+    id: taskId,
+    jobs: [legacyJob],
+    status: mapBackendJobStatus(job.job_status),
+    createdBy: '-',
+    createdAt: job.created_at,
+    updatedAt: job.updated_at || job.created_at,
+    deliveryCompany: job.trucking_company || job.driver_name ? {
+      companyName: job.trucking_company,
+      driverName: job.driver_name,
+      driverPhone: job.driver_phone,
+      plateNo: job.plate_no,
+      trackingNo: job.shipping_no,
+      queryPhone: job.query_phone,
+    } : undefined,
+  };
+}
+
+async function fetchTasksFromBackend(businessMode: LegacyBusinessMode): Promise<MutableLegacyTask[]> {
+  const params: Record<string, any> = {};
+  if (businessMode === 'SEA') params.businessLine = 'SEA';
+  else if (businessMode === 'AIR') params.businessLine = 'AIR';
+  const listRes: any = await jobApi.list(params);
+  const list: BackendJobDetail[] = listRes.data || [];
+  // 并发拉详情
+  const details = await Promise.all(
+    list.map(async (j) => {
+      try {
+        const detailRes: any = await jobApi.get(j.job_no);
+        return detailRes.data as BackendJobDetail;
+      } catch {
+        return j;
+      }
+    })
+  );
+  return details.map(backendJobToLegacyTask);
+}
+
 function nodeFlowByMode(mode: LegacyTaskMode) {
   return mode === 'ORIGIN' ? ORIGIN_NODE_FLOW : DEST_NODE_FLOW;
 }
@@ -526,11 +767,28 @@ interface LegacyTaskManagerProps {
 }
 
 export const LegacyTaskManager: React.FC<LegacyTaskManagerProps> = ({ mode = 'ORIGIN', businessMode = 'ALL' }) => {
-  const [tasks, setTasks] = useState<MutableLegacyTask[]>(() => cloneTasks(businessMode));
+  const [tasks, setTasks] = useState<MutableLegacyTask[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
 
-  // 当 businessMode 切换时（如海运↔空运），重新加载数据并应用对应前缀
+  // 从后端加载任务列表（businessMode 变化时重新加载）
   useEffect(() => {
-    setTasks(cloneTasks(businessMode));
+    let cancelled = false;
+    setTasksLoading(true);
+    fetchTasksFromBackend(businessMode)
+      .then((data) => {
+        if (!cancelled) setTasks(data);
+      })
+      .catch((err) => {
+        console.error('[LegacyTaskManager] fetch tasks failed:', err);
+        if (!cancelled) {
+          message.error('加载任务列表失败：' + (err?.message || '未知错误'));
+          setTasks(cloneTasks(businessMode)); // 兜底：仍用 mock
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setTasksLoading(false);
+      });
+    return () => { cancelled = true; };
   }, [businessMode]);
   const detailScrollRef = useRef<HTMLDivElement | null>(null);
 
