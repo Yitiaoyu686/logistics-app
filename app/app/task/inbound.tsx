@@ -100,6 +100,12 @@ export default function InboundScreen() {
   const [editingFee, setEditingFee] = useState<InboundFee | null>(null);
   const [photos, setPhotos] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // 三方快递补录
+  const [thirdPartyOpen, setThirdPartyOpen] = useState(false);
+  const [tpExpressCompany, setTpExpressCompany] = useState('');
+  const [tpTrackingNo, setTpTrackingNo] = useState('');
+  const [tpSignTime, setTpSignTime] = useState('');
+  const [tpSignBy, setTpSignBy] = useState('');
 
   useEffect(() => {
     if (params.orderId) loadOrder(params.orderId as string);
@@ -261,6 +267,14 @@ export default function InboundScreen() {
         locationCode: location,
         goodsCategory: goodsCategory || null,
         photoUrls: photos,
+        thirdPartyExpress: tpExpressCompany || tpTrackingNo || tpSignBy
+          ? {
+              expressCompany: tpExpressCompany,
+              trackingNo: tpTrackingNo,
+              signTime: tpSignTime,
+              signBy: tpSignBy,
+            }
+          : undefined,
         fees: fees.map((f) => ({
           feeType: f.feeType,
           currency: f.currency,
@@ -465,6 +479,75 @@ export default function InboundScreen() {
             {isAbnormal && (
               <View style={styles.photoHint}>
                 <Text style={styles.photoHintText}>⚠️ 异常包裹必须拍照记录</Text>
+              </View>
+            )}
+          </View>
+
+          {/* 三方快递补录 */}
+          <View style={styles.section}>
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+              onPress={() => setThirdPartyOpen((v) => !v)}
+            >
+              <Text style={styles.sectionTitle}>
+                📬 三方快递补录 <Text style={styles.photoHintInline}>（可选）</Text>
+              </Text>
+              <Ionicons name={thirdPartyOpen ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textTertiary} />
+            </TouchableOpacity>
+            {thirdPartyOpen && (
+              <View style={{ marginTop: spacing.md }}>
+                <View style={styles.formRow}>
+                  <View style={styles.formItem}>
+                    <Text style={styles.formLabel}>快递公司</Text>
+                    <View style={styles.inputWrapper}>
+                      <TextInput
+                        style={styles.input}
+                        value={tpExpressCompany}
+                        onChangeText={setTpExpressCompany}
+                        placeholder="如：顺丰"
+                        placeholderTextColor={colors.textTertiary}
+                      />
+                    </View>
+                  </View>
+                  <View style={styles.formItem}>
+                    <Text style={styles.formLabel}>快递单号</Text>
+                    <View style={styles.inputWrapper}>
+                      <TextInput
+                        style={styles.input}
+                        value={tpTrackingNo}
+                        onChangeText={setTpTrackingNo}
+                        placeholder="扫码或输入"
+                        placeholderTextColor={colors.textTertiary}
+                      />
+                    </View>
+                  </View>
+                </View>
+                <View style={styles.formRow}>
+                  <View style={styles.formItem}>
+                    <Text style={styles.formLabel}>签收时间</Text>
+                    <View style={styles.inputWrapper}>
+                      <TextInput
+                        style={styles.input}
+                        value={tpSignTime}
+                        onChangeText={setTpSignTime}
+                        placeholder="YYYY-MM-DD HH:mm"
+                        placeholderTextColor={colors.textTertiary}
+                      />
+                    </View>
+                  </View>
+                  <View style={styles.formItem}>
+                    <Text style={styles.formLabel}>签收人</Text>
+                    <View style={styles.inputWrapper}>
+                      <TextInput
+                        style={styles.input}
+                        value={tpSignBy}
+                        onChangeText={setTpSignBy}
+                        placeholder="签收人姓名"
+                        placeholderTextColor={colors.textTertiary}
+                      />
+                    </View>
+                  </View>
+                </View>
               </View>
             )}
           </View>

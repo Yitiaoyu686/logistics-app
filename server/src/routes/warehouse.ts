@@ -15,9 +15,14 @@ router.post('/inbounds', (req: Request, res: Response) => {
   const id = uuid();
   const inboundNo = generateInboundNo();
 
+  const thirdPartyRemark = b.thirdPartyExpress
+    ? `[三方] ${b.thirdPartyExpress.expressCompany || ''} ${b.thirdPartyExpress.trackingNo || ''} ${b.thirdPartyExpress.signBy ? `签收:${b.thirdPartyExpress.signBy}` : ''} ${b.thirdPartyExpress.signTime || ''}`.trim()
+    : '';
+  const finalRemark = [b.remark, thirdPartyRemark].filter(Boolean).join(' | ') || null;
+
   db.prepare("INSERT INTO wms_inbound_order (id, inbound_no, business_line, warehouse_id, order_id, sub_order_id, source_type, inbound_status, inbound_at, operator_user_id, remark) VALUES (?,?,?,?,?,?,?,?,datetime('now'),?,?)").run(
     id, inboundNo, b.businessLine || 'SEA', b.warehouseId, b.orderId, b.subOrderId,
-    b.sourceType || 'THIRD_PARTY', 'COMPLETED', b.operatorUserId, b.remark
+    b.sourceType || 'THIRD_PARTY', 'COMPLETED', b.operatorUserId, finalRemark
   );
 
   // Create inbound item
@@ -176,7 +181,8 @@ router.get('/inbound', (req: Request, res: Response) => {
 router.get('/stock', (req: Request, res: Response) => {
   const db = getDb();
   const { status, warehouseId, keyword } = req.query;
-  let sql = `SELECT s.*, o.order_no, o.customer_name, o.route_code, o.consignee_name,
+  let sql = `SELECT s.*, o.order_no, o.customer_name, o.route_code,
+    o.consignee_name, o.consignee_country, o.consignee_city,
     so.sub_order_no, so.sub_status
     FROM wms_stock s
     LEFT JOIN oms_order o ON o.id = s.order_id

@@ -454,6 +454,27 @@ export default function CustomerScreen({ embedded = false }: CustomerScreenProps
                   </TouchableOpacity>
                 </View>
 
+                {/* 入仓号区块 — 客户专属入仓标识 */}
+                <View style={styles.entrySection}>
+                  <Text style={styles.entryLabel}>🏷️ 入仓号</Text>
+                  <View style={styles.entryCard}>
+                    <Text style={styles.entryCode}>{detail.customer_code}</Text>
+                    <Text style={styles.entryHint}>
+                      客户包裹填写此入仓号可自动关联订单
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+                    {['广州总仓', '深圳分仓', 'LOS 到达仓'].map((wh, i) => (
+                      <View key={i} style={styles.entryChip}>
+                        <Text style={styles.entryChipLabel}>{wh}</Text>
+                        <Text style={styles.entryChipValue}>
+                          {detail.customer_code}-{['GZ', 'SZ', 'LOS'][i]}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+
                 {/* 折叠区：基本信息 */}
                 <CollapseSection title="📋 基本信息" defaultOpen>
                   <DetailLine label="客户编号" value={detail.customer_code} />
@@ -612,6 +633,14 @@ const styles = StyleSheet.create({
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
   modalTitle: { fontSize: font.lg, fontWeight: '700', color: colors.text },
   detailHero: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, alignItems: 'center', marginBottom: spacing.md },
+  entrySection: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.md, borderLeftWidth: 3, borderLeftColor: colors.primary },
+  entryLabel: { fontSize: font.md, fontWeight: '600', color: colors.text, marginBottom: spacing.sm },
+  entryCard: { backgroundColor: colors.primaryLight, borderRadius: radius.md, padding: spacing.md },
+  entryCode: { fontSize: font.xxl, fontWeight: '800', color: colors.primary, fontFamily: font.mono, letterSpacing: 2 },
+  entryHint: { fontSize: font.xs, color: colors.textSecondary, marginTop: 4 },
+  entryChip: { flex: 1, padding: spacing.sm, backgroundColor: colors.bg, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderLight },
+  entryChipLabel: { fontSize: font.xs, color: colors.textSecondary },
+  entryChipValue: { fontSize: font.xs, color: colors.primary, fontWeight: '700', fontFamily: font.mono, marginTop: 2 },
   detailAvatar: { width: 64, height: 64, borderRadius: radius.full, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
   detailAvatarText: { fontSize: font.xxl, fontWeight: '700', color: colors.primary },
   detailName: { fontSize: font.lg, fontWeight: '700', color: colors.text },

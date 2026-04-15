@@ -37,6 +37,25 @@ router.get('/:id/full', (req: Request, res: Response) => {
   const actualPackages = db.prepare('SELECT * FROM oms_package_actual WHERE order_id = ?').all(req.params.id);
   const fees = db.prepare("SELECT * FROM fin_fee WHERE related_id = ? AND fee_level = 'ORDER'").all(req.params.id);
 
+  const subOrderIds = (subOrders as any[]).map((s) => s.id);
+  let relatedJobs: any[] = [];
+  let relatedDpns: any[] = [];
+  if (subOrderIds.length > 0) {
+    const placeholders = subOrderIds.map(() => '?').join(',');
+    relatedJobs = db.prepare(`
+      SELECT DISTINCT j.id, j.job_no, j.job_status, j.route_code, j.container_no, j.etd, j.eta
+      FROM tms_job_order_rel r
+      JOIN tms_job j ON j.id = r.job_id
+      WHERE r.sub_order_id IN (${placeholders})
+    `).all(...subOrderIds);
+    relatedDpns = db.prepare(`
+      SELECT DISTINCT d.id, d.dpn_no, d.dpn_status, d.from_site, d.to_site
+      FROM pod_dpn_item di
+      JOIN pod_dpn d ON d.id = di.dpn_id
+      WHERE di.sub_order_id IN (${placeholders})
+    `).all(...subOrderIds);
+  }
+
   res.json({
     data: {
       ...order,
@@ -44,6 +63,8 @@ router.get('/:id/full', (req: Request, res: Response) => {
       packages,
       actualPackages,
       fees,
+      relatedJobs,
+      relatedDpns,
     },
   });
 });

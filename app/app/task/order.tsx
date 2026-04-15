@@ -44,6 +44,24 @@ interface PackageItem {
   declared_weight_kg: number;
 }
 
+interface RelatedJob {
+  id: string;
+  job_no: string;
+  job_status: string;
+  route_code?: string;
+  container_no?: string;
+  etd?: string;
+  eta?: string;
+}
+
+interface RelatedDpn {
+  id: string;
+  dpn_no: string;
+  dpn_status: string;
+  from_site?: string;
+  to_site?: string;
+}
+
 interface OrderDetail extends OrderItem {
   subOrders: SubOrder[];
   packages: PackageItem[];
@@ -51,6 +69,8 @@ interface OrderDetail extends OrderItem {
   remark: string | null;
   sender_name: string | null;
   sender_phone: string | null;
+  relatedJobs?: RelatedJob[];
+  relatedDpns?: RelatedDpn[];
 }
 
 const STATUS_FILTERS = [
@@ -359,6 +379,63 @@ export default function OrderScreen({ embedded = false }: OrderScreenProps = {})
                   ))}
                 </View>
 
+                {/* 关联任务 */}
+                {((detail.relatedJobs?.length || 0) > 0 || (detail.relatedDpns?.length || 0) > 0) && (
+                  <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>🔗 关联任务</Text>
+                    {(detail.relatedJobs || []).map((j: any) => (
+                      <TouchableOpacity
+                        key={j.id}
+                        style={styles.relCard}
+                        onPress={() => {
+                          setSelectedId(null);
+                          router.push({
+                            pathname: '/task/packing',
+                            params: { jobId: j.id, mode: 'add-order' },
+                          });
+                        }}
+                      >
+                        <Ionicons name="cube-outline" size={18} color={colors.primary} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.relNo}>{j.job_no}</Text>
+                          <Text style={styles.relSub}>
+                            JOB · {j.job_status} · {j.route_code || '-'} {j.container_no ? `· ${j.container_no}` : ''}
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+                      </TouchableOpacity>
+                    ))}
+                    {(detail.relatedDpns || []).map((d: any) => (
+                      <TouchableOpacity
+                        key={d.id}
+                        style={styles.relCard}
+                        onPress={() => {
+                          setSelectedId(null);
+                          router.push({
+                            pathname: '/task/dpn',
+                            params: {
+                              dpnId: d.id,
+                              dpnNo: d.dpn_no,
+                              dpnStatus: d.dpn_status,
+                              fromSite: d.from_site,
+                              toSite: d.to_site,
+                            },
+                          });
+                        }}
+                      >
+                        <Ionicons name="document-text-outline" size={18} color={colors.taskDispatch} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.relNo}>{d.dpn_no}</Text>
+                          <Text style={styles.relSub}>
+                            DPN · {d.dpn_status} · {d.from_site || '-'} → {d.to_site || '-'}
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+
                 {/* 费用 */}
                 <View style={styles.section}>
                   <Text style={styles.sectionTitle}>💰 费用明细</Text>
@@ -442,6 +519,9 @@ const styles = StyleSheet.create({
   timelineRight: { flex: 1, paddingTop: 4, paddingBottom: spacing.md },
   timelineLabel: { fontSize: font.sm, color: colors.textTertiary },
   timelineNote: { fontSize: font.xs, color: colors.primary, marginTop: 2 },
+  relCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, backgroundColor: colors.bg, borderRadius: radius.md, marginBottom: spacing.xs, borderLeftWidth: 3, borderLeftColor: colors.primary },
+  relNo: { fontSize: font.sm, fontFamily: font.mono, fontWeight: '700', color: colors.primary },
+  relSub: { fontSize: font.xs, color: colors.textSecondary, marginTop: 2 },
   // Detail rows
   detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing.sm, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
   detailLabel: { fontSize: font.sm, color: colors.textSecondary },

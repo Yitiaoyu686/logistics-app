@@ -16,6 +16,8 @@ interface StockItem {
   customer_name: string;
   route_code: string;
   consignee_name: string;
+  consignee_country?: string;
+  consignee_city?: string;
   sub_order_no: string;
   stock_status: StockStatus;
   pieces: number;
@@ -84,9 +86,19 @@ export default function StockScreen() {
     }
   };
 
+  // 到达国三级筛选
+  const [filterCountry, setFilterCountry] = useState<string>('ALL');
+  const [filterCity, setFilterCity] = useState<string>('ALL');
+  const [filterSite, setFilterSite] = useState<string>('ALL');
+
   const filtered = useMemo(() => {
     return list.filter((s) => {
       if (status !== 'ALL' && s.stock_status !== status) return false;
+      if (isDestination) {
+        if (filterCountry !== 'ALL' && s.consignee_country !== filterCountry) return false;
+        if (filterCity !== 'ALL' && s.consignee_city !== filterCity) return false;
+        if (filterSite !== 'ALL' && s.warehouse_id !== filterSite) return false;
+      }
       if (keyword) {
         const k = keyword.toLowerCase();
         return (
@@ -98,7 +110,20 @@ export default function StockScreen() {
       }
       return true;
     });
-  }, [list, status, keyword]);
+  }, [list, status, keyword, isDestination, filterCountry, filterCity, filterSite]);
+
+  const destinationOptions = useMemo(() => {
+    if (!isDestination) return { countries: [], cities: [], sites: [] };
+    const countries = Array.from(new Set(list.map((s: any) => s.consignee_country).filter(Boolean)));
+    const cities = Array.from(new Set(
+      list
+        .filter((s: any) => filterCountry === 'ALL' || s.consignee_country === filterCountry)
+        .map((s: any) => s.consignee_city)
+        .filter(Boolean)
+    ));
+    const sites = Array.from(new Set(list.map((s) => s.warehouse_id).filter(Boolean)));
+    return { countries, cities, sites };
+  }, [list, isDestination, filterCountry]);
 
   const stats = useMemo(() => {
     const total = list.length;
@@ -257,6 +282,67 @@ export default function StockScreen() {
           })}
         </ScrollView>
       </View>
+
+      {/* 到达国三级筛选 */}
+      {isDestination && (
+        <View style={{ paddingTop: spacing.sm, paddingBottom: spacing.sm, backgroundColor: colors.card, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.md, gap: spacing.sm }}>
+            <TouchableOpacity
+              style={[styles.chip, filterCountry === 'ALL' && styles.chipActive]}
+              onPress={() => { setFilterCountry('ALL'); setFilterCity('ALL'); }}
+            >
+              <Text style={[styles.chipText, filterCountry === 'ALL' && styles.chipTextActive]}>🌍 全部国家</Text>
+            </TouchableOpacity>
+            {destinationOptions.countries.map((c) => (
+              <TouchableOpacity
+                key={c}
+                style={[styles.chip, filterCountry === c && styles.chipActive]}
+                onPress={() => { setFilterCountry(c); setFilterCity('ALL'); }}
+              >
+                <Text style={[styles.chipText, filterCountry === c && styles.chipTextActive]}>{c}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {filterCountry !== 'ALL' && destinationOptions.cities.length > 0 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.md, gap: spacing.sm, marginTop: spacing.xs }}>
+              <TouchableOpacity
+                style={[styles.chip, filterCity === 'ALL' && styles.chipActive]}
+                onPress={() => setFilterCity('ALL')}
+              >
+                <Text style={[styles.chipText, filterCity === 'ALL' && styles.chipTextActive]}>🏙️ 全部城市</Text>
+              </TouchableOpacity>
+              {destinationOptions.cities.map((c) => (
+                <TouchableOpacity
+                  key={c}
+                  style={[styles.chip, filterCity === c && styles.chipActive]}
+                  onPress={() => setFilterCity(c)}
+                >
+                  <Text style={[styles.chipText, filterCity === c && styles.chipTextActive]}>{c}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.md, gap: spacing.sm, marginTop: spacing.xs }}>
+            <TouchableOpacity
+              style={[styles.chip, filterSite === 'ALL' && styles.chipActive]}
+              onPress={() => setFilterSite('ALL')}
+            >
+              <Text style={[styles.chipText, filterSite === 'ALL' && styles.chipTextActive]}>📍 全部站点</Text>
+            </TouchableOpacity>
+            {destinationOptions.sites.map((s) => (
+              <TouchableOpacity
+                key={s}
+                style={[styles.chip, filterSite === s && styles.chipActive]}
+                onPress={() => setFilterSite(s)}
+              >
+                <Text style={[styles.chipText, filterSite === s && styles.chipTextActive]}>{s}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       {/* List */}
       {loading ? (
