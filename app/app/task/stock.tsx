@@ -7,6 +7,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { warehouseApi } from '../../lib/api';
+import { safeBack } from '../../lib/nav';
 
 type StockStatus = 'IN_STOCK' | 'ALLOCATED' | 'PACKED' | 'OUTBOUND' | 'RETURNED' | 'DAMAGED';
 
@@ -218,7 +219,7 @@ export default function StockScreen() {
     <SafeAreaView style={styles.safe}>
       {/* Nav */}
       <View style={styles.navBar}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}>
+        <TouchableOpacity onPress={() => safeBack(router)} style={styles.navBtn}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.navTitle}>{isDestination ? '到达国库存查询' : '库存管理'}</Text>

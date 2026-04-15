@@ -8,6 +8,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { customerApi, orderApi, systemApi } from '../../lib/api';
+import { safeBack } from '../../lib/nav';
 
 type ServiceType = 'EXPRESS' | 'STANDARD';
 type ExportMode = 'BUYER_EXPORT' | 'SELF_EXPORT';
@@ -233,7 +234,7 @@ export default function OrderCreateScreen() {
         `运单号：${res.data?.orderNo}\n入仓号：${res.data?.warehouseEntryNo}${fromUnmatchedId ? '\n已自动关联无单快递' : ''}`,
         [
           { text: '继续创建', onPress: () => { setStep(1); setPackages([{ expressCompany: '顺丰', trackingNo: '', goodsName: '', goodsCategory: 'OTHER', pieces: 1, weight: 0 }]); } },
-          { text: '完成', onPress: () => router.back() },
+          { text: '完成', onPress: () => safeBack(router) },
         ]
       );
     } catch (err: any) {
@@ -476,7 +477,7 @@ export default function OrderCreateScreen() {
     <SafeAreaView style={styles.safe}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <View style={styles.navBar}>
-          <TouchableOpacity onPress={() => step > 1 ? setStep(step - 1) : router.back()} style={styles.navBtn}>
+          <TouchableOpacity onPress={() => step > 1 ? setStep(step - 1) : safeBack(router)} style={styles.navBtn}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.navTitle}>新建订单</Text>

@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { orderApi } from '../../lib/api';
+import { safeBack } from '../../lib/nav';
 
 interface OrderItem {
   id: string;
@@ -202,7 +203,7 @@ export default function OrderScreen({ embedded = false }: OrderScreenProps = {})
         {embedded ? (
           <View style={styles.navBtn} />
         ) : (
-          <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}>
+          <TouchableOpacity onPress={() => safeBack(router)} style={styles.navBtn}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
         )}

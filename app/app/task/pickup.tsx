@@ -7,6 +7,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { deliveryApi } from '../../lib/api';
+import { safeBack } from '../../lib/nav';
 
 type Mode = 'notify' | 'verify';
 
@@ -35,7 +36,7 @@ export default function PickupScreen() {
       Alert.alert(
         '通知已发送',
         `短信已发送到 ${params.recipientPhone}\n包含提货码、自提站点地址和营业时间`,
-        [{ text: '确定', onPress: () => router.back() }]
+        [{ text: '确定', onPress: () => safeBack(router) }]
       );
     } catch (err: any) {
       Alert.alert('发送失败', err.message || '请重试');
@@ -52,7 +53,7 @@ export default function PickupScreen() {
       if (params.pickupId) {
         await deliveryApi.completePickup(params.pickupId as string);
       }
-      Alert.alert('核销成功', '客户已取货', [{ text: '确定', onPress: () => router.back() }]);
+      Alert.alert('核销成功', '客户已取货', [{ text: '确定', onPress: () => safeBack(router) }]);
     } catch (err: any) {
       Alert.alert('核销失败', err.message || '请重试');
     } finally {
@@ -65,7 +66,7 @@ export default function PickupScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         {/* Nav */}
         <View style={styles.navBar}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}>
+          <TouchableOpacity onPress={() => safeBack(router)} style={styles.navBtn}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.navTitle}>{mode === 'notify' ? '通知自提' : '核销自提'}</Text>

@@ -7,6 +7,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { deliveryApi, orderApi, systemApi } from '../../lib/api';
+import { safeBack } from '../../lib/nav';
 
 interface SupplierOption {
   id: string;
@@ -191,7 +192,7 @@ export default function DpnScreen() {
         await deliveryApi.bindSubOrders(params.dpnId as string, ids);
       }
       Alert.alert('绑定成功', `已绑定 ${selectedCount} 条运单`, [
-        { text: '确定', onPress: () => router.back() },
+        { text: '确定', onPress: () => safeBack(router) },
       ]);
     } catch (err: any) {
       Alert.alert('绑定失败', err.message || '请重试');
@@ -221,7 +222,7 @@ export default function DpnScreen() {
         });
       }
       Alert.alert('发车成功', `${driverName} · ${plateNo}\n已进入运输中`, [
-        { text: '确定', onPress: () => router.back() },
+        { text: '确定', onPress: () => safeBack(router) },
       ]);
     } catch (err: any) {
       Alert.alert('发车失败', err.message || '请重试');
@@ -241,7 +242,7 @@ export default function DpnScreen() {
         });
       }
       Alert.alert('到达确认', '已标记为已到达', [
-        { text: '确定', onPress: () => router.back() },
+        { text: '确定', onPress: () => safeBack(router) },
       ]);
     } catch (err: any) {
       Alert.alert('提交失败', err.message || '请重试');
@@ -272,7 +273,7 @@ export default function DpnScreen() {
         });
       }
       Alert.alert('入库完成', '货物已入到达国仓库', [
-        { text: '确定', onPress: () => router.back() },
+        { text: '确定', onPress: () => safeBack(router) },
       ]);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '请重试';
@@ -289,7 +290,7 @@ export default function DpnScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         {/* Nav */}
         <View style={styles.navBar}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}>
+          <TouchableOpacity onPress={() => safeBack(router)} style={styles.navBtn}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.navTitle}>DPN 管理</Text>

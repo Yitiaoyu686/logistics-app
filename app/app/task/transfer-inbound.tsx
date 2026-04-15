@@ -7,6 +7,7 @@ import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { warehouseApi } from '../../lib/api';
+import { safeBack } from '../../lib/nav';
 
 type InboundMode = 'SCAN' | 'MANUAL';
 type ItemStatus = 'PENDING' | 'RECEIVED';
@@ -179,7 +180,7 @@ export default function TransferInboundScreen() {
     try {
       await warehouseApi.confirmTransferInbound(detail.id);
       Alert.alert('入库完成', `${detail.transfer_no} 已最终确认`, [
-        { text: '完成', onPress: () => router.back() },
+        { text: '完成', onPress: () => safeBack(router) },
       ]);
     } catch (err: any) {
       Alert.alert('提交失败', err.message || '请重试');
@@ -242,7 +243,7 @@ export default function TransferInboundScreen() {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.navBar}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}>
+          <TouchableOpacity onPress={() => safeBack(router)} style={styles.navBtn}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.navTitle}>调拨入库</Text>
@@ -259,7 +260,7 @@ export default function TransferInboundScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         {/* Nav */}
         <View style={styles.navBar}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}>
+          <TouchableOpacity onPress={() => safeBack(router)} style={styles.navBtn}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.navTitle}>{pageTitle}</Text>

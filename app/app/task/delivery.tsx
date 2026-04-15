@@ -7,6 +7,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { deliveryApi } from '../../lib/api';
+import { safeBack } from '../../lib/nav';
 
 type Mode = 'sign' | 'fail';
 
@@ -50,7 +51,7 @@ export default function DeliveryScreen() {
           remark: signRemark,
         });
       }
-      Alert.alert('签收成功', '', [{ text: '确定', onPress: () => router.back() }]);
+      Alert.alert('签收成功', '', [{ text: '确定', onPress: () => safeBack(router) }]);
     } catch (err: any) {
       Alert.alert('签收失败', err.message || '请重试');
     } finally {
@@ -69,7 +70,7 @@ export default function DeliveryScreen() {
           remark: failDetail,
         });
       }
-      Alert.alert('已提交', '已通知相关人员', [{ text: '确定', onPress: () => router.back() }]);
+      Alert.alert('已提交', '已通知相关人员', [{ text: '确定', onPress: () => safeBack(router) }]);
     } catch (err: any) {
       Alert.alert('提交失败', err.message || '请重试');
     } finally {
@@ -81,7 +82,7 @@ export default function DeliveryScreen() {
     Alert.alert('转为自提', '确认将此任务转为自提？', [
       { text: '取消', style: 'cancel' },
       { text: '确认', onPress: () => {
-        Alert.alert('已转自提', '任务已出现在自提列表', [{ text: '确定', onPress: () => router.back() }]);
+        Alert.alert('已转自提', '任务已出现在自提列表', [{ text: '确定', onPress: () => safeBack(router) }]);
       }},
     ]);
   };
@@ -91,7 +92,7 @@ export default function DeliveryScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         {/* Nav */}
         <View style={styles.navBar}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}>
+          <TouchableOpacity onPress={() => safeBack(router)} style={styles.navBtn}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.navTitle}>{mode === 'sign' ? '配送签收' : '配送失败'}</Text>

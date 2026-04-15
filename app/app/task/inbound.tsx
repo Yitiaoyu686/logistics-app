@@ -7,6 +7,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { orderApi, warehouseApi } from '../../lib/api';
+import { safeBack } from '../../lib/nav';
 
 type PackageCondition = 'GOOD' | 'DAMAGED' | 'WET' | 'OPENED' | 'INCOMPLETE';
 
@@ -289,10 +290,10 @@ export default function InboundScreen() {
 
       if (andPrint) {
         Alert.alert('入库成功', '面单已发送到蓝牙打印机', [
-          { text: '继续扫下一单', onPress: () => router.back() },
+          { text: '继续扫下一单', onPress: () => safeBack(router) },
         ]);
       } else {
-        Alert.alert('入库成功', '', [{ text: '确定', onPress: () => router.back() }]);
+        Alert.alert('入库成功', '', [{ text: '确定', onPress: () => safeBack(router) }]);
       }
     } catch (err: any) {
       Alert.alert('入库失败', err.message || '请重试');
@@ -314,7 +315,7 @@ export default function InboundScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         {/* 顶部导航 */}
         <View style={styles.navBar}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}>
+          <TouchableOpacity onPress={() => safeBack(router)} style={styles.navBtn}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.navTitle}>{MODE_LABEL[mode]}</Text>

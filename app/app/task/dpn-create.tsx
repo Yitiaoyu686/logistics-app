@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { deliveryApi } from '../../lib/api';
+import { safeBack } from '../../lib/nav';
 
 type DeliveryMethod = 'DELIVERY' | 'SELF_PICKUP' | 'SATELLITE_STATION';
 
@@ -56,7 +57,7 @@ export default function DpnCreateScreen() {
                 },
               }),
           },
-          { text: '稍后', onPress: () => router.back() },
+          { text: '稍后', onPress: () => safeBack(router) },
         ],
       );
     } catch (err: unknown) {
@@ -74,7 +75,7 @@ export default function DpnCreateScreen() {
         style={{ flex: 1 }}
       >
         <View style={styles.navBar}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}>
+          <TouchableOpacity onPress={() => safeBack(router)} style={styles.navBtn}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.navTitle}>新建 DPN</Text>

@@ -8,6 +8,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { customerApi, systemApi } from '../../lib/api';
+import { safeBack } from '../../lib/nav';
 
 type CustomerType = 'COMPANY_CN' | 'COMPANY_OS' | 'PERSONAL';
 type Transport = 'SEA' | 'AIR' | 'BOTH';
@@ -82,7 +83,7 @@ export default function CustomerCreateScreen() {
       Alert.alert(
         '创建成功',
         `客户编号：${res.data?.customerCode || '-'}`,
-        [{ text: '完成', onPress: () => router.back() }]
+        [{ text: '完成', onPress: () => safeBack(router) }]
       );
     } catch (err: any) {
       Alert.alert('创建失败', err.message || '请重试');
@@ -95,7 +96,7 @@ export default function CustomerCreateScreen() {
     <SafeAreaView style={styles.safe}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <View style={styles.navBar}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}>
+          <TouchableOpacity onPress={() => safeBack(router)} style={styles.navBtn}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.navTitle}>新增客户</Text>

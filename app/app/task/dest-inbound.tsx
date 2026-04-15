@@ -7,6 +7,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { jobApi, warehouseApi } from '../../lib/api';
+import { safeBack } from '../../lib/nav';
 
 type DeliveryStatus = 'ARRIVED_WAREHOUSE' | 'DIRECT_TO_CUSTOMER';
 type CargoStatus = 'INTACT' | 'DAMAGED_GOODS' | 'DAMAGED_PACKAGE' | 'LOST';
@@ -161,7 +162,7 @@ export default function DestInboundScreen() {
       Alert.alert(
         '入库完成',
         `本次入库 ${stats.completed}/${stats.total}\n完好 ${stats.intact} · 破损 ${stats.damaged} · 丢失 ${stats.lost}`,
-        [{ text: '确定', onPress: () => router.back() }],
+        [{ text: '确定', onPress: () => safeBack(router) }],
       );
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '请重试';
@@ -183,7 +184,7 @@ export default function DestInboundScreen() {
     <SafeAreaView style={styles.safe}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <View style={styles.navBar}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}>
+          <TouchableOpacity onPress={() => safeBack(router)} style={styles.navBtn}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.navTitle}>任务入库核对</Text>

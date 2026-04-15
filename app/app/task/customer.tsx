@@ -9,6 +9,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { customerApi, orderApi } from '../../lib/api';
+import { safeBack } from '../../lib/nav';
 
 type PoolType = 'PRIVATE' | 'PUBLIC';
 type StatusFilter = 'ALL' | 'ACTIVE' | 'SLEEP' | 'FROZEN';
@@ -315,7 +316,7 @@ export default function CustomerScreen({ embedded = false }: CustomerScreenProps
         {embedded ? (
           <View style={styles.navBtn} />
         ) : (
-          <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}>
+          <TouchableOpacity onPress={() => safeBack(router)} style={styles.navBtn}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
         )}

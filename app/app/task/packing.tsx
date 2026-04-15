@@ -7,6 +7,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { jobApi, systemApi } from '../../lib/api';
+import { safeBack } from '../../lib/nav';
 
 interface SupplierOption {
   id: string;
@@ -160,7 +161,7 @@ export default function PackingScreen() {
         remark: `${truckingCompany} ${driverName} ${plateNo}`,
       }).catch(() => null);
       Alert.alert('执行成功', '任务已安排发运', [
-        { text: '确定', onPress: () => router.back() },
+        { text: '确定', onPress: () => safeBack(router) },
       ]);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '请重试';
@@ -187,7 +188,7 @@ export default function PackingScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         {/* Nav */}
         <View style={styles.navBar}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.navBtn}>
+          <TouchableOpacity onPress={() => safeBack(router)} style={styles.navBtn}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.navTitle}>{mode === 'add-order' ? '装箱 · 添加订单' : '执行出库'}</Text>
