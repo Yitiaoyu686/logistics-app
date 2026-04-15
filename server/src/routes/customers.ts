@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../database/schema';
-import { uuid } from '../utils/idGenerator';
+import { createCustomerRecord, mapCustomerRow } from '../database/customerRepo';
 
 const router = Router();
 
@@ -21,55 +21,94 @@ router.get('/', (req: Request, res: Response) => {
 
   sql += ' ORDER BY created_at DESC';
   const rows = db.prepare(sql).all(...params) as any[];
-
-  const mapped = rows.map((r: any) => ({
-    id: r.id,
-    customerCode: r.customer_code,
-    customerName: r.customer_name,
-    customerType: r.customer_type,
-    country: r.country,
-    industry: r.industry,
-    contactName: r.contact_name,
-    contactPhone: r.contact_phone,
-    contactEmail: r.contact_email,
-    ownerUserId: r.owner_user_id,
-    poolType: r.pool_type,
-    status: r.status,
-    preferredTransport: r.preferred_transport,
-    preferredPayment: r.preferred_payment,
-    remark: r.remark,
-    createdAt: r.created_at,
-    // Count orders
-    orderCount: (db.prepare('SELECT COUNT(*) as c FROM oms_order WHERE customer_id = ?').get(r.id) as any).c,
-  }));
-
-  res.json({ data: mapped });
+  res.json({ data: rows.map((r) => mapCustomerRow(db, r)) });
 });
 
 // GET /api/v2/oms/customers/:id
 router.get('/:id', (req: Request, res: Response) => {
   const db = getDb();
-  const customer = db.prepare('SELECT * FROM crm_customer WHERE id = ?').get(req.params.id) as any;
-  if (!customer) { res.status(404).json({ error: 'Not found' }); return; }
+  const row = db.prepare('SELECT * FROM crm_customer WHERE id = ?').get(req.params.id) as any;
+  if (!row) { res.status(404).json({ error: 'Not found' }); return; }
 
-  const senders = db.prepare('SELECT * FROM crm_sender_profile WHERE customer_id = ?').all(req.params.id);
-  const recipients = db.prepare('SELECT * FROM crm_recipient_address WHERE customer_id = ?').all(req.params.id);
+  const senders = db.prepare('SELECT * FROM crm_sender_profile WHERE customer_id = ? ORDER BY is_default DESC, created_at ASC').all(req.params.id) as any[];
+  const recipients = db.prepare('SELECT * FROM crm_recipient_address WHERE customer_id = ? ORDER BY is_default DESC, created_at ASC').all(req.params.id) as any[];
 
-  res.json({ data: { ...customer, senders, recipients } });
+  const senderContacts = senders.map((s, i) => ({
+    id: s.id || `SENDER-${i + 1}`,
+    label: i === 0 ? '默认发货人' : `发货人 ${i + 1}`,
+    senderName: s.sender_name,
+    senderPhone: s.sender_phone,
+    senderAddress: s.sender_address,
+    senderCity: s.sender_city,
+    senderCountry: s.sender_country,
+  }));
+  const receiverContacts = recipients.map((r, i) => ({
+    id: r.id || `RECEIVER-${i + 1}`,
+    label: i === 0 ? '默认收货人' : `收货人 ${i + 1}`,
+    consigneeName: r.recipient_name,
+    consigneePhone: r.recipient_phone,
+    consigneeCountry: r.country,
+    consigneeCity: r.city,
+    consigneeZipCode: r.zip_code,
+    consigneeAddress: r.detail_address,
+  }));
+  const firstSender = senderContacts[0];
+  const firstReceiver = receiverContacts[0];
+  const logisticsInfo = {
+    senderContacts,
+    receiverContacts,
+    senderName: firstSender?.senderName,
+    senderPhone: firstSender?.senderPhone,
+    senderAddress: firstSender?.senderAddress,
+    senderCity: firstSender?.senderCity,
+    senderCountry: firstSender?.senderCountry,
+    consigneeName: firstReceiver?.consigneeName,
+    consigneePhone: firstReceiver?.consigneePhone,
+    consigneeCountry: firstReceiver?.consigneeCountry,
+    consigneeCity: firstReceiver?.consigneeCity,
+    consigneeZipCode: firstReceiver?.consigneeZipCode,
+    consigneeAddress: firstReceiver?.consigneeAddress,
+    preferredTransportType: row.preferred_transport,
+    paymentMethod: row.preferred_payment,
+  };
+
+  res.json({
+    data: {
+      ...mapCustomerRow(db, row),
+      senders,
+      recipients,
+      logisticsInfo,
+    },
+  });
 });
 
 // POST /api/v2/oms/customers
 router.post('/', (req: Request, res: Response) => {
   const db = getDb();
-  const id = uuid();
-  const b = req.body;
-  const code = b.customerCode || `C${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-  db.prepare('INSERT INTO crm_customer (id, customer_code, customer_name, customer_type, country, industry, contact_name, contact_phone, contact_email, owner_user_id, pool_type, status, preferred_transport, preferred_payment, remark) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(
-    id, code, b.customerName, b.customerType || 'COMPANY_CN', b.country, b.industry,
-    b.contactName, b.contactPhone, b.contactEmail, b.ownerUserId, b.poolType || 'PRIVATE',
-    b.status || 'ACTIVE', b.preferredTransport, b.preferredPayment, b.remark
-  );
-  res.json({ data: { id, customerCode: code } });
+  const b = req.body || {};
+  const { id, customerCode } = createCustomerRecord(db, {
+    name: b.name || b.customerName,
+    customerType: b.customerType || b.enterpriseInfo?.entityType,
+    country: b.country,
+    address: b.address,
+    industry: b.industry,
+    source: b.source,
+    contact: b.contact,
+    contactName: b.contactName,
+    contactPhone: b.contactPhone,
+    contactEmail: b.contactEmail,
+    salesId: b.salesId,
+    ownerUserId: b.ownerUserId,
+    poolType: b.poolType || 'PRIVATE',
+    status: b.status || 'ACTIVE',
+    preferredTransport: b.preferredTransport,
+    preferredPayment: b.preferredPayment,
+    remark: b.remark,
+    enterpriseInfo: b.enterpriseInfo,
+    logisticsInfo: b.logisticsInfo,
+  });
+  const row = db.prepare('SELECT * FROM crm_customer WHERE id = ?').get(id) as any;
+  res.json({ data: { ...mapCustomerRow(db, row), id, customerCode, shortCode: customerCode } });
 });
 
 // PUT /api/v2/oms/customers/:id

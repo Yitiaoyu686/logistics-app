@@ -186,7 +186,9 @@ export function createTables(): void {
       customer_name TEXT NOT NULL,
       customer_type TEXT DEFAULT 'COMPANY' CHECK(customer_type IN ('COMPANY_CN','COMPANY_OVERSEAS','INDIVIDUAL')),
       country TEXT,
+      address TEXT,
       industry TEXT,
+      source TEXT,
       contact_name TEXT,
       contact_phone TEXT,
       contact_email TEXT,
@@ -195,6 +197,7 @@ export function createTables(): void {
       status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN ('ACTIVE','DORMANT','FROZEN')),
       preferred_transport TEXT,
       preferred_payment TEXT,
+      enterprise_info TEXT,
       remark TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT
