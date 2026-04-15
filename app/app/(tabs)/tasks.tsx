@@ -160,6 +160,29 @@ export default function TasksScreen() {
           });
         }
 
+        // 退回入库入口 — 常驻快捷卡片（真实场景来自 warehouseApi.getReturns）
+        let returnCount = 0;
+        try {
+          const returnsRes = await warehouseApi.getReturns();
+          returnCount = (returnsRes.data || []).length;
+        } catch {
+          returnCount = 0;
+        }
+        items.push({
+          id: 'return-entry',
+          type: 'transfer',
+          icon: '↩️',
+          title: '退回入库',
+          subtitle: returnCount > 0 ? `待处理 ${returnCount} 条` : '暂无待处理',
+          detail: '处理从到达国退回的运单 / 配送失败退回',
+          status: returnCount > 0 ? '待处理' : '无任务',
+          statusColor: returnCount > 0 ? colors.warning : colors.textTertiary,
+          actions: [
+            { label: '查看列表', color: colors.primary, route: '/task/return-process' },
+          ],
+          borderColor: colors.taskTransfer,
+        });
+
         // 运营预告：即将发运的JOB
         const allJobs = await jobApi.list();
         for (const j of (allJobs.data || []).filter((j: any) => ['CUSTOMS_EXPORT', 'DEPARTED'].includes(j.job_status))) {

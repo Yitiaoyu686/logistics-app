@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, Modal, ScrollView,
   Alert, ActivityIndicator,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../lib/theme';
 import { warehouseApi, orderApi } from '../lib/api';
@@ -36,6 +37,7 @@ interface UnmatchedMatchDialogProps {
 }
 
 export function UnmatchedMatchDialog({ visible, target, onClose, onSuccess }: UnmatchedMatchDialogProps) {
+  const router = useRouter();
   const [orders, setOrders] = useState<OrderOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [keyword, setKeyword] = useState('');
@@ -119,6 +121,31 @@ export function UnmatchedMatchDialog({ visible, target, onClose, onSuccess }: Un
                 )}
               </View>
 
+              {/* 创建新订单 — 若匹配不到现有订单，直接为当前快递创建订单 */}
+              <TouchableOpacity
+                style={styles.createOrderBtn}
+                onPress={() => {
+                  if (!target) return;
+                  onClose();
+                  router.push({
+                    pathname: '/task/order-create',
+                    params: {
+                      fromUnmatchedId: target.id,
+                      trackingNo: target.tracking_no,
+                      senderName: target.sender_name || '',
+                      senderPhone: target.sender_phone || '',
+                      pieces: String(target.pieces),
+                      weightKg: String(target.gross_weight_kg),
+                      expressCompany: target.express_company || '',
+                    },
+                  });
+                }}
+              >
+                <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
+                <Text style={styles.createOrderBtnText}>创建新订单并自动关联</Text>
+                <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+              </TouchableOpacity>
+
               {/* 搜索 */}
               <View style={styles.searchInputWrap}>
                 <Ionicons name="search-outline" size={18} color={colors.textTertiary} />
@@ -195,6 +222,8 @@ const styles = StyleSheet.create({
   hintBox: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6, paddingTop: 6, borderTopWidth: 0.5, borderTopColor: colors.borderLight },
   hintText: { fontSize: font.xs, color: colors.warning, fontStyle: 'italic' },
 
+  createOrderBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: colors.primaryLight, borderWidth: 1, borderColor: colors.primary, borderStyle: 'dashed', borderRadius: radius.md, paddingVertical: spacing.md, marginBottom: spacing.md },
+  createOrderBtnText: { fontSize: font.sm, color: colors.primary, fontWeight: '600' },
   searchInputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: radius.md, paddingHorizontal: spacing.md, height: 44, gap: spacing.sm, marginBottom: spacing.sm },
   searchInput: { flex: 1, fontSize: font.md, color: colors.text },
 

@@ -65,7 +65,18 @@ const GOODS_CATEGORIES = ['ELECTRONICS', 'APPAREL', 'DAILY_USE', 'BEAUTY', 'MACH
 
 export default function OrderCreateScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ customerId?: string; customerName?: string }>();
+  const params = useLocalSearchParams<{
+    customerId?: string;
+    customerName?: string;
+    fromUnmatchedId?: string;
+    trackingNo?: string;
+    senderName?: string;
+    senderPhone?: string;
+    pieces?: string;
+    weightKg?: string;
+    expressCompany?: string;
+  }>();
+  const fromUnmatchedId = params.fromUnmatchedId as string | undefined;
 
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
@@ -80,10 +91,20 @@ export default function OrderCreateScreen() {
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [customerKeyword, setCustomerKeyword] = useState('');
 
-  // Step 2: 包裹列表
-  const [packages, setPackages] = useState<PackageItem[]>([
-    { expressCompany: '顺丰', trackingNo: '', goodsName: '', goodsCategory: 'OTHER', pieces: 1, weight: 0 },
-  ]);
+  // Step 2: 包裹列表 — 如果从无订单快递过来，预填一条
+  const [packages, setPackages] = useState<PackageItem[]>(() => {
+    if (params.trackingNo) {
+      return [{
+        expressCompany: (params.expressCompany as string) || '顺丰',
+        trackingNo: params.trackingNo as string,
+        goodsName: '',
+        goodsCategory: 'OTHER',
+        pieces: Number(params.pieces) || 1,
+        weight: Number(params.weightKg) || 0,
+      }];
+    }
+    return [{ expressCompany: '顺丰', trackingNo: '', goodsName: '', goodsCategory: 'OTHER', pieces: 1, weight: 0 }];
+  });
 
   // Step 3: 收货信息
   const [customerDetail, setCustomerDetail] = useState<CustomerDetail | null>(null);
@@ -193,9 +214,23 @@ export default function OrderCreateScreen() {
           heightCm: p.heightCm,
         })),
       });
+      // 如果是从无订单快递跳过来的，创建订单后立即匹配
+      if (fromUnmatchedId && res.data?.id) {
+        try {
+          const { warehouseApi } = await import('../../lib/api');
+          await warehouseApi.matchUnmatched(fromUnmatchedId, {
+            orderId: res.data.id,
+            customerName,
+            createSubOrder: true,
+            matchMethod: 'CREATE_NEW',
+          });
+        } catch {
+          // 非致命：订单已创建
+        }
+      }
       Alert.alert(
         '✅ 订单创建成功',
-        `运单号：${res.data?.orderNo}\n入仓号：${res.data?.warehouseEntryNo}`,
+        `运单号：${res.data?.orderNo}\n入仓号：${res.data?.warehouseEntryNo}${fromUnmatchedId ? '\n已自动关联无单快递' : ''}`,
         [
           { text: '继续创建', onPress: () => { setStep(1); setPackages([{ expressCompany: '顺丰', trackingNo: '', goodsName: '', goodsCategory: 'OTHER', pieces: 1, weight: 0 }]); } },
           { text: '完成', onPress: () => router.back() },

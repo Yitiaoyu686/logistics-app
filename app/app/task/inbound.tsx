@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TextInput, TouchableOpacity,
-  SafeAreaView, Alert, KeyboardAvoidingView, Platform, Modal,
+  SafeAreaView, Alert, KeyboardAvoidingView, Platform, Modal, Image,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -98,6 +98,8 @@ export default function InboundScreen() {
   const [fees, setFees] = useState<InboundFee[]>([]);
   const [feeEditorOpen, setFeeEditorOpen] = useState(false);
   const [editingFee, setEditingFee] = useState<InboundFee | null>(null);
+  const [photos, setPhotos] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (params.orderId) loadOrder(params.orderId as string);
@@ -200,6 +202,38 @@ export default function InboundScreen() {
     setFees((prev) => prev.filter((f) => f.id !== id));
   };
 
+  const openPhotoPicker = () => {
+    if (Platform.OS === 'web' && fileInputRef.current) {
+      fileInputRef.current.click();
+    } else {
+      Alert.alert('📷 拍照', '原生拍照能力将在打包后启用（expo-image-picker）', [
+        {
+          text: '添加占位',
+          onPress: () =>
+            setPhotos((prev) => [...prev, `https://picsum.photos/seed/${Date.now()}/200/200`]),
+        },
+        { text: '取消', style: 'cancel' },
+      ]);
+    }
+  };
+
+  const onPickFiles = (event: unknown) => {
+    const e = event as { target: { files: FileList | null } };
+    const files = e.target.files;
+    if (!files) return;
+    const urls: string[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files.item(i);
+      if (file) urls.push(URL.createObjectURL(file));
+    }
+    setPhotos((prev) => [...prev, ...urls]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const removePhoto = (url: string) => {
+    setPhotos((prev) => prev.filter((p) => p !== url));
+  };
+
   const isAbnormal = condition !== 'GOOD';
 
   const handleSubmit = async (andPrint: boolean) => {
@@ -226,6 +260,7 @@ export default function InboundScreen() {
         packageCondition: condition,
         locationCode: location,
         goodsCategory: goodsCategory || null,
+        photoUrls: photos,
         fees: fees.map((f) => ({
           feeType: f.feeType,
           currency: f.currency,
@@ -430,12 +465,35 @@ export default function InboundScreen() {
             {isAbnormal && (
               <View style={styles.photoHint}>
                 <Text style={styles.photoHintText}>⚠️ 异常包裹必须拍照记录</Text>
-                <TouchableOpacity style={styles.photoBtn}>
-                  <Ionicons name="camera-outline" size={18} color={colors.danger} />
-                  <Text style={styles.photoBtnText}>拍照</Text>
-                </TouchableOpacity>
               </View>
             )}
+          </View>
+
+          {/* 入库照片 */}
+          <View style={styles.section}>
+            <View style={styles.feeHeader}>
+              <Text style={styles.sectionTitle}>
+                📷 入库照片 <Text style={styles.photoHintInline}>（快递面单/外观/破损）</Text>
+              </Text>
+              <Text style={styles.photoCount}>{photos.length} 张</Text>
+            </View>
+            <View style={styles.photoGrid}>
+              {photos.map((url) => (
+                <View key={url} style={styles.photoTile}>
+                  <Image source={{ uri: url }} style={styles.photoImage} />
+                  <TouchableOpacity style={styles.photoRemove} onPress={() => removePhoto(url)}>
+                    <Ionicons name="close" size={14} color="#fff" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              {photos.length < 9 && (
+                <TouchableOpacity style={styles.photoAdd} onPress={openPhotoPicker}>
+                  <Ionicons name="camera-outline" size={28} color={colors.primary} />
+                  <Text style={styles.photoAddText}>添加照片</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            {Platform.OS === 'web' && renderHiddenFileInput(fileInputRef, onPickFiles)}
           </View>
 
           {/* 库位号 */}
@@ -669,6 +727,22 @@ export default function InboundScreen() {
   );
 }
 
+// Web-only: hidden multi-file picker (RNW escape hatch)
+function renderHiddenFileInput(
+  ref: React.RefObject<HTMLInputElement | null>,
+  onChange: (e: unknown) => void,
+): React.ReactElement {
+  const React = require('react') as typeof import('react');
+  return React.createElement('input', {
+    ref,
+    type: 'file',
+    accept: 'image/*',
+    multiple: true,
+    style: { display: 'none' },
+    onChange,
+  });
+}
+
 function FormField({ label, value, onChangeText, keyboardType, unit, compact }: {
   label: string; value: string; onChangeText: (v: string) => void;
   keyboardType?: any; unit?: string; compact?: boolean;
@@ -764,8 +838,14 @@ const styles = StyleSheet.create({
   conditionText: { fontSize: font.sm, color: colors.textSecondary },
   photoHint: { marginTop: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.dangerLight, borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.danger + '30' },
   photoHintText: { fontSize: font.sm, color: colors.danger, flex: 1 },
-  photoBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.card, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.danger },
-  photoBtnText: { fontSize: font.sm, color: colors.danger, fontWeight: '600' },
+  photoHintInline: { fontSize: font.xs, color: colors.textTertiary, fontWeight: '400' },
+  photoCount: { fontSize: font.sm, color: colors.primary, fontWeight: '600' },
+  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  photoTile: { width: 88, height: 88, borderRadius: radius.md, overflow: 'hidden', position: 'relative', borderWidth: 1, borderColor: colors.borderLight },
+  photoImage: { width: '100%', height: '100%' },
+  photoRemove: { position: 'absolute', top: 4, right: 4, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
+  photoAdd: { width: 88, height: 88, borderRadius: radius.md, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.primary, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primaryLight, gap: 4 },
+  photoAddText: { fontSize: font.xs, color: colors.primary },
   // Location
   locationRow: { flexDirection: 'row', gap: spacing.sm },
   locationInput: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.card, paddingHorizontal: spacing.md, height: 44, fontSize: font.md, color: colors.text },
