@@ -78,10 +78,69 @@ export default function DpnScreen() {
   // Arrive mode
   const [arrivalRemark, setArrivalRemark] = useState('');
 
+  // Receive mode (scan-by-item)
+  const [receiveItems, setReceiveItems] = useState<Array<{
+    id: string;
+    sub_order_no: string;
+    tracking_no?: string;
+    customer_name?: string;
+    pieces?: number;
+    inbound_status: 'PENDING' | 'RECEIVED';
+  }>>([]);
+  const [receiveScanInput, setReceiveScanInput] = useState('');
+
   useEffect(() => {
     if (mode === 'bind') loadAvailableSubOrders();
     if (mode === 'dispatch') loadSuppliers();
+    if (mode === 'receive') loadReceiveItems();
   }, [mode]);
+
+  const loadReceiveItems = async () => {
+    if (!params.dpnId) return;
+    try {
+      const res = await deliveryApi.getDpnItems(params.dpnId as string);
+      setReceiveItems(
+        (res.data || []).map((it: any) => ({
+          id: it.id,
+          sub_order_no: it.sub_order_no || '-',
+          tracking_no: it.tracking_no,
+          customer_name: it.customer_name,
+          pieces: it.pieces,
+          inbound_status: it.inbound_status === 'RECEIVED' ? 'RECEIVED' : 'PENDING',
+        })),
+      );
+    } catch {
+      setReceiveItems([]);
+    }
+  };
+
+  const handleReceiveScan = async () => {
+    const code = receiveScanInput.trim();
+    if (!code) { Alert.alert('请输入运单号'); return; }
+    if (!params.dpnId) return;
+    try {
+      await deliveryApi.scanReceiveDpn(params.dpnId as string, { code, method: 'SCAN' });
+      setReceiveScanInput('');
+      loadReceiveItems();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '扫码失败';
+      Alert.alert('未匹配', message);
+    }
+  };
+
+  const handleMarkReceived = async (subOrderNo: string) => {
+    if (!params.dpnId) return;
+    try {
+      await deliveryApi.scanReceiveDpn(params.dpnId as string, {
+        code: subOrderNo,
+        method: 'MANUAL',
+      });
+      loadReceiveItems();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '操作失败';
+      Alert.alert('失败', message);
+    }
+  };
 
   const loadSuppliers = async () => {
     try {
@@ -192,19 +251,32 @@ export default function DpnScreen() {
   };
 
   const handleReceive = async () => {
+    const pending = receiveItems.filter((i) => i.inbound_status === 'PENDING').length;
+    if (pending > 0) {
+      Alert.alert('还有未入库', `尚有 ${pending} 条运单未扫码入库，确定结束？`, [
+        { text: '继续扫码', style: 'cancel' },
+        { text: '强制结束', style: 'destructive', onPress: () => doFinalizeReceive() },
+      ]);
+      return;
+    }
+    doFinalizeReceive();
+  };
+
+  const doFinalizeReceive = async () => {
     setSubmitting(true);
     try {
       if (params.dpnId) {
         await deliveryApi.updateDpn(params.dpnId as string, {
-          dpnStatus: 'SIGNED',
-          remark: '入库确认完成',
+          dpnStatus: 'INBOUND',
+          remark: `入库确认完成 (${receiveItems.filter((i) => i.inbound_status === 'RECEIVED').length}/${receiveItems.length})`,
         });
       }
       Alert.alert('入库完成', '货物已入到达国仓库', [
         { text: '确定', onPress: () => router.back() },
       ]);
-    } catch (err: any) {
-      Alert.alert('提交失败', err.message || '请重试');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '请重试';
+      Alert.alert('提交失败', message);
     } finally {
       setSubmitting(false);
     }
@@ -351,15 +423,81 @@ export default function DpnScreen() {
             </View>
           )}
 
-          {/* Receive Mode */}
+          {/* Receive Mode — 扫码逐件 */}
           {mode === 'receive' && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>📦 入库确认</Text>
-              <Text style={styles.hint}>确认货物已入到达国仓库，后续将生成配送任务</Text>
-              <View style={styles.warningCard}>
-                <Ionicons name="alert-circle" size={18} color={colors.warning} />
-                <Text style={styles.warningText}>请确保所有货物已实际收到并清点</Text>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>📦 扫码入库</Text>
+                <Text style={styles.selectedCount}>
+                  {receiveItems.filter((i) => i.inbound_status === 'RECEIVED').length}/{receiveItems.length}
+                </Text>
               </View>
+
+              {/* 扫码输入 */}
+              <View style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md }}>
+                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', borderWidth: 2, borderColor: colors.primary, borderRadius: radius.md, paddingHorizontal: spacing.md, height: 48, gap: spacing.sm }}>
+                  <Ionicons name="scan" size={20} color={colors.primary} />
+                  <TextInput
+                    style={{ flex: 1, fontSize: font.md, color: colors.text, fontFamily: font.mono }}
+                    value={receiveScanInput}
+                    onChangeText={setReceiveScanInput}
+                    placeholder="扫描或输入运单号"
+                    placeholderTextColor={colors.textTertiary}
+                    onSubmitEditing={handleReceiveScan}
+                    returnKeyType="done"
+                  />
+                </View>
+                <TouchableOpacity
+                  style={{ backgroundColor: colors.primary, paddingHorizontal: spacing.lg, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' }}
+                  onPress={handleReceiveScan}
+                >
+                  <Text style={{ color: '#fff', fontSize: font.md, fontWeight: '600' }}>入库</Text>
+                </TouchableOpacity>
+              </View>
+
+              {receiveItems.length === 0 ? (
+                <Text style={styles.empty}>该 DPN 未绑定运单</Text>
+              ) : (
+                receiveItems.map((it) => (
+                  <View
+                    key={it.id}
+                    style={[
+                      styles.subCard,
+                      it.inbound_status === 'RECEIVED' && { borderColor: colors.success, backgroundColor: colors.successLight },
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.checkBox,
+                        {
+                          backgroundColor: it.inbound_status === 'RECEIVED' ? colors.success : colors.card,
+                          borderColor: it.inbound_status === 'RECEIVED' ? colors.success : colors.border,
+                        },
+                      ]}
+                    >
+                      {it.inbound_status === 'RECEIVED' && <Ionicons name="checkmark" size={14} color="#fff" />}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.subNo}>{it.sub_order_no}</Text>
+                      <Text style={styles.subInfo}>{it.customer_name || '-'} · {it.pieces || 0}件</Text>
+                    </View>
+                    {it.inbound_status === 'PENDING' && (
+                      <TouchableOpacity
+                        style={{
+                          paddingHorizontal: spacing.md,
+                          paddingVertical: 6,
+                          borderWidth: 1,
+                          borderColor: colors.primary,
+                          borderRadius: radius.sm,
+                        }}
+                        onPress={() => handleMarkReceived(it.sub_order_no)}
+                      >
+                        <Text style={{ fontSize: font.xs, color: colors.primary, fontWeight: '600' }}>手动入库</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))
+              )}
             </View>
           )}
         </ScrollView>

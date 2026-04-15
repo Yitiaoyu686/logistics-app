@@ -713,6 +713,10 @@ export function createTables(): void {
   ensureColumn('pod_dpn', 'shipping_no', 'TEXT');
   ensureColumn('pod_dpn', 'track_url', 'TEXT');
   ensureColumn('pod_dpn', 'logistics_company_id', 'TEXT');
+  // DPN 逐件入库
+  ensureColumn('pod_dpn_item', 'inbound_status', "TEXT DEFAULT 'PENDING'");
+  ensureColumn('pod_dpn_item', 'inbound_time', 'TEXT');
+  ensureColumn('pod_dpn_item', 'inbound_method', 'TEXT');
 
   console.log('All tables created successfully');
 }

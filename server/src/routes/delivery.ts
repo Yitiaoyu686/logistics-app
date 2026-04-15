@@ -54,6 +54,54 @@ router.post('/dpns', (req: Request, res: Response) => {
   res.json({ data: { id, dpnNo } });
 });
 
+// GET /api/v2/pod/dpns/:id/items — 获取 DPN 绑定的运单（含入库状态）
+router.get('/dpns/:id/items', (req: Request, res: Response) => {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT di.*, so.sub_order_no, so.pieces AS so_pieces, so.actual_weight_kg,
+      o.order_no, o.customer_name
+    FROM pod_dpn_item di
+    LEFT JOIN oms_sub_order so ON so.id = di.sub_order_id
+    LEFT JOIN oms_order o ON o.id = so.order_id
+    WHERE di.dpn_id = ?
+    ORDER BY di.created_at
+  `).all(req.params.id);
+  res.json({ data: rows });
+});
+
+// POST /api/v2/pod/dpns/:id/scan-receive — 扫码逐件确认入库
+router.post('/dpns/:id/scan-receive', (req: Request, res: Response) => {
+  const db = getDb();
+  const dpnId = req.params.id;
+  const { code, method } = req.body as { code?: string; method?: 'SCAN' | 'MANUAL' };
+  if (!code) { res.status(400).json({ error: 'code required' }); return; }
+
+  // 查找匹配的 pod_dpn_item（按 tracking_no 或关联的 sub_order_no）
+  const item = db.prepare(`
+    SELECT di.*
+    FROM pod_dpn_item di
+    LEFT JOIN oms_sub_order so ON so.id = di.sub_order_id
+    WHERE di.dpn_id = ?
+      AND (di.tracking_no = ? OR so.sub_order_no = ?)
+  `).get(dpnId, code, code) as any;
+
+  if (!item) { res.status(404).json({ error: 'Not in DPN' }); return; }
+  if (item.inbound_status === 'RECEIVED') {
+    res.json({ data: { id: item.id, alreadyReceived: true } });
+    return;
+  }
+
+  db.prepare("UPDATE pod_dpn_item SET inbound_status='RECEIVED', inbound_method=?, inbound_time=datetime('now') WHERE id=?")
+    .run(method || 'SCAN', item.id);
+
+  // 如果该 DPN 全部入库，更新 DPN 状态
+  const remaining = (db.prepare("SELECT COUNT(*) c FROM pod_dpn_item WHERE dpn_id=? AND (inbound_status IS NULL OR inbound_status='PENDING')").get(dpnId) as any).c;
+  if (remaining === 0) {
+    db.prepare("UPDATE pod_dpn SET dpn_status='INBOUND', updated_at=datetime('now') WHERE id=?").run(dpnId);
+  }
+  res.json({ data: { id: item.id, remaining } });
+});
+
 // POST /api/v2/pod/dpns/:id/bind-sub-orders — 绑定运单
 router.post('/dpns/:id/bind-sub-orders', (req: Request, res: Response) => {
   const db = getDb();
