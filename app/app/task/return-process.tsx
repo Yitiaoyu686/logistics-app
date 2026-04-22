@@ -98,7 +98,13 @@ export default function ReturnProcessScreen() {
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.navTitle}>退运处理</Text>
-        <Text style={styles.navExtra}>只读</Text>
+        <TouchableOpacity
+          onPress={() => router.push('/task/return-create')}
+          style={styles.navCreateBtn}
+        >
+          <Ionicons name="add" size={18} color="#fff" />
+          <Text style={styles.navCreateText}>新建</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.searchRow}>
@@ -116,7 +122,7 @@ export default function ReturnProcessScreen() {
 
       <View style={styles.tipBar}>
         <Ionicons name="information-circle-outline" size={16} color={colors.info} />
-        <Text style={styles.tipText}>退运任务由销售/财务在 Web 端发起，仓管仅查看</Text>
+        <Text style={styles.tipText}>发现库存异常或客户取消时可直接新建退运单</Text>
       </View>
 
       {loading ? (
@@ -147,7 +153,8 @@ const styles = StyleSheet.create({
   navBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, paddingHorizontal: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
   navBtn: { padding: spacing.xs },
   navTitle: { flex: 1, marginLeft: spacing.sm, fontSize: font.lg, fontWeight: '600', color: colors.text },
-  navExtra: { fontSize: font.xs, color: colors.textTertiary, paddingHorizontal: spacing.sm, paddingVertical: 2, backgroundColor: colors.borderLight, borderRadius: radius.sm },
+  navCreateBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: colors.primary, paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.md },
+  navCreateText: { color: '#fff', fontSize: font.sm, fontWeight: '600' },
 
   searchRow: { paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm, backgroundColor: colors.card },
   searchInputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bg, borderRadius: radius.md, paddingHorizontal: spacing.md, height: 40, gap: spacing.sm },
