@@ -59,6 +59,8 @@ export default function PackingScreen() {
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
+  const unitLabel = job?.business_line === 'AIR' ? '集装号' : '集装箱号';
+
   useEffect(() => {
     if (params.jobId) loadJob(params.jobId as string);
     else setLoading(false);
@@ -90,7 +92,7 @@ export default function PackingScreen() {
 
   const handleCreateUnit = async () => {
     if (!job) { Alert.alert('任务信息缺失'); return; }
-    if (!unitNo.trim()) { Alert.alert('请填写集装号'); return; }
+    if (!unitNo.trim()) { Alert.alert(`请填写${unitLabel}`); return; }
     setCreatingUnit(true);
     try {
       const res = await jobApi.createShippingUnit({
@@ -105,7 +107,7 @@ export default function PackingScreen() {
       });
       setCreatedUnit({ id: res.data?.id, unitNo: res.data?.unitNo });
       setUnitDialogOpen(false);
-      Alert.alert('创建成功', `集装号 ${res.data?.unitNo} 已创建`, [
+      Alert.alert('创建成功', `${unitLabel} ${res.data?.unitNo} 已创建`, [
         { text: '打印箱唛', onPress: () => setLabelVisible(true) },
         { text: '继续添加', style: 'cancel' },
       ]);
@@ -250,7 +252,7 @@ export default function PackingScreen() {
               {/* 集装号 — 先创建集装号再添加订单 */}
               <View style={styles.section}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={styles.sectionTitle}>📦 集装号</Text>
+                  <Text style={styles.sectionTitle}>📦 {unitLabel}</Text>
                   {(!job?.container_no && !createdUnit) && (
                     <TouchableOpacity
                       style={{
@@ -265,7 +267,7 @@ export default function PackingScreen() {
                       onPress={() => setUnitDialogOpen(true)}
                     >
                       <Ionicons name="add-circle-outline" size={16} color={colors.primary} />
-                      <Text style={{ fontSize: font.sm, color: colors.primary, fontWeight: '600' }}>创建集装号</Text>
+                      <Text style={{ fontSize: font.sm, color: colors.primary, fontWeight: '600' }}>创建{unitLabel}</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -293,7 +295,7 @@ export default function PackingScreen() {
                   </View>
                 ) : (
                   <Text style={{ fontSize: font.xs, color: colors.textTertiary, marginTop: spacing.sm }}>
-                    请先创建集装号
+                    请先创建{unitLabel}
                   </Text>
                 )}
               </View>
@@ -408,9 +410,9 @@ export default function PackingScreen() {
         >
           <View style={styles.modalBackdrop}>
             <View style={styles.modalSheet}>
-              <Text style={styles.modalTitle}>创建集装号</Text>
+              <Text style={styles.modalTitle}>创建{unitLabel}</Text>
 
-              <Text style={styles.formLabel}>集装号 *</Text>
+              <Text style={styles.formLabel}>{unitLabel} *</Text>
               <TextInput
                 style={[styles.input, { marginBottom: spacing.md }]}
                 value={unitNo}
