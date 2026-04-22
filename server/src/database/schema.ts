@@ -721,5 +721,20 @@ export function createTables(): void {
   ensureColumn('pod_dpn_item', 'inbound_time', 'TEXT');
   ensureColumn('pod_dpn_item', 'inbound_method', 'TEXT');
 
+  // fin_fee 扩展 - 对齐前端 FeeRecord 形状
+  ensureColumn('fin_fee', 'related_type', 'TEXT');          // UI 的 ORDER/UNIT/JOB/TRANSFER/DPN(不受 fee_level CHECK 限制)
+  ensureColumn('fin_fee', 'fee_type_ui', 'TEXT');           // UI 的 FREIGHT/CUSTOMS/WAREHOUSE/DELIVERY/INSURANCE/HANDLING/OVERWEIGHT/PACKAGING/OTHER
+  ensureColumn('fin_fee', 'supplier_name', 'TEXT');
+  ensureColumn('fin_fee', 'customer_name', 'TEXT');
+  ensureColumn('fin_fee', 'invoice_no', 'TEXT');
+  ensureColumn('fin_fee', 'remark', 'TEXT');
+  ensureColumn('fin_fee', 'approver_name', 'TEXT');
+  ensureColumn('fin_fee', 'approved_at', 'TEXT');
+  ensureColumn('fin_fee', 'reject_reason', 'TEXT');
+  ensureColumn('fin_fee', 'payment_method', 'TEXT');
+  ensureColumn('fin_fee', 'paid_at', 'TEXT');
+  ensureColumn('fin_fee', 'amount_cny', 'REAL');
+  ensureColumn('fin_fee', 'cancel_reason', 'TEXT');
+
   console.log('All tables created successfully');
 }

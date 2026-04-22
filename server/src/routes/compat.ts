@@ -5,6 +5,20 @@
  */
 import { Router, Request, Response } from 'express';
 import { getDb } from '../database/schema';
+import {
+  createUiFee,
+  updateUiFee,
+  approveFee,
+  rejectFee,
+  payFee,
+  cancelFee,
+  bootstrapFees,
+  listUiFees,
+  getUiFee,
+  getFeeCoverage,
+  recordPayment,
+} from '../database/feeRepo';
+import { bindSubOrders, sealUnit, advanceNode } from '../database/jobRepo';
 
 const router = Router();
 
@@ -124,30 +138,22 @@ router.get('/v2/pod/dpn-candidates', (_req: Request, res: Response) => {
 // 财务费用
 // ============================================================
 
-// GET /api/fees
-router.get('/fees', (_req: Request, res: Response) => {
+// GET /api/fees — UI 形状的费用列表;支持 ?id=xxx 返回单条
+router.get('/fees', (req: Request, res: Response) => {
   const db = getDb();
-  const rows = db.prepare(`
-    SELECT f.*, o.order_no, o.customer_name
-    FROM fin_fee f
-    LEFT JOIN oms_order o ON o.id = f.related_id AND f.fee_level = 'ORDER'
-    ORDER BY f.created_at DESC
-  `).all();
-  res.json({ data: rows });
+  const id = (req.query.id as string) || '';
+  if (id) {
+    const one = getUiFee(db, id);
+    res.json({ data: one ? [one] : [] });
+    return;
+  }
+  res.json({ data: listUiFees(db) });
 });
 
-// GET /api/fees/coverage — 费用覆盖率统计
+// GET /api/fees/coverage — 费用覆盖率统计(UI 形状)
 router.get('/fees/coverage', (_req: Request, res: Response) => {
   const db = getDb();
-  const total = (db.prepare('SELECT COUNT(*) as c FROM oms_order').get() as any).c;
-  const withFees = (db.prepare("SELECT COUNT(DISTINCT related_id) as c FROM fin_fee WHERE fee_level = 'ORDER'").get() as any).c;
-  res.json({
-    data: {
-      totalOrders: total,
-      ordersWithFees: withFees,
-      coverage: total > 0 ? Math.round((withFees / total) * 100) : 0,
-    },
-  });
+  res.json({ data: getFeeCoverage(db) });
 });
 
 // ============================================================
@@ -437,8 +443,57 @@ router.put('/warehouse/stock/:id', stubSuccess);
 router.put('/warehouse/stock/:id/status', stubSuccess);
 router.post('/warehouse/stock/:id/return', stubSuccess);
 router.delete('/warehouse/stock/:id', stubSuccess);
-router.post('/warehouse/units/:id/load', stubSuccess);
-router.post('/warehouse/units/:id/seal', stubSuccess);
+// 装箱: 把一批子单装入 unit
+router.post('/warehouse/units/:id/load', (req: Request, res: Response) => {
+  try {
+    const db = getDb();
+    const unitId = req.params.id;
+    const { subOrderIds } = (req.body || {}) as { subOrderIds?: string[] };
+    if (!Array.isArray(subOrderIds) || subOrderIds.length === 0) {
+      res.status(400).json({ error: '缺少 subOrderIds' });
+      return;
+    }
+    const unit = db.prepare('SELECT id, job_id FROM tms_shipping_unit WHERE id = ? OR unit_no = ?')
+      .get(unitId, unitId) as any;
+    if (!unit) {
+      res.status(404).json({ error: '集装单元不存在' });
+      return;
+    }
+    if (!unit.job_id) {
+      res.status(400).json({ error: '集装单元未绑定任务, 无法装箱' });
+      return;
+    }
+    const result = bindSubOrders(db, {
+      jobId: unit.job_id,
+      unitId: unit.id,
+      subOrderIds,
+    });
+    res.json({ data: { success: true, bound: result.bound, unitId: unit.id, jobId: unit.job_id } });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : '装箱失败';
+    res.status(500).json({ error: msg });
+  }
+});
+
+// 封箱
+router.post('/warehouse/units/:id/seal', (req: Request, res: Response) => {
+  try {
+    const db = getDb();
+    const unitId = req.params.id;
+    const { sealNo } = (req.body || {}) as { sealNo?: string };
+    const unit = db.prepare('SELECT id FROM tms_shipping_unit WHERE id = ? OR unit_no = ?')
+      .get(unitId, unitId) as any;
+    if (!unit) {
+      res.status(404).json({ error: '集装单元不存在' });
+      return;
+    }
+    sealUnit(db, unit.id, sealNo);
+    res.json({ data: { success: true, unitId: unit.id, sealNo } });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : '封箱失败';
+    res.status(500).json({ error: msg });
+  }
+});
 router.put('/warehouse/units/:id', stubSuccess);
 router.delete('/warehouse/units/:id', stubSuccess);
 router.post('/warehouse/returns', stubSuccess);
@@ -469,8 +524,39 @@ router.post('/v2/wms/unmatched-packages/:id/match', (req: Request, res: Response
 // Job 写操作
 router.post('/jobs/:jobNo/bind-units', stubSuccess);
 router.post('/jobs/:jobNo/unbind-units', stubSuccess);
-router.put('/jobs/:jobNo/origin-phase', stubSuccess);
-router.put('/jobs/:jobNo/dest-phase', stubSuccess);
+
+const advanceNodeHandler = (req: Request, res: Response) => {
+  try {
+    const db = getDb();
+    const { jobNo } = req.params;
+    const body = req.body || {};
+    const job = db.prepare('SELECT id FROM tms_job WHERE id = ? OR job_no = ?')
+      .get(jobNo, jobNo) as any;
+    if (!job) {
+      res.status(404).json({ error: '任务不存在' });
+      return;
+    }
+    if (!body.nodeCode || !body.nodeName) {
+      res.status(400).json({ error: '缺少 nodeCode / nodeName' });
+      return;
+    }
+    const result = advanceNode(db, {
+      jobId: job.id,
+      nodeCode: body.nodeCode,
+      nodeName: body.nodeName,
+      eventTime: body.eventTime || new Date().toISOString(),
+      location: body.location,
+      remark: body.remark,
+      operatorUserId: body.operatorUserId,
+    });
+    res.json({ data: { success: true, eventId: result.eventId } });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : '节点推进失败';
+    res.status(500).json({ error: msg });
+  }
+};
+router.put('/jobs/:jobNo/origin-phase', advanceNodeHandler);
+router.put('/jobs/:jobNo/dest-phase', advanceNodeHandler);
 router.delete('/jobs/:jobNo', stubSuccess);
 
 // 配送 / DPN / 自提
@@ -482,16 +568,158 @@ router.post('/v2/pod/dpns/draft', stubSuccess);
 router.post('/v2/pod/delivery-tasks', stubSuccess);
 router.post('/v2/pod/dpns/:id/return-to-warehouse', stubSuccess);
 
-// 财务
-router.post('/fees', stubSuccess);
-router.post('/fees/bootstrap', stubSuccess);
-router.put('/fees/:id', stubSuccess);
-router.post('/fees/:id/approve', stubSuccess);
-router.post('/fees/:id/reject', stubSuccess);
-router.post('/fees/:id/pay', stubSuccess);
-router.post('/fees/:id/cancel', stubSuccess);
-router.post('/v2/finance/fees', stubSuccess);
-router.post('/v2/finance/payments/confirm', stubSuccess);
+// ============================================================
+// 财务费用 - 真实落库
+// ============================================================
+
+const createFeeHandler = (req: Request, res: Response) => {
+  try {
+    const db = getDb();
+    const body = req.body || {};
+    if (!body.relatedId || !body.relatedNo || !body.feeType || !body.feeDirection || body.amount == null) {
+      res.status(400).json({ error: '缺少必填字段: relatedId / relatedNo / feeType / feeDirection / amount' });
+      return;
+    }
+    const result = createUiFee(db, {
+      relatedType: body.relatedType || 'ORDER',
+      relatedId: body.relatedId,
+      relatedNo: body.relatedNo,
+      feeType: body.feeType,
+      feeDirection: body.feeDirection,
+      amount: Number(body.amount),
+      currency: body.currency || 'CNY',
+      exchangeRate: body.exchangeRate != null ? Number(body.exchangeRate) : 1,
+      supplierName: body.supplierName,
+      customerName: body.customerName,
+      description: body.description,
+      remark: body.remark,
+      invoiceNo: body.invoiceNo,
+      createdBy: body.createdBy,
+      businessLine: body.businessLine,
+    });
+    const saved = getUiFee(db, result.id);
+    res.json({ data: saved });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : '创建费用失败';
+    res.status(500).json({ error: msg });
+  }
+};
+
+router.post('/fees', createFeeHandler);
+router.post('/v2/finance/fees', createFeeHandler);
+
+router.put('/fees/:id', (req: Request, res: Response) => {
+  try {
+    const db = getDb();
+    const body = req.body || {};
+    const result = updateUiFee(db, String(req.params.id), {
+      relatedType: body.relatedType,
+      relatedId: body.relatedId,
+      relatedNo: body.relatedNo,
+      feeType: body.feeType,
+      feeDirection: body.feeDirection,
+      amount: body.amount != null ? Number(body.amount) : undefined,
+      currency: body.currency,
+      exchangeRate: body.exchangeRate != null ? Number(body.exchangeRate) : undefined,
+      supplierName: body.supplierName,
+      customerName: body.customerName,
+      description: body.description,
+      remark: body.remark,
+      invoiceNo: body.invoiceNo,
+    });
+    if (!result) {
+      res.status(404).json({ error: '费用不存在' });
+      return;
+    }
+    res.json({ data: getUiFee(db, result.id) });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : '更新费用失败';
+    res.status(400).json({ error: msg });
+  }
+});
+
+router.post('/fees/:id/approve', (req: Request, res: Response) => {
+  const db = getDb();
+  const { approver } = req.body || {};
+  const result = approveFee(db, String(req.params.id), approver);
+  if (!result) {
+    res.status(404).json({ error: '费用不存在' });
+    return;
+  }
+  res.json({ data: getUiFee(db, result.id) });
+});
+
+router.post('/fees/:id/reject', (req: Request, res: Response) => {
+  const db = getDb();
+  const { approver, rejectReason } = req.body || {};
+  const result = rejectFee(db, String(req.params.id), approver, rejectReason);
+  if (!result) {
+    res.status(404).json({ error: '费用不存在' });
+    return;
+  }
+  res.json({ data: getUiFee(db, result.id) });
+});
+
+router.post('/fees/:id/pay', (req: Request, res: Response) => {
+  const db = getDb();
+  const body = req.body || {};
+  const result = payFee(db, String(req.params.id), {
+    paymentMethod: body.paymentMethod,
+    paymentTime: body.paidAt || body.paymentTime,
+    remark: body.remark,
+  });
+  if (!result) {
+    res.status(404).json({ error: '费用不存在' });
+    return;
+  }
+  res.json({ data: getUiFee(db, result.id) });
+});
+
+router.post('/fees/:id/cancel', (req: Request, res: Response) => {
+  const db = getDb();
+  const { reason } = req.body || {};
+  const result = cancelFee(db, String(req.params.id), reason);
+  if (!result) {
+    res.status(404).json({ error: '费用不存在' });
+    return;
+  }
+  res.json({ data: getUiFee(db, result.id) });
+});
+
+router.post('/fees/bootstrap', (req: Request, res: Response) => {
+  const db = getDb();
+  const body = req.body || {};
+  const types = Array.isArray(body.types) ? body.types : ['ORDER', 'UNIT', 'JOB'];
+  const valid = types.filter((t: string) => ['ORDER', 'UNIT', 'JOB'].includes(t)) as Array<
+    'ORDER' | 'UNIT' | 'JOB'
+  >;
+  const result = bootstrapFees(db, valid, body.createdBy);
+  res.json({ data: result });
+});
+
+router.post('/v2/finance/payments/confirm', (req: Request, res: Response) => {
+  const db = getDb();
+  const body = req.body || {};
+  if (!body.feeId) {
+    res.status(400).json({ error: '缺少 feeId' });
+    return;
+  }
+  const fee = db.prepare('SELECT * FROM fin_fee WHERE id = ?').get(body.feeId) as any;
+  if (!fee) {
+    res.status(404).json({ error: '费用不存在' });
+    return;
+  }
+  const pay = recordPayment(db, {
+    relatedFeeId: body.feeId,
+    paymentType: fee.fee_direction === 'RECEIVABLE' ? 'INBOUND' : 'OUTBOUND',
+    amount: body.amount != null ? Number(body.amount) : Number(fee.amount),
+    currencyCode: body.currency || fee.currency_code,
+    paymentMethod: body.paymentMethod,
+    paymentTime: body.paymentTime,
+    remark: body.remark,
+  });
+  res.json({ data: { payment: pay, fee: getUiFee(db, body.feeId) } });
+});
 
 router.post('/finance/commission/rules', stubSuccess);
 router.put('/finance/commission/rules/:id', stubSuccess);
