@@ -108,7 +108,7 @@ export default function PackingScreen() {
       setCreatedUnit({ id: res.data?.id, unitNo: res.data?.unitNo });
       setUnitDialogOpen(false);
       Alert.alert('创建成功', `${unitLabel} ${res.data?.unitNo} 已创建`, [
-        { text: '打印箱唛', onPress: () => setLabelVisible(true) },
+        { text: '打印面单', onPress: () => setLabelVisible(true) },
         { text: '继续添加', style: 'cancel' },
       ]);
       loadJob(job.job_no || job.id);
@@ -290,7 +290,7 @@ export default function PackingScreen() {
                       onPress={() => setLabelVisible(true)}
                     >
                       <Ionicons name="print-outline" size={16} color="#fff" />
-                      <Text style={{ fontSize: font.sm, color: '#fff', fontWeight: '600' }}>打印箱唛</Text>
+                      <Text style={{ fontSize: font.sm, color: '#fff', fontWeight: '600' }}>打印面单</Text>
                     </TouchableOpacity>
                   </View>
                 ) : (
@@ -496,7 +496,7 @@ export default function PackingScreen() {
           </View>
         </Modal>
 
-        {/* 箱唛预览 Modal */}
+        {/* 面单预览 Modal */}
         <Modal
           visible={labelVisible}
           transparent
@@ -505,7 +505,7 @@ export default function PackingScreen() {
         >
           <View style={styles.modalBackdrop}>
             <View style={[styles.modalSheet, { paddingVertical: spacing.xl }]}>
-              <Text style={styles.modalTitle}>📋 箱唛预览</Text>
+              <Text style={styles.modalTitle}>📋 面单预览</Text>
 
               <View
                 style={{
@@ -567,7 +567,7 @@ export default function PackingScreen() {
                 <TouchableOpacity
                   style={[styles.btnPrimary, { flex: 1, height: 48 }]}
                   onPress={() => {
-                    Alert.alert('🖨 打印', '箱唛已发送到蓝牙打印机', [
+                    Alert.alert('🖨 打印', '面单已发送到蓝牙打印机', [
                       { text: '确定', onPress: () => setLabelVisible(false) },
                     ]);
                   }}
