@@ -389,27 +389,35 @@ export default function PackingScreen() {
 
   // 扫码区:原生显示相机,Web 显示输入框占位
   const renderScanner = () => {
-    // Web 降级:相机不可用,内嵌输入框
+    // Web 降级:相机不可用,模拟相机扫码区(方形+4角框+底部输入)
     if (Platform.OS === 'web' || !CameraView) {
       return (
-        <View style={styles.scannerWebFallback}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm }}>
-            <Ionicons name="scan-outline" size={22} color={colors.primary} />
-            <View style={styles.readyDot} />
-            <Text style={{ fontSize: font.xs, color: colors.success, fontWeight: '700' }}>
+        <View style={styles.scannerWebArea}>
+          {/* 状态条 */}
+          <View style={styles.scannerStatusBar}>
+            <Text style={styles.scannerStatusText}>
               {activeUnit
-                ? `扫运单 → ${activeUnit.unit_no}`
+                ? `● 扫运单 → ${activeUnit.unit_no}`
                 : pendingOrders.length > 0
-                  ? `已扫 ${pendingOrders.length} 单,扫集装号完成绑定`
-                  : '就绪 · 扫集装号或运单码'}
+                  ? `● 已扫 ${pendingOrders.length} 单,扫集装号完成绑定`
+                  : '● 就绪 · 对准条码自动识别'}
             </Text>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+          {/* 方形扫码框 + 4 角 */}
+          <View style={styles.scanFrame}>
+            <View style={[styles.corner, styles.topLeft]} />
+            <View style={[styles.corner, styles.topRight]} />
+            <View style={[styles.corner, styles.bottomLeft]} />
+            <View style={[styles.corner, styles.bottomRight]} />
+            <Ionicons name="scan-outline" size={72} color="rgba(96,165,250,0.4)" />
+          </View>
+          {/* 底部输入(Web 替代扫码枪) */}
+          <View style={styles.scannerWebInputWrap}>
             <TextInput
               ref={scanInputRef}
-              style={[styles.input, { flex: 1, height: 44, fontFamily: font.mono, fontWeight: '700' }]}
-              placeholder="Web 预览:手动输入编码模拟扫码"
-              placeholderTextColor={colors.textTertiary}
+              style={styles.scannerWebInput}
+              placeholder="Web 预览:手动输入编码"
+              placeholderTextColor="rgba(255,255,255,0.5)"
               value={scanInput}
               onChangeText={setScanInput}
               onSubmitEditing={() => { void handleAddOrder(); }}
@@ -419,7 +427,7 @@ export default function PackingScreen() {
               blurOnSubmit={false}
             />
             {bindingOrder ? (
-              <ActivityIndicator size="small" color={colors.primary} />
+              <ActivityIndicator size="small" color="#fff" />
             ) : scanInput.length > 0 ? (
               <TouchableOpacity onPress={() => { void handleAddOrder(); }} style={styles.scanGoBtn}>
                 <Ionicons name="arrow-forward" size={18} color="#fff" />
@@ -1338,8 +1346,9 @@ const styles = StyleSheet.create({
   scannerCameraArea: {
     height: 320, backgroundColor: '#000', borderRadius: radius.lg,
     overflow: 'hidden', marginBottom: spacing.md, position: 'relative',
+    alignItems: 'center', justifyContent: 'center',
   },
-  scanFrame: { position: 'absolute', alignSelf: 'center', top: '50%', width: 220, height: 220, marginTop: -110, marginLeft: 0 },
+  scanFrame: { width: 220, height: 220, alignItems: 'center', justifyContent: 'center' },
   corner: { position: 'absolute', width: 22, height: 22, borderColor: colors.primary },
   topLeft: { top: 0, left: 0, borderTopWidth: 3, borderLeftWidth: 3 },
   topRight: { top: 0, right: 0, borderTopWidth: 3, borderRightWidth: 3 },
@@ -1353,11 +1362,22 @@ const styles = StyleSheet.create({
   scannerPermText: { color: 'rgba(255,255,255,0.7)', fontSize: font.sm },
   scannerPermBtn: { paddingHorizontal: spacing.xl, paddingVertical: spacing.md, backgroundColor: colors.primary, borderRadius: radius.full },
   scannerPermBtnText: { color: '#fff', fontSize: font.md, fontWeight: '600' },
-  scannerWebFallback: {
-    backgroundColor: colors.card, borderRadius: radius.lg,
-    padding: spacing.md, marginBottom: spacing.md,
-    borderWidth: 2, borderColor: colors.primary,
-    shadowColor: colors.primary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 2,
+  // Web 方形扫码区(模拟相机)
+  scannerWebArea: {
+    height: 340, backgroundColor: '#1a1a2e', borderRadius: radius.lg,
+    marginBottom: spacing.md, position: 'relative', overflow: 'hidden',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  scannerWebInputWrap: {
+    position: 'absolute', bottom: spacing.md, left: spacing.md, right: spacing.md,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: radius.md,
+    paddingHorizontal: spacing.sm, paddingVertical: spacing.xs,
+    borderWidth: 1, borderColor: 'rgba(96,165,250,0.5)',
+  },
+  scannerWebInput: {
+    flex: 1, height: 40, fontSize: font.md, color: '#fff', fontFamily: font.mono, fontWeight: '700',
+    paddingHorizontal: spacing.sm,
   },
 
   // 扫码就绪输入栏
