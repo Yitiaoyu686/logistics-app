@@ -346,7 +346,8 @@ export default function PackingScreen() {
               <View style={styles.section}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Text style={styles.sectionTitle}>📦 {unitLabel}</Text>
-                  {(!job?.container_no && !createdUnit) && (
+                  {/* 空运:允许持续批量创建(button 常驻);海运:已有集装箱时隐藏 */}
+                  {(job?.business_line === 'AIR' || (!job?.container_no && !createdUnit)) && (
                     <TouchableOpacity
                       style={{
                         flexDirection: 'row',

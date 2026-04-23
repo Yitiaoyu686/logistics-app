@@ -127,10 +127,14 @@ router.post('/shipping-units', (req: Request, res: Response) => {
     Number(b.maxVolumeCbm) || 0,
   );
 
-  // 如果关联了 job，同步把 container_no 写到 tms_job（方便列表展示）
+  // 如果关联了 job 且是海运(1 JOB = 1 集装箱),同步把 container_no 写到 tms_job
+  // 空运不写,因为空运 1 JOB 对应多个集装号,concept 不适用
   if (b.jobId) {
-    db.prepare("UPDATE tms_job SET container_no = COALESCE(container_no, ?), updated_at = datetime('now') WHERE id = ?")
-      .run(unitNo, b.jobId);
+    const job = db.prepare('SELECT business_line FROM tms_job WHERE id = ?').get(b.jobId) as any;
+    if (job?.business_line === 'SEA') {
+      db.prepare("UPDATE tms_job SET container_no = COALESCE(container_no, ?), updated_at = datetime('now') WHERE id = ?")
+        .run(unitNo, b.jobId);
+    }
   }
 
   res.json({ data: { id, unitNo } });
