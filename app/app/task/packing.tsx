@@ -10,6 +10,19 @@ import { colors, spacing, radius, font } from '../../lib/theme';
 import { jobApi, systemApi, orderApi, warehouseApi } from '../../lib/api';
 import { safeBack } from '../../lib/nav';
 
+// 动态引入 expo-camera,避免 Web 预览崩溃
+let CameraView: any = null;
+let useCameraPermissions: any = null;
+if (Platform.OS !== 'web') {
+  try {
+    const mod = require('expo-camera');
+    CameraView = mod.CameraView;
+    useCameraPermissions = mod.useCameraPermissions;
+  } catch {
+    // 未安装/不可用
+  }
+}
+
 interface SupplierOption {
   id: string;
   name: string;
@@ -63,6 +76,10 @@ export default function PackingScreen() {
   const toastTimerRef = useRef<number | null>(null);
   // 防重扫:短时间同值去重
   const lastScanRef = useRef<{ code: string; at: number } | null>(null);
+  // 相机权限 + 手电筒 + 手动输入弹窗
+  const [permission, requestPermission] = useCameraPermissions ? useCameraPermissions() : [null, () => {}];
+  const [torch, setTorch] = useState(false);
+  const [manualVisible, setManualVisible] = useState(false);
 
   // 展示 toast, 2.5s 自动消失
   const showToast = (type: 'success' | 'error' | 'warn', text: string, detail?: string) => {
@@ -103,6 +120,13 @@ export default function PackingScreen() {
     const timer = setTimeout(() => scanInputRef.current?.focus(), 100);
     return () => clearTimeout(timer);
   }, [mode, loading, job?.id]);
+
+  // 原生平台自动请求相机权限
+  useEffect(() => {
+    if (Platform.OS !== 'web' && permission && !permission.granted) {
+      requestPermission();
+    }
+  }, [permission]);
 
   useEffect(() => {
     if (mode !== 'execute-out') return;
@@ -253,8 +277,8 @@ export default function PackingScreen() {
   // 智能双向连续扫码:不用 Alert 打断,用顶部 toast
   //   - 匹配本 job 某 unit.unit_no → 激活集装号;若缓冲区有待绑运单,自动全部绑定
   //   - 其他 → 查子单:已激活→直接绑;未激活→进入待绑缓冲区,等扫集装号时一并绑定
-  const handleAddOrder = async () => {
-    const raw = scanInput.trim();
+  const handleAddOrder = async (override?: string) => {
+    const raw = (override || scanInput).trim();
     // 立刻清空 + 保焦点,让下一次扫码马上可以进行
     setScanInput('');
     scanInputRef.current?.focus();
@@ -355,6 +379,82 @@ export default function PackingScreen() {
   // 从缓冲区移除
   const handleRemovePending = (orderId: string) => {
     setPendingOrders((prev) => prev.filter((o) => o.id !== orderId));
+  };
+
+  // 相机扫到条码:直接走统一绑定逻辑(传入 override 避免闭包读到旧 state)
+  const handleBarcodeScanned = (event: { data: string }) => {
+    if (!event?.data) return;
+    void handleAddOrder(String(event.data));
+  };
+
+  // 扫码区:原生显示相机,Web 显示输入框占位
+  const renderScanner = () => {
+    // Web 降级:输入框扫码区(保留现有体验)
+    if (Platform.OS === 'web' || !CameraView) {
+      return (
+        <View style={styles.scannerWebFallback}>
+          <View style={styles.scannerHint}>
+            <Ionicons name="scan-outline" size={40} color={colors.primary} />
+            <Text style={styles.scannerHintText}>
+              Web 预览不支持相机,请在下方输入框模拟扫码
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
+    // 原生:请求/已授权
+    if (!permission?.granted) {
+      return (
+        <View style={styles.scannerPermArea}>
+          <Ionicons name="camera-outline" size={64} color="rgba(255,255,255,0.4)" />
+          <Text style={styles.scannerPermText}>需要相机权限才能扫码</Text>
+          <TouchableOpacity style={styles.scannerPermBtn} onPress={requestPermission}>
+            <Text style={styles.scannerPermBtnText}>授予权限</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.scannerCameraArea}>
+        <CameraView
+          style={StyleSheet.absoluteFill}
+          facing="back"
+          enableTorch={torch}
+          barcodeScannerSettings={{
+            barcodeTypes: ['qr', 'ean13', 'ean8', 'code128', 'code39', 'upc_a', 'upc_e', 'pdf417'],
+          }}
+          onBarcodeScanned={bindingOrder ? undefined : handleBarcodeScanned}
+        />
+        {/* 扫描框 */}
+        <View style={styles.scanFrame}>
+          <View style={[styles.corner, styles.topLeft]} />
+          <View style={[styles.corner, styles.topRight]} />
+          <View style={[styles.corner, styles.bottomLeft]} />
+          <View style={[styles.corner, styles.bottomRight]} />
+        </View>
+        {/* 状态提示 */}
+        <View style={styles.scannerStatusBar}>
+          <Text style={styles.scannerStatusText}>
+            {activeUnit
+              ? `● 扫运单 → ${activeUnit.unit_no}`
+              : pendingOrders.length > 0
+                ? `● 已扫 ${pendingOrders.length} 单,扫集装号完成绑定`
+                : '● 就绪 · 对准条码自动识别'}
+          </Text>
+        </View>
+        {/* 工具按钮 */}
+        <View style={styles.scannerTools}>
+          <TouchableOpacity style={styles.toolBtn} onPress={() => setTorch(!torch)}>
+            <Ionicons name={torch ? 'flashlight' : 'flashlight-outline'} size={22} color={torch ? colors.warning : '#fff'} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.toolBtn} onPress={() => setManualVisible(true)}>
+            <Ionicons name="keypad-outline" size={22} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
   };
 
   const handleExecuteOut = async () => {
@@ -464,6 +564,8 @@ export default function PackingScreen() {
 
           {mode === 'add-order' ? (
             <>
+              {/* 相机扫码区(原生平台)或 Web 占位 */}
+              {renderScanner()}
               {(() => {
                 const isAir = job?.business_line === 'AIR';
                 const jobUnits = (job?.units || []) as Array<{
@@ -741,7 +843,7 @@ export default function PackingScreen() {
                 placeholderTextColor={colors.textTertiary}
                 value={scanInput}
                 onChangeText={setScanInput}
-                onSubmitEditing={handleAddOrder}
+                onSubmitEditing={() => { void handleAddOrder(); }}
                 autoCapitalize="characters"
                 returnKeyType="send"
                 autoFocus
@@ -750,7 +852,7 @@ export default function PackingScreen() {
               {bindingOrder ? (
                 <ActivityIndicator size="small" color={colors.primary} style={{ marginRight: spacing.md }} />
               ) : scanInput.length > 0 ? (
-                <TouchableOpacity onPress={handleAddOrder} style={styles.scanGoBtn}>
+                <TouchableOpacity onPress={() => { void handleAddOrder(); }} style={styles.scanGoBtn}>
                   <Ionicons name="arrow-forward" size={18} color="#fff" />
                 </TouchableOpacity>
               ) : null}
@@ -1027,6 +1129,48 @@ export default function PackingScreen() {
           </View>
         </Modal>
 
+        {/* 手动输入(相机不可用时降级) */}
+        <Modal
+          visible={manualVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setManualVisible(false)}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalSheet}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md }}>
+                <Text style={styles.modalTitle}>手动输入</Text>
+                <TouchableOpacity onPress={() => setManualVisible(false)}>
+                  <Ionicons name="close" size={22} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <Text style={{ fontSize: font.xs, color: colors.textSecondary, marginBottom: spacing.md }}>
+                输入集装号或运单号,按确认绑定
+              </Text>
+              <TextInput
+                ref={scanInputRef}
+                style={[styles.input, { fontSize: font.lg, height: 52, fontFamily: font.mono, fontWeight: '700' }]}
+                placeholder="扫码或输入编码"
+                placeholderTextColor={colors.textTertiary}
+                value={scanInput}
+                onChangeText={setScanInput}
+                onSubmitEditing={() => { void handleAddOrder(); setManualVisible(false); }}
+                autoCapitalize="characters"
+                returnKeyType="send"
+                autoFocus
+                blurOnSubmit={false}
+              />
+              <TouchableOpacity
+                style={[styles.btnPrimary, { marginTop: spacing.md, height: 48 }, bindingOrder && { opacity: 0.6 }]}
+                onPress={() => { void handleAddOrder(); setManualVisible(false); }}
+                disabled={bindingOrder}
+              >
+                <Text style={styles.btnPrimaryText}>{bindingOrder ? '处理中...' : '确认'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
         {/* 集装号选择器(扫码枪不可用时降级) */}
         <Modal
           visible={unitPickerOpen}
@@ -1210,6 +1354,29 @@ const styles = StyleSheet.create({
   // 管理集装号入口
   manageLink: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-end', paddingHorizontal: spacing.md, paddingVertical: 6, backgroundColor: colors.primaryLight, borderRadius: radius.md, marginBottom: spacing.sm },
   manageLinkText: { fontSize: font.sm, color: colors.primary, fontWeight: '600' },
+
+  // 相机扫码区
+  scannerCameraArea: {
+    height: 320, backgroundColor: '#000', borderRadius: radius.lg,
+    overflow: 'hidden', marginBottom: spacing.md, position: 'relative',
+  },
+  scanFrame: { position: 'absolute', alignSelf: 'center', top: '50%', width: 220, height: 220, marginTop: -110, marginLeft: 0 },
+  corner: { position: 'absolute', width: 22, height: 22, borderColor: colors.primary },
+  topLeft: { top: 0, left: 0, borderTopWidth: 3, borderLeftWidth: 3 },
+  topRight: { top: 0, right: 0, borderTopWidth: 3, borderRightWidth: 3 },
+  bottomLeft: { bottom: 0, left: 0, borderBottomWidth: 3, borderLeftWidth: 3 },
+  bottomRight: { bottom: 0, right: 0, borderBottomWidth: 3, borderRightWidth: 3 },
+  scannerStatusBar: { position: 'absolute', top: spacing.md, left: spacing.md, right: spacing.md, backgroundColor: 'rgba(0,0,0,0.6)', paddingVertical: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radius.full, alignItems: 'center' },
+  scannerStatusText: { color: colors.success, fontSize: font.sm, fontWeight: '700' },
+  scannerTools: { position: 'absolute', bottom: spacing.md, right: spacing.md, flexDirection: 'row', gap: spacing.sm },
+  toolBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
+  scannerPermArea: { height: 240, backgroundColor: '#1a1a2e', borderRadius: radius.lg, marginBottom: spacing.md, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
+  scannerPermText: { color: 'rgba(255,255,255,0.7)', fontSize: font.sm },
+  scannerPermBtn: { paddingHorizontal: spacing.xl, paddingVertical: spacing.md, backgroundColor: colors.primary, borderRadius: radius.full },
+  scannerPermBtnText: { color: '#fff', fontSize: font.md, fontWeight: '600' },
+  scannerWebFallback: { height: 120, backgroundColor: colors.primaryLight, borderRadius: radius.lg, marginBottom: spacing.md, alignItems: 'center', justifyContent: 'center' },
+  scannerHint: { alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg },
+  scannerHintText: { fontSize: font.sm, color: colors.primary, textAlign: 'center' },
 
   // 扫码就绪输入栏
   scanReadyRow: {
