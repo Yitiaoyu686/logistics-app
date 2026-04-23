@@ -97,7 +97,15 @@ export default function PackingScreen() {
   const loadJob = async (id: string) => {
     try {
       const res = await jobApi.get(id);
-      setJob(res.data);
+      const jobData: any = res.data;
+      setJob(jobData);
+      // 海运自动激活唯一集装号(1 JOB = 1 集装箱)
+      if (jobData?.business_line === 'SEA') {
+        const units = (jobData.units || []) as Array<{ id: string; unit_no: string }>;
+        if (units.length > 0 && !activeUnit) {
+          setActiveUnit({ id: units[0].id, unit_no: units[0].unit_no });
+        }
+      }
     } catch (err: any) {
       Alert.alert('加载失败', err.message || '无法加载任务信息');
     } finally {
@@ -439,26 +447,6 @@ export default function PackingScreen() {
                           </Text>
                         )}
                       </View>
-                      {/* 海运统一扫码:直接绑当前唯一集装号 */}
-                      <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>扫码添加运单</Text>
-                        <View style={styles.scanRow}>
-                          <TextInput
-                            style={styles.scanInput}
-                            placeholder="扫码或手动输入运单号"
-                            placeholderTextColor={colors.textTertiary}
-                            value={scanInput}
-                            onChangeText={setScanInput}
-                            onSubmitEditing={handleAddOrder}
-                          />
-                          <TouchableOpacity style={styles.scanBtn}>
-                            <Ionicons name="scan-outline" size={20} color={colors.primary} />
-                          </TouchableOpacity>
-                          <TouchableOpacity style={styles.addBtn} onPress={handleAddOrder} disabled={bindingOrder}>
-                            <Text style={styles.addBtnText}>{bindingOrder ? '...' : '添加'}</Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
                     </>
                   );
                 }
@@ -553,43 +541,6 @@ export default function PackingScreen() {
                       </View>
                     )}
 
-                    {/* 统一扫码区域 */}
-                    <View style={styles.section}>
-                      <Text style={styles.sectionTitle}>
-                        🔍 {activeUnit ? '扫描运单码' : '扫描集装号'}
-                      </Text>
-                      <Text style={{ fontSize: font.xs, color: colors.textTertiary, marginBottom: spacing.sm }}>
-                        {activeUnit
-                          ? '当前已锁定集装号,请扫描要装入的运单码;扫另一个集装号可切换'
-                          : '先扫描要操作的集装号锁定,再扫运单码绑定'}
-                      </Text>
-                      <View style={styles.scanRow}>
-                        <TextInput
-                          style={styles.scanInput}
-                          placeholder={activeUnit ? '扫码/输入运单号' : '扫码/输入集装号'}
-                          placeholderTextColor={colors.textTertiary}
-                          value={scanInput}
-                          onChangeText={setScanInput}
-                          onSubmitEditing={handleAddOrder}
-                          autoCapitalize="characters"
-                        />
-                        <TouchableOpacity style={styles.scanBtn}>
-                          <Ionicons name="scan-outline" size={20} color={colors.primary} />
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.addBtn} onPress={handleAddOrder} disabled={bindingOrder}>
-                          <Text style={styles.addBtnText}>{bindingOrder ? '...' : activeUnit ? '绑定' : '锁定'}</Text>
-                        </TouchableOpacity>
-                      </View>
-                      {!activeUnit && jobUnits.length > 0 && (
-                        <TouchableOpacity
-                          onPress={() => { setUnitSearchKw(''); setUnitPickerOpen(true); }}
-                          style={{ marginTop: spacing.sm, alignSelf: 'flex-start', paddingHorizontal: spacing.sm, paddingVertical: 4 }}
-                        >
-                          <Text style={{ fontSize: font.xs, color: colors.primary }}>或从列表选择集装号 ›</Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-
                     {/* 本箱已绑运单 */}
                     {activeUnit && (
                       <View style={styles.section}>
@@ -658,8 +609,45 @@ export default function PackingScreen() {
           )}
         </ScrollView>
 
-        {/* 底部按钮:只在执行出库模式显示,添加订单模式聚焦扫码 */}
-        {mode === 'execute-out' && (
+        {/* 底部:添加订单模式常驻扫码;执行出库模式保留确认按钮 */}
+        {mode === 'add-order' ? (
+          <View style={styles.scanBottomBar}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <Text style={{ fontSize: font.xs, color: colors.textSecondary, fontWeight: '600' }}>
+                🔍 {activeUnit ? `扫描运单码 → ${activeUnit.unit_no}` : '扫描集装号'}
+              </Text>
+              {job?.business_line === 'AIR' && !activeUnit && (job?.units?.length || 0) > 0 && (
+                <TouchableOpacity onPress={() => { setUnitSearchKw(''); setUnitPickerOpen(true); }}>
+                  <Text style={{ fontSize: font.xs, color: colors.primary }}>从列表选择 ›</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            <View style={styles.scanRow}>
+              <TextInput
+                style={styles.scanInput}
+                placeholder={activeUnit ? '扫码/输入运单号' : '扫码/输入集装号'}
+                placeholderTextColor={colors.textTertiary}
+                value={scanInput}
+                onChangeText={setScanInput}
+                onSubmitEditing={handleAddOrder}
+                autoCapitalize="characters"
+                returnKeyType="send"
+              />
+              <TouchableOpacity style={styles.scanBtn}>
+                <Ionicons name="scan-outline" size={20} color={colors.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.addBtn, bindingOrder && { opacity: 0.6 }]}
+                onPress={handleAddOrder}
+                disabled={bindingOrder}
+              >
+                <Text style={styles.addBtnText}>
+                  {bindingOrder ? '...' : activeUnit ? '绑定' : '锁定'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
           <View style={styles.bottomBar}>
             <TouchableOpacity
               style={[styles.btnExecute, submitting && { opacity: 0.6 }]}
@@ -1109,6 +1097,18 @@ const styles = StyleSheet.create({
   // 激活集装号卡(扫码绑定)
   activeUnitCard: { backgroundColor: colors.primary, borderRadius: radius.lg, padding: spacing.lg },
   activeUnitNo: { fontSize: 36, fontFamily: font.mono, fontWeight: '900', color: '#fff', letterSpacing: 2, textAlign: 'center' },
+
+  // 底部常驻扫码栏
+  scanBottomBar: {
+    position: 'absolute', left: 0, right: 0, bottom: 0,
+    backgroundColor: colors.card,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+    borderTopWidth: 0.5,
+    borderTopColor: colors.borderLight,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 6,
+  },
 
   // 批量创建集装号
   stepperBtn: { width: 44, height: 44, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primaryLight },
