@@ -134,9 +134,17 @@ router.post('/dest-inbound/:jobId/submit', (req: Request, res: Response) => {
   );
   const subOrderUpdate = db.prepare("UPDATE oms_sub_order SET sub_status='PENDING_DELIVERY', updated_at=datetime('now') WHERE id=?");
 
+  // 在到达国仓创建或更新 wms_stock,让到达仓库存查询看得到
+  const destStockUpsert = db.prepare(
+    `INSERT INTO wms_stock (id, business_line, warehouse_id, order_id, sub_order_id, stock_status, pieces, gross_weight_kg, volume_cbm, location_code, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 'IN_STOCK', ?, ?, 0, ?, datetime('now'), datetime('now'))`
+  );
+
   let received = 0, missing = 0, damaged = 0;
   for (const it of b.items || []) {
     const sub = db.prepare('SELECT order_id FROM oms_sub_order WHERE id = ?').get(it.subOrderId) as any;
+    const cargoStatus = it.cargoStatus || 'INTACT';
+    const deliveryStatus = it.deliveryStatus || 'PENDING_DELIVERY';
     itemInsert.run(
       uuid(),
       inboundOrderId,
@@ -145,13 +153,28 @@ router.post('/dest-inbound/:jobId/submit', (req: Request, res: Response) => {
       it.trackingNo || null,
       it.pieces || 1,
       it.weightKg || 0,
-      cargoToCondition[it.cargoStatus] || 'GOOD',
-      it.deliveryStatus,
-      it.cargoStatus,
-      it.cargoStatus === 'LOST' ? 'ABNORMAL' : 'COMPLETED'
+      cargoToCondition[cargoStatus] || 'GOOD',
+      deliveryStatus,
+      cargoStatus,
+      cargoStatus === 'LOST' ? 'ABNORMAL' : 'COMPLETED'
     );
-    if (it.cargoStatus === 'LOST') missing++;
-    else if (it.cargoStatus !== 'INTACT') damaged++;
+
+    // 丢失的货不建到达仓库存
+    if (cargoStatus !== 'LOST') {
+      destStockUpsert.run(
+        uuid(),
+        job.business_line || 'SEA',
+        b.warehouseId || job.dest_warehouse_id || null,
+        sub?.order_id || null,
+        it.subOrderId,
+        it.pieces || 1,
+        it.weightKg || 0,
+        (it as any).locationCode || null,
+      );
+    }
+
+    if (cargoStatus === 'LOST') missing++;
+    else if (cargoStatus !== 'INTACT') damaged++;
     else received++;
     subOrderUpdate.run(it.subOrderId);
   }

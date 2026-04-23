@@ -127,7 +127,7 @@ router.get('/v2/pod/dpn-candidates', (_req: Request, res: Response) => {
     SELECT so.*, o.order_no, o.customer_name, o.consignee_name, o.consignee_phone, o.consignee_address
     FROM oms_sub_order so
     LEFT JOIN oms_order o ON o.id = so.order_id
-    WHERE so.sub_status IN ('ARRIVED','INBOUND')
+    WHERE so.sub_status IN ('ARRIVED','INBOUND','PENDING_DELIVERY')
       AND NOT EXISTS (SELECT 1 FROM pod_dpn_item di WHERE di.sub_order_id = so.id)
     ORDER BY so.created_at DESC
   `).all();

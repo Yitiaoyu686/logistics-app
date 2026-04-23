@@ -153,6 +153,44 @@ router.put('/dpns/:id', (req: Request, res: Response) => {
     vals.push(req.params.id);
     db.prepare(`UPDATE pod_dpn SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
   }
+
+  // 发车后(填了 driver 或 dispatch_time,或状态置为 DISPATCHED/IN_TRANSIT),
+  // 为每个已绑运单自动派生一条 pod_delivery_task(若尚未生成)
+  const dpn = db.prepare('SELECT * FROM pod_dpn WHERE id = ?').get(req.params.id) as any;
+  const hasDispatched = dpn && (dpn.dispatch_time || dpn.driver_name || ['DISPATCHED','IN_TRANSIT','ARRIVED','COMPLETED','SIGNED'].includes(dpn.dpn_status));
+  if (hasDispatched && dpn.dpn_type === 'DELIVERY') {
+    const items = db.prepare(`
+      SELECT di.sub_order_id, so.sub_order_no,
+             o.consignee_name, o.consignee_phone, o.consignee_address,
+             o.payment_method
+      FROM pod_dpn_item di
+      LEFT JOIN oms_sub_order so ON so.id = di.sub_order_id
+      LEFT JOIN oms_order o ON o.id = so.order_id
+      WHERE di.dpn_id = ?
+        AND NOT EXISTS (
+          SELECT 1 FROM pod_delivery_task dt
+          WHERE dt.dpn_id = di.dpn_id AND dt.sub_order_no = so.sub_order_no
+        )
+    `).all(req.params.id) as any[];
+    const taskInsert = db.prepare(
+      `INSERT INTO pod_delivery_task (
+        id, dpn_id, task_no, sub_order_no,
+        recipient_name, recipient_phone, recipient_address,
+        service_type, payment_method, payment_status,
+        task_status, driver_name, driver_phone, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'DELIVERY', ?, ?, 'PENDING', ?, ?, datetime('now'), datetime('now'))`
+    );
+    for (const it of items) {
+      const tid = uuid();
+      taskInsert.run(
+        tid, req.params.id, `DT-${dpn.dpn_no}-${tid.slice(-4)}`, it.sub_order_no || null,
+        it.consignee_name, it.consignee_phone, it.consignee_address,
+        it.payment_method || null, 'UNPAID',
+        dpn.driver_name || null, dpn.driver_phone || null
+      );
+    }
+  }
+
   res.json({ data: { id: req.params.id } });
 });
 
@@ -185,14 +223,36 @@ router.get('/delivery-tasks', (req: Request, res: Response) => {
 router.post('/delivery-tasks/:id/sign', (req: Request, res: Response) => {
   const db = getDb();
   const b = req.body;
+  const signPhotoUrls = b.signPhotoUrls || b.photoUrls || [];
   db.prepare("UPDATE pod_delivery_task SET task_status='SIGNED', signed_by=?, signed_at=datetime('now'), sign_photo_urls=?, remark=?, updated_at=datetime('now') WHERE id=?").run(
-    b.signedBy, JSON.stringify(b.signPhotoUrls || []), b.remark, req.params.id
+    b.signedBy, JSON.stringify(signPhotoUrls), b.remark, req.params.id
   );
 
-  // Update DPN status
-  const task = db.prepare('SELECT dpn_id FROM pod_delivery_task WHERE id = ?').get(req.params.id) as any;
+  const task = db.prepare('SELECT * FROM pod_delivery_task WHERE id = ?').get(req.params.id) as any;
   if (task) {
-    db.prepare("UPDATE pod_dpn SET dpn_status='SIGNED', updated_at=datetime('now') WHERE id=?").run(task.dpn_id);
+    // 联动更新子单 → DELIVERED,主单 → DELIVERED(如果全部子单都到)
+    if (task.sub_order_no) {
+      const sub = db.prepare('SELECT id, order_id FROM oms_sub_order WHERE sub_order_no = ?').get(task.sub_order_no) as any;
+      if (sub) {
+        db.prepare("UPDATE oms_sub_order SET sub_status='DELIVERED', updated_at=datetime('now') WHERE id=?").run(sub.id);
+        db.prepare("UPDATE wms_stock SET stock_status='OUTBOUND', updated_at=datetime('now') WHERE sub_order_id=?").run(sub.id);
+
+        // 主单联动: 全部子单都 DELIVERED 才升级
+        const remaining = (db.prepare(
+          "SELECT COUNT(*) as c FROM oms_sub_order WHERE order_id=? AND sub_status != 'DELIVERED'"
+        ).get(sub.order_id) as any).c;
+        if (remaining === 0) {
+          db.prepare("UPDATE oms_order SET order_status='DELIVERED', updated_at=datetime('now') WHERE id=?").run(sub.order_id);
+        }
+      }
+    }
+
+    // DPN 状态: 全部 task 都签收才置 COMPLETED, 否则 IN_TRANSIT 保持
+    const pending = (db.prepare(
+      "SELECT COUNT(*) as c FROM pod_delivery_task WHERE dpn_id=? AND task_status NOT IN ('SIGNED','FAILED')"
+    ).get(task.dpn_id) as any).c;
+    const dpnStatus = pending === 0 ? 'COMPLETED' : 'IN_TRANSIT';
+    db.prepare("UPDATE pod_dpn SET dpn_status=?, updated_at=datetime('now') WHERE id=?").run(dpnStatus, task.dpn_id);
   }
 
   res.json({ data: { success: true } });

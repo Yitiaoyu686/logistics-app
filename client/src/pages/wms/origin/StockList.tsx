@@ -81,6 +81,42 @@ const PAYMENT_STATUS_LABEL: Record<string, string> = {
   PAID: '已付',
 };
 
+// 把后端 snake_case 的 wms_stock 行映射成 StockListRow(camelCase)
+function mapStockRow(row: Record<string, unknown>): StockListRow {
+  const r = row as Record<string, any>;
+  return {
+    id: r.id,
+    masterOrderNo: r.order_no || '-',
+    subOrderNo: r.sub_order_no || '-',
+    trackingNo: r.tracking_no || '-',
+    clientCode: r.client_code || '',
+    clientName: r.customer_name || '-',
+    pieces: Number(r.pieces || 0),
+    weight: Number(r.gross_weight_kg || 0),
+    volume: Number(r.volume_cbm || 0),
+    transportType: r.business_line,
+    route: r.route_code || '-',
+    recipient: r.consignee_name,
+    destination: [r.consignee_country, r.consignee_city].filter(Boolean).join(' · '),
+    status: r.stock_status,
+    warehouseLocation: r.warehouse_id,
+    warehouse: 'CN',
+    location: r.location_code,
+    inboundTime: r.created_at,
+    shippingUnitId: r.shipping_unit_id,
+    shippingUnitNo: r.shipping_unit_no,
+    salesPerson: r.sales_person || r.sales_user_name,
+    remark: r.remark,
+    // StockListRow 附加字段
+    serviceType: r.service_type,
+    goodsDescription: r.goods_description,
+    paymentMethod: r.payment_method,
+    paymentStatus: r.payment_status,
+    displayOrderNo: r.order_no,
+    displaySubOrderNo: r.sub_order_no,
+  } as StockListRow;
+}
+
 export const StockList = ({
   warehouseId,
   businessMode = 'ALL',
@@ -122,6 +158,9 @@ export const StockList = ({
       if (!rows.length) {
         const fallbackOrders = await loadOriginFallbackOrders(businessMode);
         rows = buildOriginStockFallbackData(fallbackOrders);
+      } else {
+        // Map snake_case backend rows → camelCase StockListRow
+        rows = rows.map(mapStockRow);
       }
       setStockItems(rows as StockListRow[]);
     } catch (error: any) {
