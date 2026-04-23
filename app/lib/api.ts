@@ -71,6 +71,8 @@ export const orderApi = {
   get: (id: string) => api.get(`/v2/oms/orders/${id}/full`),
   create: (data: any) => api.post('/v2/oms/orders', data),
   update: (id: string, data: any) => api.put(`/v2/oms/orders/${id}`, data),
+  // 扫码按子单号/运单号查子单(返回 id + 基础信息)
+  getSubByNo: (subOrderNo: string) => api.get(`/orders/sub/${encodeURIComponent(subOrderNo)}`),
 };
 
 // Customers
@@ -125,6 +127,9 @@ export const warehouseApi = {
   submitDestInbound: (jobId: string, data: any) => api.post(`/v2/wms/dest-inbound/${jobId}/submit`, data),
   getReturns: () => api.get('/warehouse/returns'),
   applyReturn: (stockId: string, data: any) => api.post(`/warehouse/stock/${stockId}/return`, data),
+  // 装箱:把运单绑到集装号
+  loadUnit: (unitId: string, subOrderIds: string[]) =>
+    api.post(`/warehouse/units/${unitId}/load`, { subOrderIds }),
 };
 
 // DPN & Delivery

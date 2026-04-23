@@ -6,7 +6,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
-import { jobApi, systemApi } from '../../lib/api';
+import { jobApi, systemApi, orderApi, warehouseApi } from '../../lib/api';
 import { safeBack } from '../../lib/nav';
 
 interface SupplierOption {
@@ -48,6 +48,12 @@ export default function PackingScreen() {
 
   // 面单预览支持多个 unit
   const [printUnits, setPrintUnits] = useState<Array<{ id?: string; unitNo: string }>>([]);
+
+  // 扫码绑定:当前激活集装号(空运关键交互)
+  const [activeUnit, setActiveUnit] = useState<{ id: string; unit_no: string } | null>(null);
+  const [unitPickerOpen, setUnitPickerOpen] = useState(false);
+  const [unitSearchKw, setUnitSearchKw] = useState('');
+  const [bindingOrder, setBindingOrder] = useState(false);
 
   // 执行出库表单
   const [recipientName, setRecipientName] = useState('');
@@ -213,10 +219,61 @@ export default function PackingScreen() {
     setUnitDialogOpen(true);
   };
 
-  const handleAddOrder = () => {
-    if (!scanInput.trim()) { Alert.alert('请输入运单号或扫码'); return; }
-    setAddedOrders((prev) => [...prev, { id: scanInput, no: scanInput, pieces: 1, weight: 10 }]);
-    setScanInput('');
+  // 智能扫码:
+  //   1. 输入匹配本 job 任一 unit.unit_no → 锁定为激活集装号(切换/首次激活)
+  //   2. 否则当运单号处理 → 查 sub_order → 绑到激活集装号
+  const handleAddOrder = async () => {
+    const raw = scanInput.trim();
+    if (!raw) { Alert.alert('请扫描或输入编码'); return; }
+    const code = raw.toUpperCase();
+
+    // 判断是不是本 job 的集装号
+    const jobUnits = (job?.units || []) as Array<{ id: string; unit_no: string }>;
+    const matchedUnit = jobUnits.find((u) => String(u.unit_no || '').toUpperCase() === code);
+    if (matchedUnit) {
+      setActiveUnit({ id: matchedUnit.id, unit_no: matchedUnit.unit_no });
+      setScanInput('');
+      return;
+    }
+
+    // 未激活集装号,提示先扫集装号
+    if (!activeUnit) {
+      Alert.alert('请先扫描集装号', `当前输入 "${raw}" 不是本任务的集装号\n先扫或选择一个集装号,再扫运单码`);
+      return;
+    }
+
+    // 当运单号处理 → 查子单 → 绑定
+    setBindingOrder(true);
+    try {
+      const subRes = await orderApi.getSubByNo(raw);
+      const sub = (subRes as any)?.data;
+      if (!sub?.id) {
+        Alert.alert('运单未找到', `${raw} 在系统中不存在,请确认已入库`);
+        return;
+      }
+      // 检查状态
+      if (!['INBOUND','PENDING_PACKING'].includes(sub.sub_status)) {
+        const proceed = await new Promise<boolean>((resolve) => {
+          Alert.alert(
+            '状态提醒',
+            `${sub.sub_order_no} 当前状态为 ${sub.sub_status},确认绑定吗?`,
+            [
+              { text: '取消', style: 'cancel', onPress: () => resolve(false) },
+              { text: '继续绑定', onPress: () => resolve(true) },
+            ],
+          );
+        });
+        if (!proceed) return;
+      }
+      await warehouseApi.loadUnit(activeUnit.id, [sub.id]);
+      setScanInput('');
+      await loadJob(job.job_no || job.id); // 刷新 job.units 重量件数
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '绑定失败';
+      Alert.alert('绑定失败', message);
+    } finally {
+      setBindingOrder(false);
+    }
   };
 
   const handleExecuteOut = async () => {
@@ -342,156 +399,232 @@ export default function PackingScreen() {
 
           {mode === 'add-order' ? (
             <>
-              {/* 集装号 — 先创建集装号再添加订单 */}
-              <View style={styles.section}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={styles.sectionTitle}>📦 {unitLabel}</Text>
-                  {/* 空运:允许持续批量创建(button 常驻);海运:已有集装箱时隐藏 */}
-                  {(job?.business_line === 'AIR' || (!job?.container_no && !createdUnit)) && (
-                    <TouchableOpacity
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: 4,
-                        paddingHorizontal: spacing.md,
-                        paddingVertical: 6,
-                        backgroundColor: colors.primaryLight,
-                        borderRadius: radius.md,
-                      }}
-                      onPress={openUnitDialog}
-                    >
-                      <Ionicons name="add-circle-outline" size={16} color={colors.primary} />
-                      <Text style={{ fontSize: font.sm, color: colors.primary, fontWeight: '600' }}>
-                        {job?.business_line === 'AIR' ? `批量创建${unitLabel}` : `创建${unitLabel}`}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-                {(() => {
-                  // 空运:展示 job.units[] 列表;海运:展示单个 container_no
-                  const jobUnits = (job?.units || []) as Array<{ id: string; unit_no: string; unit_status?: string }>;
-                  const isAir = job?.business_line === 'AIR';
-                  const hasAny = isAir ? jobUnits.length > 0 : !!(job?.container_no || createdUnit);
+              {(() => {
+                const isAir = job?.business_line === 'AIR';
+                const jobUnits = (job?.units || []) as Array<{
+                  id: string; unit_no: string; unit_status?: string;
+                  current_weight_kg?: number; current_pieces?: number;
+                }>;
+                const relations = (job?.relations || []) as Array<{
+                  sub_order_id: string; shipping_unit_id: string;
+                  sub_order_no?: string; pieces?: number; actual_weight_kg?: number;
+                }>;
 
-                  if (!hasAny) {
-                    return (
-                      <Text style={{ fontSize: font.xs, color: colors.textTertiary, marginTop: spacing.sm }}>
-                        请先创建{unitLabel}
-                      </Text>
-                    );
-                  }
-
-                  if (isAir) {
-                    // 空运多集装号:横向滚动芯片 + 右上角统一"打印面单"入口
-                    return (
-                      <View style={{ marginTop: spacing.sm }}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
-                          <Text style={{ fontSize: font.sm, color: colors.textSecondary }}>
-                            已创建 {jobUnits.length} 个{unitLabel}
-                          </Text>
-                          <TouchableOpacity
-                            style={{
-                              flexDirection: 'row', alignItems: 'center', gap: 4,
-                              paddingHorizontal: spacing.md, paddingVertical: 6,
-                              backgroundColor: colors.primary, borderRadius: radius.md,
-                            }}
-                            onPress={() => {
-                              setPrintUnits(jobUnits.map((u) => ({ id: u.id, unitNo: u.unit_no })));
-                              setLabelVisible(true);
-                            }}
-                          >
-                            <Ionicons name="print-outline" size={16} color="#fff" />
-                            <Text style={{ fontSize: font.sm, color: '#fff', fontWeight: '600' }}>
-                              打印面单 ({jobUnits.length})
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
-                        <ScrollView
-                          horizontal
-                          showsHorizontalScrollIndicator={false}
-                          contentContainerStyle={{ gap: spacing.sm, paddingBottom: 2 }}
-                        >
-                          {jobUnits.map((u) => (
-                            <View
-                              key={u.id}
+                // 海运:维持原单个展示(兼容)
+                if (!isAir) {
+                  return (
+                    <>
+                      <View style={styles.section}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Text style={styles.sectionTitle}>📦 {unitLabel}</Text>
+                          {(!job?.container_no && !createdUnit) && (
+                            <TouchableOpacity
                               style={{
                                 flexDirection: 'row', alignItems: 'center', gap: 4,
                                 paddingHorizontal: spacing.md, paddingVertical: 6,
-                                borderRadius: radius.md,
-                                backgroundColor: u.unit_status === 'EMPTY' ? colors.primaryLight : '#e0f2fe',
-                                borderWidth: 1,
-                                borderColor: u.unit_status === 'EMPTY' ? colors.primary : '#0ea5e9',
+                                backgroundColor: colors.primaryLight, borderRadius: radius.md,
+                              }}
+                              onPress={openUnitDialog}
+                            >
+                              <Ionicons name="add-circle-outline" size={16} color={colors.primary} />
+                              <Text style={{ fontSize: font.sm, color: colors.primary, fontWeight: '600' }}>创建{unitLabel}</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                        {(job?.container_no || createdUnit) ? (
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm }}>
+                            <Ionicons name="cube-outline" size={20} color={colors.primary} />
+                            <Text style={{ flex: 1, fontSize: font.md, color: colors.text, fontFamily: font.mono, fontWeight: '600' }}>
+                              {createdUnit?.unitNo || job?.container_no}
+                            </Text>
+                            <TouchableOpacity
+                              style={{
+                                flexDirection: 'row', alignItems: 'center', gap: 4,
+                                paddingHorizontal: spacing.md, paddingVertical: 6,
+                                backgroundColor: colors.primary, borderRadius: radius.md,
+                              }}
+                              onPress={() => setLabelVisible(true)}
+                            >
+                              <Ionicons name="print-outline" size={16} color="#fff" />
+                              <Text style={{ fontSize: font.sm, color: '#fff', fontWeight: '600' }}>打印面单</Text>
+                            </TouchableOpacity>
+                          </View>
+                        ) : (
+                          <Text style={{ fontSize: font.xs, color: colors.textTertiary, marginTop: spacing.sm }}>
+                            请先创建{unitLabel}
+                          </Text>
+                        )}
+                      </View>
+                      {/* 海运统一扫码:直接绑当前唯一集装号 */}
+                      <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>扫码添加运单</Text>
+                        <View style={styles.scanRow}>
+                          <TextInput
+                            style={styles.scanInput}
+                            placeholder="扫码或手动输入运单号"
+                            placeholderTextColor={colors.textTertiary}
+                            value={scanInput}
+                            onChangeText={setScanInput}
+                            onSubmitEditing={handleAddOrder}
+                          />
+                          <TouchableOpacity style={styles.scanBtn}>
+                            <Ionicons name="scan-outline" size={20} color={colors.primary} />
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.addBtn} onPress={handleAddOrder} disabled={bindingOrder}>
+                            <Text style={styles.addBtnText}>{bindingOrder ? '...' : '添加'}</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </>
+                  );
+                }
+
+                // 空运:两段扫码流程
+                const activeRelations = activeUnit
+                  ? relations.filter((r) => r.shipping_unit_id === activeUnit.id)
+                  : [];
+                const activeUnitData = activeUnit
+                  ? jobUnits.find((u) => u.id === activeUnit.id)
+                  : null;
+
+                return (
+                  <>
+                    {/* 顶部集装号池概况 */}
+                    <View style={styles.section}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text style={styles.sectionTitle}>📦 {unitLabel}池 ({jobUnits.length})</Text>
+                        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                          <TouchableOpacity
+                            style={{ paddingHorizontal: spacing.md, paddingVertical: 6, backgroundColor: colors.primaryLight, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                            onPress={openUnitDialog}
+                          >
+                            <Ionicons name="add-circle-outline" size={16} color={colors.primary} />
+                            <Text style={{ fontSize: font.sm, color: colors.primary, fontWeight: '600' }}>批量创建</Text>
+                          </TouchableOpacity>
+                          {jobUnits.length > 0 && (
+                            <TouchableOpacity
+                              style={{ paddingHorizontal: spacing.md, paddingVertical: 6, backgroundColor: '#f5f5f5', borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                              onPress={() => {
+                                setPrintUnits(jobUnits.map((u) => ({ id: u.id, unitNo: u.unit_no })));
+                                setLabelVisible(true);
                               }}
                             >
-                              <Ionicons name="cube-outline" size={14} color={colors.primary} />
-                              <Text style={{ fontSize: font.sm, fontFamily: font.mono, fontWeight: '600', color: colors.primaryDark }}>
-                                {u.unit_no}
-                              </Text>
-                            </View>
-                          ))}
-                        </ScrollView>
+                              <Ionicons name="print-outline" size={16} color={colors.textSecondary} />
+                              <Text style={{ fontSize: font.sm, color: colors.textSecondary, fontWeight: '600' }}>面单({jobUnits.length})</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
                       </View>
-                    );
-                  }
 
-                  // 海运:单个集装箱号
-                  return (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm }}>
-                      <Ionicons name="cube-outline" size={20} color={colors.primary} />
-                      <Text style={{ flex: 1, fontSize: font.md, color: colors.text, fontFamily: font.mono, fontWeight: '600' }}>
-                        {createdUnit?.unitNo || job?.container_no}
+                      {jobUnits.length === 0 ? (
+                        <Text style={{ fontSize: font.xs, color: colors.textTertiary, marginTop: spacing.sm }}>
+                          请先批量创建{unitLabel},打印面单贴到商品后,再来扫码绑定
+                        </Text>
+                      ) : (
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm }}>
+                          {['EMPTY', 'LOADING', 'SEALED'].map((status) => {
+                            const count = jobUnits.filter((u) => u.unit_status === status).length;
+                            if (count === 0) return null;
+                            const cfg = {
+                              EMPTY: { label: '空', color: colors.textSecondary, bg: '#f5f5f5' },
+                              LOADING: { label: '装箱中', color: colors.primary, bg: colors.primaryLight },
+                              SEALED: { label: '已封箱', color: colors.success, bg: colors.successLight },
+                            }[status as 'EMPTY' | 'LOADING' | 'SEALED'];
+                            return (
+                              <View key={status} style={{ paddingHorizontal: spacing.sm, paddingVertical: 2, backgroundColor: cfg.bg, borderRadius: radius.sm }}>
+                                <Text style={{ fontSize: font.xs, color: cfg.color, fontWeight: '600' }}>
+                                  {cfg.label} {count}
+                                </Text>
+                              </View>
+                            );
+                          })}
+                        </View>
+                      )}
+                    </View>
+
+                    {/* 激活的集装号卡(大字显示) */}
+                    {activeUnit && activeUnitData && (
+                      <View style={[styles.section, styles.activeUnitCard]}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
+                          <Text style={{ fontSize: font.xs, color: '#fff', opacity: 0.9 }}>当前集装号</Text>
+                          <TouchableOpacity onPress={() => setActiveUnit(null)} style={{ padding: 4 }}>
+                            <Text style={{ fontSize: font.xs, color: '#fff', opacity: 0.9, textDecorationLine: 'underline' }}>切换</Text>
+                          </TouchableOpacity>
+                        </View>
+                        <Text style={styles.activeUnitNo}>{activeUnit.unit_no}</Text>
+                        <View style={{ flexDirection: 'row', gap: spacing.lg, marginTop: spacing.sm }}>
+                          <View>
+                            <Text style={{ fontSize: font.xs, color: '#fff', opacity: 0.8 }}>件数</Text>
+                            <Text style={{ fontSize: font.md, color: '#fff', fontWeight: '700' }}>{activeUnitData.current_pieces || 0}</Text>
+                          </View>
+                          <View>
+                            <Text style={{ fontSize: font.xs, color: '#fff', opacity: 0.8 }}>重量</Text>
+                            <Text style={{ fontSize: font.md, color: '#fff', fontWeight: '700' }}>{(activeUnitData.current_weight_kg || 0).toFixed(1)} kg</Text>
+                          </View>
+                          <View>
+                            <Text style={{ fontSize: font.xs, color: '#fff', opacity: 0.8 }}>运单</Text>
+                            <Text style={{ fontSize: font.md, color: '#fff', fontWeight: '700' }}>{activeRelations.length}</Text>
+                          </View>
+                        </View>
+                      </View>
+                    )}
+
+                    {/* 统一扫码区域 */}
+                    <View style={styles.section}>
+                      <Text style={styles.sectionTitle}>
+                        🔍 {activeUnit ? '扫描运单码' : '扫描集装号'}
                       </Text>
-                      <TouchableOpacity
-                        style={{
-                          flexDirection: 'row', alignItems: 'center', gap: 4,
-                          paddingHorizontal: spacing.md, paddingVertical: 6,
-                          backgroundColor: colors.primary, borderRadius: radius.md,
-                        }}
-                        onPress={() => setLabelVisible(true)}
-                      >
-                        <Ionicons name="print-outline" size={16} color="#fff" />
-                        <Text style={{ fontSize: font.sm, color: '#fff', fontWeight: '600' }}>打印面单</Text>
-                      </TouchableOpacity>
+                      <Text style={{ fontSize: font.xs, color: colors.textTertiary, marginBottom: spacing.sm }}>
+                        {activeUnit
+                          ? '当前已锁定集装号,请扫描要装入的运单码;扫另一个集装号可切换'
+                          : '先扫描要操作的集装号锁定,再扫运单码绑定'}
+                      </Text>
+                      <View style={styles.scanRow}>
+                        <TextInput
+                          style={styles.scanInput}
+                          placeholder={activeUnit ? '扫码/输入运单号' : '扫码/输入集装号'}
+                          placeholderTextColor={colors.textTertiary}
+                          value={scanInput}
+                          onChangeText={setScanInput}
+                          onSubmitEditing={handleAddOrder}
+                          autoCapitalize="characters"
+                        />
+                        <TouchableOpacity style={styles.scanBtn}>
+                          <Ionicons name="scan-outline" size={20} color={colors.primary} />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.addBtn} onPress={handleAddOrder} disabled={bindingOrder}>
+                          <Text style={styles.addBtnText}>{bindingOrder ? '...' : activeUnit ? '绑定' : '锁定'}</Text>
+                        </TouchableOpacity>
+                      </View>
+                      {!activeUnit && jobUnits.length > 0 && (
+                        <TouchableOpacity
+                          onPress={() => { setUnitSearchKw(''); setUnitPickerOpen(true); }}
+                          style={{ marginTop: spacing.sm, alignSelf: 'flex-start', paddingHorizontal: spacing.sm, paddingVertical: 4 }}
+                        >
+                          <Text style={{ fontSize: font.xs, color: colors.primary }}>或从列表选择集装号 ›</Text>
+                        </TouchableOpacity>
+                      )}
                     </View>
-                  );
-                })()}
-              </View>
 
-              {/* 扫码添加 */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>扫码添加订单</Text>
-                <View style={styles.scanRow}>
-                  <TextInput
-                    style={styles.scanInput}
-                    placeholder="扫码或手动输入运单号"
-                    placeholderTextColor={colors.textTertiary}
-                    value={scanInput}
-                    onChangeText={setScanInput}
-                    onSubmitEditing={handleAddOrder}
-                  />
-                  <TouchableOpacity style={styles.scanBtn}>
-                    <Ionicons name="scan-outline" size={20} color={colors.primary} />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.addBtn} onPress={handleAddOrder}>
-                    <Text style={styles.addBtnText}>添加</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* 已装订单列表 */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>已装订单 ({addedOrders.length})</Text>
-                {addedOrders.length === 0 ? (
-                  <Text style={styles.emptyText}>暂无已装订单，请扫码添加</Text>
-                ) : (
-                  addedOrders.map((o, i) => (
-                    <View key={i} style={styles.orderItem}>
-                      <Text style={styles.orderNo}>{o.no}</Text>
-                      <Text style={styles.orderMeta}>{o.pieces}件 · {o.weight}kg</Text>
-                    </View>
-                  ))
-                )}
-              </View>
+                    {/* 本箱已绑运单 */}
+                    {activeUnit && (
+                      <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>本箱已绑运单 ({activeRelations.length})</Text>
+                        {activeRelations.length === 0 ? (
+                          <Text style={styles.emptyText}>暂无,请扫运单码添加</Text>
+                        ) : (
+                          activeRelations.map((r) => (
+                            <View key={r.sub_order_id} style={styles.orderItem}>
+                              <Text style={styles.orderNo}>{r.sub_order_no || r.sub_order_id}</Text>
+                              <Text style={styles.orderMeta}>{r.pieces || 0}件 · {(r.actual_weight_kg || 0).toFixed(1)}kg</Text>
+                            </View>
+                          ))
+                        )}
+                      </View>
+                    )}
+                  </>
+                );
+              })()}
             </>
           ) : (
             <>
@@ -817,6 +950,58 @@ export default function PackingScreen() {
           </View>
         </Modal>
 
+        {/* 集装号选择器(扫码枪不可用时降级) */}
+        <Modal
+          visible={unitPickerOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setUnitPickerOpen(false)}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.modalBackdrop} onPress={() => setUnitPickerOpen(false)}>
+            <TouchableOpacity activeOpacity={1} style={[styles.modalSheet, { maxHeight: '80%' }]}>
+              <Text style={styles.modalTitle}>选择集装号</Text>
+              <TextInput
+                style={[styles.input, { marginBottom: spacing.sm }]}
+                value={unitSearchKw}
+                onChangeText={setUnitSearchKw}
+                placeholder="搜索集装号"
+                placeholderTextColor={colors.textTertiary}
+                autoCapitalize="characters"
+              />
+              <ScrollView style={{ maxHeight: 480 }}>
+                {((job?.units || []) as Array<{ id: string; unit_no: string; unit_status?: string; current_pieces?: number; current_weight_kg?: number }>)
+                  .filter((u) => !unitSearchKw || String(u.unit_no || '').toUpperCase().includes(unitSearchKw.toUpperCase()))
+                  .map((u) => {
+                    const isActive = activeUnit?.id === u.id;
+                    return (
+                      <TouchableOpacity
+                        key={u.id}
+                        style={{
+                          flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+                          paddingVertical: spacing.md, paddingHorizontal: spacing.sm,
+                          borderBottomWidth: 0.5, borderBottomColor: colors.borderLight,
+                          backgroundColor: isActive ? colors.primaryLight : 'transparent',
+                        }}
+                        onPress={() => {
+                          setActiveUnit({ id: u.id, unit_no: u.unit_no });
+                          setUnitPickerOpen(false);
+                        }}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: font.md, fontFamily: font.mono, fontWeight: '700', color: colors.text }}>{u.unit_no}</Text>
+                          <Text style={{ fontSize: font.xs, color: colors.textSecondary, marginTop: 2 }}>
+                            {u.unit_status || 'EMPTY'} · {u.current_pieces || 0}件 / {(u.current_weight_kg || 0).toFixed(1)}kg
+                          </Text>
+                        </View>
+                        {isActive && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
+                      </TouchableOpacity>
+                    );
+                  })}
+              </ScrollView>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
+
         {/* 承运方选择 */}
         <Modal
           visible={supplierPickerOpen}
@@ -940,6 +1125,10 @@ const styles = StyleSheet.create({
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalSheet: { backgroundColor: colors.card, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.lg, paddingBottom: spacing.xl },
   modalTitle: { fontSize: font.lg, fontWeight: '700', color: colors.text, marginBottom: spacing.md, textAlign: 'center' },
+
+  // 激活集装号卡(扫码绑定)
+  activeUnitCard: { backgroundColor: colors.primary, borderRadius: radius.lg, padding: spacing.lg },
+  activeUnitNo: { fontSize: 36, fontFamily: font.mono, fontWeight: '900', color: '#fff', letterSpacing: 2, textAlign: 'center' },
 
   // 批量创建集装号
   stepperBtn: { width: 44, height: 44, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primaryLight },
