@@ -30,7 +30,7 @@ export default function PackingScreen() {
   const [scanInput, setScanInput] = useState('');
   const [addedOrders, setAddedOrders] = useState<any[]>([]);
 
-  // 集装号
+  // 集装号 - 单个 (海运)
   const [unitDialogOpen, setUnitDialogOpen] = useState(false);
   const [unitNo, setUnitNo] = useState('');
   const [containerType, setContainerType] = useState('40HQ');
@@ -39,6 +39,15 @@ export default function PackingScreen() {
   const [creatingUnit, setCreatingUnit] = useState(false);
   const [labelVisible, setLabelVisible] = useState(false);
   const [createdUnit, setCreatedUnit] = useState<{ id: string; unitNo: string } | null>(null);
+
+  // 集装号 - 批量 (空运): 前缀 + 起始号 + 数量
+  const [batchPrefix, setBatchPrefix] = useState('AK');
+  const [batchStartNo, setBatchStartNo] = useState(1);
+  const [batchCount, setBatchCount] = useState(10);
+  const [batchShouldPrint, setBatchShouldPrint] = useState(true);
+
+  // 面单预览支持多个 unit
+  const [printUnits, setPrintUnits] = useState<Array<{ id?: string; unitNo: string }>>([]);
 
   // 执行出库表单
   const [recipientName, setRecipientName] = useState('');
@@ -106,6 +115,7 @@ export default function PackingScreen() {
         maxWeightKg: Number(unitMaxWeight) || 0,
       });
       setCreatedUnit({ id: res.data?.id, unitNo: res.data?.unitNo });
+      setPrintUnits([{ id: res.data?.id, unitNo: res.data?.unitNo || unitNo }]);
       setUnitDialogOpen(false);
       Alert.alert('创建成功', `${unitLabel} ${res.data?.unitNo} 已创建`, [
         { text: '打印面单', onPress: () => setLabelVisible(true) },
@@ -118,6 +128,89 @@ export default function PackingScreen() {
     } finally {
       setCreatingUnit(false);
     }
+  };
+
+  // 空运批量创建集装号
+  const handleBatchCreateUnits = async () => {
+    if (!job) { Alert.alert('任务信息缺失'); return; }
+    const prefix = batchPrefix.trim().toUpperCase();
+    if (!prefix) { Alert.alert('请输入前缀'); return; }
+    if (!Number.isFinite(batchStartNo) || batchStartNo < 0) { Alert.alert('起始号无效'); return; }
+    if (!Number.isFinite(batchCount) || batchCount < 1) { Alert.alert('数量至少 1'); return; }
+
+    // 冲突预检
+    const existingNos = new Set(
+      (job.units || []).map((u: any) => String(u.unit_no || '').toUpperCase())
+    );
+    const genNos: string[] = [];
+    for (let i = 0; i < batchCount; i++) {
+      const num = batchStartNo + i;
+      const unitNum = `${prefix}-${String(num).padStart(3, '0')}`;
+      if (existingNos.has(unitNum.toUpperCase())) {
+        Alert.alert('冲突', `${unitNum} 已存在,请调整起始号`);
+        return;
+      }
+      genNos.push(unitNum);
+    }
+
+    setCreatingUnit(true);
+    const created: Array<{ id: string; unitNo: string }> = [];
+    const failed: string[] = [];
+    for (const unum of genNos) {
+      try {
+        const res = await jobApi.createShippingUnit({
+          unitNo: unum,
+          businessLine: 'AIR',
+          unitType: 'PALLET',
+          jobId: job.id,
+          routeCode: job.route_code,
+          maxWeightKg: 1500,
+          maxVolumeCbm: 12,
+        });
+        created.push({ id: res.data?.id, unitNo: res.data?.unitNo || unum });
+      } catch (err) {
+        failed.push(unum);
+      }
+    }
+    setCreatingUnit(false);
+
+    if (failed.length > 0) {
+      Alert.alert('部分失败', `已创建 ${created.length} / 失败 ${failed.length}\n失败: ${failed.join(', ')}`);
+    }
+    if (created.length > 0) {
+      setPrintUnits(created);
+      setUnitDialogOpen(false);
+      setBatchStartNo(batchStartNo + batchCount); // 下次默认续号
+      if (batchShouldPrint) {
+        setLabelVisible(true);
+      } else {
+        Alert.alert('创建成功', `已新增 ${created.length} 个集装号`);
+      }
+      loadJob(job.job_no || job.id);
+    }
+  };
+
+  // 打开批量弹窗时自动推算前缀和起始号
+  const openUnitDialog = () => {
+    const units = (job?.units || []) as any[];
+    if (job?.business_line === 'AIR' && units.length > 0) {
+      // 取第一个 unit 的字母前缀
+      const sample = String(units[0].unit_no || 'AK').toUpperCase();
+      const pfxMatch = sample.match(/^([A-Z]+)/);
+      const pfx = pfxMatch?.[1] || 'AK';
+      // 同前缀的最大数字号 +1
+      let maxNum = 0;
+      for (const u of units) {
+        const m = String(u.unit_no || '').toUpperCase().match(new RegExp(`^${pfx}[-]?(\\d+)$`));
+        if (m) maxNum = Math.max(maxNum, Number(m[1]));
+      }
+      setBatchPrefix(pfx);
+      setBatchStartNo(maxNum + 1);
+    } else if (job?.business_line === 'AIR') {
+      setBatchPrefix('AK');
+      setBatchStartNo(1);
+    }
+    setUnitDialogOpen(true);
   };
 
   const handleAddOrder = () => {
@@ -264,10 +357,12 @@ export default function PackingScreen() {
                         backgroundColor: colors.primaryLight,
                         borderRadius: radius.md,
                       }}
-                      onPress={() => setUnitDialogOpen(true)}
+                      onPress={openUnitDialog}
                     >
                       <Ionicons name="add-circle-outline" size={16} color={colors.primary} />
-                      <Text style={{ fontSize: font.sm, color: colors.primary, fontWeight: '600' }}>创建{unitLabel}</Text>
+                      <Text style={{ fontSize: font.sm, color: colors.primary, fontWeight: '600' }}>
+                        {job?.business_line === 'AIR' ? `批量创建${unitLabel}` : `创建${unitLabel}`}
+                      </Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -410,93 +505,168 @@ export default function PackingScreen() {
         >
           <View style={styles.modalBackdrop}>
             <View style={styles.modalSheet}>
-              <Text style={styles.modalTitle}>创建{unitLabel}</Text>
+              {job?.business_line === 'AIR' ? (
+                <>
+                  <Text style={styles.modalTitle}>批量创建{unitLabel}</Text>
 
-              <Text style={styles.formLabel}>{unitLabel} *</Text>
-              <TextInput
-                style={[styles.input, { marginBottom: spacing.md }]}
-                value={unitNo}
-                onChangeText={setUnitNo}
-                placeholder="如：CSLU2185436"
-                placeholderTextColor={colors.textTertiary}
-                autoCapitalize="characters"
-              />
+                  <Text style={styles.formLabel}>前缀 *</Text>
+                  <TextInput
+                    style={[styles.input, { marginBottom: spacing.md, fontFamily: font.mono, fontWeight: '700' }]}
+                    value={batchPrefix}
+                    onChangeText={(v) => setBatchPrefix(v.toUpperCase())}
+                    placeholder="如：AK / PMC / AKE"
+                    placeholderTextColor={colors.textTertiary}
+                    autoCapitalize="characters"
+                    maxLength={6}
+                  />
 
-              <Text style={styles.formLabel}>柜型</Text>
-              <View style={{ flexDirection: 'row', gap: spacing.xs, marginBottom: spacing.md, flexWrap: 'wrap' }}>
-                {['20GP', '40GP', '40HQ', '45HQ', 'LCL'].map((t) => (
-                  <TouchableOpacity
-                    key={t}
-                    style={{
-                      paddingHorizontal: spacing.md,
-                      paddingVertical: spacing.sm,
-                      borderRadius: radius.full,
-                      borderWidth: 1,
-                      borderColor: containerType === t ? colors.primary : colors.border,
-                      backgroundColor: containerType === t ? colors.primary : colors.card,
-                    }}
-                    onPress={() => setContainerType(t)}
-                  >
-                    <Text
-                      style={{
-                        fontSize: font.sm,
-                        color: containerType === t ? '#fff' : colors.textSecondary,
-                        fontWeight: containerType === t ? '600' : '400',
-                      }}
+                  <Text style={styles.formLabel}>起始号</Text>
+                  <TextInput
+                    style={[styles.input, { marginBottom: spacing.md }]}
+                    value={String(batchStartNo)}
+                    onChangeText={(v) => setBatchStartNo(Number(v.replace(/\D/g, '')) || 0)}
+                    keyboardType="numeric"
+                    placeholder="1"
+                    placeholderTextColor={colors.textTertiary}
+                  />
+
+                  <Text style={styles.formLabel}>数量</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md }}>
+                    <TouchableOpacity
+                      style={styles.stepperBtn}
+                      onPress={() => setBatchCount(Math.max(1, batchCount - 1))}
                     >
-                      {t}
+                      <Ionicons name="remove" size={22} color={colors.primary} />
+                    </TouchableOpacity>
+                    <TextInput
+                      style={[styles.input, { flex: 1, textAlign: 'center', fontSize: font.lg, fontWeight: '700' }]}
+                      value={String(batchCount)}
+                      onChangeText={(v) => setBatchCount(Math.max(1, Number(v.replace(/\D/g, '')) || 1))}
+                      keyboardType="numeric"
+                    />
+                    <TouchableOpacity
+                      style={styles.stepperBtn}
+                      onPress={() => setBatchCount(Math.min(100, batchCount + 1))}
+                    >
+                      <Ionicons name="add" size={22} color={colors.primary} />
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.previewBox}>
+                    <Text style={styles.previewTitle}>本次将新增 {batchCount} 个集装号</Text>
+                    <Text style={styles.previewRange}>
+                      {batchPrefix}-{String(batchStartNo).padStart(3, '0')}
+                      {batchCount > 1 ? ` ~ ${batchPrefix}-${String(batchStartNo + batchCount - 1).padStart(3, '0')}` : ''}
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.printToggle}
+                    onPress={() => setBatchShouldPrint(!batchShouldPrint)}
+                  >
+                    <Ionicons
+                      name={batchShouldPrint ? 'checkbox' : 'square-outline'}
+                      size={20}
+                      color={batchShouldPrint ? colors.primary : colors.textTertiary}
+                    />
+                    <Text style={{ fontSize: font.sm, color: colors.text, marginLeft: 6 }}>
+                      创建后立即打印面单
                     </Text>
                   </TouchableOpacity>
-                ))}
-              </View>
 
-              <Text style={styles.formLabel}>封条号</Text>
-              <TextInput
-                style={[styles.input, { marginBottom: spacing.md }]}
-                value={sealNo}
-                onChangeText={setSealNo}
-                placeholder="选填"
-                placeholderTextColor={colors.textTertiary}
-              />
+                  <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                    <TouchableOpacity style={styles.cancelBtn} onPress={() => setUnitDialogOpen(false)}>
+                      <Text style={{ color: colors.textSecondary, fontSize: font.md }}>取消</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.btnPrimary, { flex: 1, height: 48 }, creatingUnit && { opacity: 0.6 }]}
+                      onPress={handleBatchCreateUnits}
+                      disabled={creatingUnit}
+                    >
+                      <Text style={styles.btnPrimaryText}>{creatingUnit ? '创建中...' : `确认创建 ${batchCount} 个`}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.modalTitle}>创建{unitLabel}</Text>
 
-              <Text style={styles.formLabel}>载重上限 (kg)</Text>
-              <TextInput
-                style={[styles.input, { marginBottom: spacing.lg }]}
-                value={unitMaxWeight}
-                onChangeText={setUnitMaxWeight}
-                keyboardType="numeric"
-                placeholder="26000"
-                placeholderTextColor={colors.textTertiary}
-              />
+                  <Text style={styles.formLabel}>{unitLabel} *</Text>
+                  <TextInput
+                    style={[styles.input, { marginBottom: spacing.md }]}
+                    value={unitNo}
+                    onChangeText={setUnitNo}
+                    placeholder="如：CSLU2185436"
+                    placeholderTextColor={colors.textTertiary}
+                    autoCapitalize="characters"
+                  />
 
-              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                <TouchableOpacity
-                  style={{
-                    flex: 1,
-                    height: 48,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                    borderRadius: radius.md,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                  onPress={() => setUnitDialogOpen(false)}
-                >
-                  <Text style={{ color: colors.textSecondary, fontSize: font.md }}>取消</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.btnPrimary, { flex: 1, height: 48 }, creatingUnit && { opacity: 0.6 }]}
-                  onPress={handleCreateUnit}
-                  disabled={creatingUnit}
-                >
-                  <Text style={styles.btnPrimaryText}>{creatingUnit ? '创建中...' : '创建'}</Text>
-                </TouchableOpacity>
-              </View>
+                  <Text style={styles.formLabel}>柜型</Text>
+                  <View style={{ flexDirection: 'row', gap: spacing.xs, marginBottom: spacing.md, flexWrap: 'wrap' }}>
+                    {['20GP', '40GP', '40HQ', '45HQ', 'LCL'].map((t) => (
+                      <TouchableOpacity
+                        key={t}
+                        style={{
+                          paddingHorizontal: spacing.md,
+                          paddingVertical: spacing.sm,
+                          borderRadius: radius.full,
+                          borderWidth: 1,
+                          borderColor: containerType === t ? colors.primary : colors.border,
+                          backgroundColor: containerType === t ? colors.primary : colors.card,
+                        }}
+                        onPress={() => setContainerType(t)}
+                      >
+                        <Text
+                          style={{
+                            fontSize: font.sm,
+                            color: containerType === t ? '#fff' : colors.textSecondary,
+                            fontWeight: containerType === t ? '600' : '400',
+                          }}
+                        >
+                          {t}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <Text style={styles.formLabel}>封条号</Text>
+                  <TextInput
+                    style={[styles.input, { marginBottom: spacing.md }]}
+                    value={sealNo}
+                    onChangeText={setSealNo}
+                    placeholder="选填"
+                    placeholderTextColor={colors.textTertiary}
+                  />
+
+                  <Text style={styles.formLabel}>载重上限 (kg)</Text>
+                  <TextInput
+                    style={[styles.input, { marginBottom: spacing.lg }]}
+                    value={unitMaxWeight}
+                    onChangeText={setUnitMaxWeight}
+                    keyboardType="numeric"
+                    placeholder="26000"
+                    placeholderTextColor={colors.textTertiary}
+                  />
+
+                  <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                    <TouchableOpacity style={styles.cancelBtn} onPress={() => setUnitDialogOpen(false)}>
+                      <Text style={{ color: colors.textSecondary, fontSize: font.md }}>取消</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.btnPrimary, { flex: 1, height: 48 }, creatingUnit && { opacity: 0.6 }]}
+                      onPress={handleCreateUnit}
+                      disabled={creatingUnit}
+                    >
+                      <Text style={styles.btnPrimaryText}>{creatingUnit ? '创建中...' : '创建'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
             </View>
           </View>
         </Modal>
 
-        {/* 面单预览 Modal */}
+        {/* 面单预览 Modal — 支持批量 */}
         <Modal
           visible={labelVisible}
           transparent
@@ -504,62 +674,65 @@ export default function PackingScreen() {
           onRequestClose={() => setLabelVisible(false)}
         >
           <View style={styles.modalBackdrop}>
-            <View style={[styles.modalSheet, { paddingVertical: spacing.xl }]}>
-              <Text style={styles.modalTitle}>📋 面单预览</Text>
+            <View style={[styles.modalSheet, { paddingVertical: spacing.xl, maxHeight: '90%' }]}>
+              <Text style={styles.modalTitle}>
+                📋 面单预览{printUnits.length > 1 ? ` · ${printUnits.length} 张` : ''}
+              </Text>
 
-              <View
-                style={{
-                  borderWidth: 2,
-                  borderColor: colors.text,
-                  padding: spacing.lg,
-                  marginBottom: spacing.lg,
-                  backgroundColor: '#fff',
-                }}
+              <ScrollView
+                style={{ maxHeight: 520 }}
+                contentContainerStyle={{ gap: spacing.md, paddingVertical: spacing.sm }}
+                showsVerticalScrollIndicator
               >
-                <Text style={{ fontSize: font.xxl, fontWeight: '800', textAlign: 'center', marginBottom: spacing.sm }}>
-                  {job?.route_code || '-'}
-                </Text>
-                <View style={{ height: 1, backgroundColor: colors.text, marginVertical: spacing.sm }} />
-                <Text style={{ fontSize: font.lg, fontFamily: font.mono, fontWeight: '700', textAlign: 'center' }}>
-                  {createdUnit?.unitNo || job?.container_no || '-'}
-                </Text>
-                <Text style={{ fontSize: font.sm, textAlign: 'center', color: colors.textSecondary, marginTop: 4 }}>
-                  JOB: {job?.job_no || '-'}
-                </Text>
-                <View style={{ height: 1, backgroundColor: colors.text, marginVertical: spacing.sm }} />
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <View>
-                    <Text style={{ fontSize: font.xs, color: colors.textSecondary }}>承运人</Text>
-                    <Text style={{ fontSize: font.sm, fontWeight: '600' }}>{job?.carrier_name || '-'}</Text>
+                {(printUnits.length > 0
+                  ? printUnits
+                  : [{ unitNo: createdUnit?.unitNo || job?.container_no || '-' }]
+                ).map((u, idx) => (
+                  <View
+                    key={u.unitNo + idx}
+                    style={{
+                      borderWidth: 2,
+                      borderColor: colors.text,
+                      padding: spacing.lg,
+                      backgroundColor: '#fff',
+                    }}
+                  >
+                    <Text style={{ fontSize: font.xxl, fontWeight: '800', textAlign: 'center', marginBottom: spacing.sm }}>
+                      {job?.route_code || '-'}
+                    </Text>
+                    <View style={{ height: 1, backgroundColor: colors.text, marginVertical: spacing.sm }} />
+                    <Text
+                      style={{
+                        fontSize: 32,
+                        fontFamily: font.mono,
+                        fontWeight: '800',
+                        textAlign: 'center',
+                        letterSpacing: 1,
+                      }}
+                    >
+                      {u.unitNo}
+                    </Text>
+                    <Text style={{ fontSize: font.sm, textAlign: 'center', color: colors.textSecondary, marginTop: 4 }}>
+                      JOB: {job?.job_no || '-'}
+                    </Text>
+                    <View style={{ height: 1, backgroundColor: colors.text, marginVertical: spacing.sm }} />
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                      <View>
+                        <Text style={{ fontSize: font.xs, color: colors.textSecondary }}>承运人</Text>
+                        <Text style={{ fontSize: font.sm, fontWeight: '600' }}>{job?.carrier_name || '-'}</Text>
+                      </View>
+                      <View>
+                        <Text style={{ fontSize: font.xs, color: colors.textSecondary }}>ETD</Text>
+                        <Text style={{ fontSize: font.sm, fontWeight: '600' }}>{job?.etd || '-'}</Text>
+                      </View>
+                    </View>
                   </View>
-                  <View>
-                    <Text style={{ fontSize: font.xs, color: colors.textSecondary }}>ETD</Text>
-                    <Text style={{ fontSize: font.sm, fontWeight: '600' }}>{job?.etd || '-'}</Text>
-                  </View>
-                </View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.sm }}>
-                  <View>
-                    <Text style={{ fontSize: font.xs, color: colors.textSecondary }}>件数</Text>
-                    <Text style={{ fontSize: font.sm, fontWeight: '600' }}>{job?.total_pieces || 0}</Text>
-                  </View>
-                  <View>
-                    <Text style={{ fontSize: font.xs, color: colors.textSecondary }}>重量</Text>
-                    <Text style={{ fontSize: font.sm, fontWeight: '600' }}>{job?.total_weight_kg || 0} kg</Text>
-                  </View>
-                </View>
-              </View>
+                ))}
+              </ScrollView>
 
-              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+              <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md }}>
                 <TouchableOpacity
-                  style={{
-                    flex: 1,
-                    height: 48,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                    borderRadius: radius.md,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
+                  style={styles.cancelBtn}
                   onPress={() => setLabelVisible(false)}
                 >
                   <Text style={{ color: colors.textSecondary, fontSize: font.md }}>关闭</Text>
@@ -567,12 +740,15 @@ export default function PackingScreen() {
                 <TouchableOpacity
                   style={[styles.btnPrimary, { flex: 1, height: 48 }]}
                   onPress={() => {
-                    Alert.alert('🖨 打印', '面单已发送到蓝牙打印机', [
+                    const count = printUnits.length || 1;
+                    Alert.alert('🖨 打印', `${count} 张面单已发送到蓝牙打印机`, [
                       { text: '确定', onPress: () => setLabelVisible(false) },
                     ]);
                   }}
                 >
-                  <Text style={styles.btnPrimaryText}>打印</Text>
+                  <Text style={styles.btnPrimaryText}>
+                    打印{printUnits.length > 1 ? ` ${printUnits.length} 张` : ''}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -702,6 +878,14 @@ const styles = StyleSheet.create({
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalSheet: { backgroundColor: colors.card, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.lg, paddingBottom: spacing.xl },
   modalTitle: { fontSize: font.lg, fontWeight: '700', color: colors.text, marginBottom: spacing.md, textAlign: 'center' },
+
+  // 批量创建集装号
+  stepperBtn: { width: 44, height: 44, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primaryLight },
+  previewBox: { padding: spacing.md, backgroundColor: colors.primaryLight, borderRadius: radius.md, marginBottom: spacing.md, alignItems: 'center' },
+  previewTitle: { fontSize: font.sm, color: colors.primaryDark, marginBottom: 4 },
+  previewRange: { fontSize: font.md, fontFamily: font.mono, fontWeight: '700', color: colors.primaryDark },
+  printToggle: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md },
+  cancelBtn: { flex: 1, height: 48, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   supplierItem: { flexDirection: 'row', alignItems: 'center', padding: spacing.md, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
   supplierName: { fontSize: font.md, fontWeight: '600', color: colors.text },
   supplierSub: { fontSize: font.xs, color: colors.textSecondary, marginTop: 2 },
