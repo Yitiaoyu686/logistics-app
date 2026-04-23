@@ -57,6 +57,18 @@ export default function PackingScreen() {
   // 先扫运单后扫集装号场景:待绑缓冲区
   const [pendingOrders, setPendingOrders] = useState<Array<{ id: string; sub_order_no: string; pieces?: number; actual_weight_kg?: number }>>([]);
   const scanInputRef = useRef<TextInput>(null);
+  // 连续扫码:内联 toast 反馈(不打断流程)
+  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'warn'; text: string; detail?: string } | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
+  // 防重扫:短时间同值去重
+  const lastScanRef = useRef<{ code: string; at: number } | null>(null);
+
+  // 展示 toast, 2.5s 自动消失
+  const showToast = (type: 'success' | 'error' | 'warn', text: string, detail?: string) => {
+    setToast({ type, text, detail });
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => setToast(null), 2500) as unknown as number;
+  };
 
   // 执行出库表单
   const [recipientName, setRecipientName] = useState('');
@@ -230,13 +242,23 @@ export default function PackingScreen() {
     setUnitDialogOpen(true);
   };
 
-  // 智能双向扫码:
+  // 智能双向连续扫码:不用 Alert 打断,用顶部 toast
   //   - 匹配本 job 某 unit.unit_no → 激活集装号;若缓冲区有待绑运单,自动全部绑定
   //   - 其他 → 查子单:已激活→直接绑;未激活→进入待绑缓冲区,等扫集装号时一并绑定
   const handleAddOrder = async () => {
     const raw = scanInput.trim();
-    if (!raw) { scanInputRef.current?.focus(); return; }
+    // 立刻清空 + 保焦点,让下一次扫码马上可以进行
+    setScanInput('');
+    scanInputRef.current?.focus();
+    if (!raw) return;
     const code = raw.toUpperCase();
+
+    // 防重扫:600ms 内同一个值忽略
+    const now = Date.now();
+    if (lastScanRef.current && lastScanRef.current.code === code && now - lastScanRef.current.at < 600) {
+      return;
+    }
+    lastScanRef.current = { code, at: now };
 
     const jobUnits = (job?.units || []) as Array<{ id: string; unit_no: string }>;
     const matchedUnit = jobUnits.find((u) => String(u.unit_no || '').toUpperCase() === code);
@@ -244,22 +266,24 @@ export default function PackingScreen() {
     if (matchedUnit) {
       // 扫到集装号
       setActiveUnit({ id: matchedUnit.id, unit_no: matchedUnit.unit_no });
-      setScanInput('');
-      // 若缓冲区有待绑运单,一并绑定到此集装号
       if (pendingOrders.length > 0) {
         setBindingOrder(true);
         try {
           await warehouseApi.loadUnit(matchedUnit.id, pendingOrders.map((o) => o.id));
+          const n = pendingOrders.length;
           setPendingOrders([]);
           await loadJob(job.job_no || job.id);
+          showToast('success', `${matchedUnit.unit_no} 已激活`, `已绑入缓冲区 ${n} 个运单`);
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : '批量绑定失败';
-          Alert.alert('部分绑定失败', message);
+          showToast('error', '批量绑定失败', message);
         } finally {
           setBindingOrder(false);
+          scanInputRef.current?.focus();
         }
+      } else {
+        showToast('success', `${matchedUnit.unit_no} 已激活`, '继续扫运单码');
       }
-      scanInputRef.current?.focus();
       return;
     }
 
@@ -269,19 +293,19 @@ export default function PackingScreen() {
       const subRes = await orderApi.getSubByNo(raw);
       const sub = (subRes as any)?.data;
       if (!sub?.id) {
-        Alert.alert('运单未找到', `${raw} 在系统中不存在,请确认已入库`);
+        showToast('error', '运单未找到', `${raw} 不在系统中`);
         return;
       }
 
       if (activeUnit) {
         // 已激活 → 直接绑
         await warehouseApi.loadUnit(activeUnit.id, [sub.id]);
-        setScanInput('');
         await loadJob(job.job_no || job.id);
+        showToast('success', `✓ 已绑入 ${activeUnit.unit_no}`, `${sub.sub_order_no} · ${sub.pieces || 0}件 ${(sub.actual_weight_kg || 0).toFixed(1)}kg`);
       } else {
-        // 未激活 → 进缓冲区,等扫集装号
+        // 未激活 → 进缓冲区
         if (pendingOrders.some((o) => o.id === sub.id)) {
-          Alert.alert('已在待绑列表', `${sub.sub_order_no} 已添加过,请扫集装号完成绑定`);
+          showToast('warn', '已在待绑列表', `${sub.sub_order_no} 已扫过`);
         } else {
           setPendingOrders((prev) => [...prev, {
             id: sub.id,
@@ -289,12 +313,12 @@ export default function PackingScreen() {
             pieces: sub.pieces,
             actual_weight_kg: sub.actual_weight_kg,
           }]);
-          setScanInput('');
+          showToast('success', '已加入待绑', `${sub.sub_order_no} · 扫集装号完成绑定`);
         }
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '处理失败';
-      Alert.alert('处理失败', message);
+      showToast('error', '处理失败', message);
     } finally {
       setBindingOrder(false);
       scanInputRef.current?.focus();
@@ -651,6 +675,29 @@ export default function PackingScreen() {
             </>
           )}
         </ScrollView>
+
+        {/* 连续扫码 toast (底部浮层) */}
+        {mode === 'add-order' && toast && (
+          <View
+            style={[
+              styles.scanToast,
+              toast.type === 'success' && { backgroundColor: colors.success },
+              toast.type === 'error' && { backgroundColor: colors.danger },
+              toast.type === 'warn' && { backgroundColor: colors.warning },
+            ]}
+            pointerEvents="none"
+          >
+            <Ionicons
+              name={toast.type === 'success' ? 'checkmark-circle' : toast.type === 'error' ? 'close-circle' : 'alert-circle'}
+              size={20}
+              color="#fff"
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.scanToastText}>{toast.text}</Text>
+              {toast.detail && <Text style={styles.scanToastDetail}>{toast.detail}</Text>}
+            </View>
+          </View>
+        )}
 
         {/* 底部:添加订单模式常驻扫码;执行出库模式保留确认按钮 */}
         {mode === 'add-order' ? (
@@ -1150,6 +1197,17 @@ const styles = StyleSheet.create({
   // 管理集装号入口
   manageLink: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-end', paddingHorizontal: spacing.md, paddingVertical: 6, backgroundColor: colors.primaryLight, borderRadius: radius.md, marginBottom: spacing.sm },
   manageLinkText: { fontSize: font.sm, color: colors.primary, fontWeight: '600' },
+
+  // 连续扫码 toast
+  scanToast: {
+    position: 'absolute', left: spacing.md, right: spacing.md, bottom: 104,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 4,
+  },
+  scanToastText: { color: '#fff', fontSize: font.sm, fontWeight: '700' },
+  scanToastDetail: { color: '#fff', fontSize: font.xs, opacity: 0.9, marginTop: 1 },
 
   // 底部常驻扫码栏
   scanBottomBar: {
