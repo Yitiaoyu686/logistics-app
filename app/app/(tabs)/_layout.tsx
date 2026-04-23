@@ -38,9 +38,9 @@ export default function TabLayout() {
       <Tabs.Screen
         name="search"
         options={{
-          title: isSales ? '客户' : '查询',
+          title: isSales ? '客户' : '办理',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name={isSales ? 'people-outline' : 'search-outline'} size={size} color={color} />
+            <Ionicons name={isSales ? 'people-outline' : 'apps-outline'} size={size} color={color} />
           ),
         }}
       />
