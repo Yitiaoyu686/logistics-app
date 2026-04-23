@@ -381,22 +381,6 @@ export default function PackingScreen() {
             </View>
           )}
 
-          {/* 模式切换 */}
-          <View style={styles.modeSwitch}>
-            <Pressable
-              style={[styles.modeBtn, mode === 'add-order' && styles.modeBtnActive]}
-              onPress={() => setMode('add-order')}
-            >
-              <Text style={[styles.modeText, mode === 'add-order' && styles.modeTextActive]}>📦 添加订单</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.modeBtn, mode === 'execute-out' && styles.modeBtnActive]}
-              onPress={() => setMode('execute-out')}
-            >
-              <Text style={[styles.modeText, mode === 'execute-out' && styles.modeTextActive]}>🚀 执行出库</Text>
-            </Pressable>
-          </View>
-
           {mode === 'add-order' ? (
             <>
               {(() => {
@@ -674,13 +658,9 @@ export default function PackingScreen() {
           )}
         </ScrollView>
 
-        {/* 底部按钮 */}
-        <View style={styles.bottomBar}>
-          {mode === 'add-order' ? (
-            <TouchableOpacity style={styles.btnPrimary} onPress={() => setMode('execute-out')}>
-              <Text style={styles.btnPrimaryText}>下一步：执行出库</Text>
-            </TouchableOpacity>
-          ) : (
+        {/* 底部按钮:只在执行出库模式显示,添加订单模式聚焦扫码 */}
+        {mode === 'execute-out' && (
+          <View style={styles.bottomBar}>
             <TouchableOpacity
               style={[styles.btnExecute, submitting && { opacity: 0.6 }]}
               onPress={handleExecuteOut}
@@ -688,8 +668,8 @@ export default function PackingScreen() {
             >
               <Text style={styles.btnPrimaryText}>{submitting ? '处理中...' : '确认执行出库'}</Text>
             </TouchableOpacity>
-          )}
-        </View>
+          </View>
+        )}
 
         {/* 创建集装号 Modal */}
         <Modal
