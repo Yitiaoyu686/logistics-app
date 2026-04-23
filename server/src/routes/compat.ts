@@ -521,9 +521,65 @@ router.post('/v2/wms/unmatched-packages/:id/match', (req: Request, res: Response
   res.json({ data: { success: true, customerId, orderId } });
 });
 
-// Job 写操作
-router.post('/jobs/:jobNo/bind-units', stubSuccess);
-router.post('/jobs/:jobNo/unbind-units', stubSuccess);
+// Job 写操作 — 绑定/解绑集装号到 JOB(Web 执行任务弹窗 → bindUnits)
+router.post('/jobs/:jobNo/bind-units', (req: Request, res: Response) => {
+  const db = getDb();
+  const { jobNo } = req.params;
+  const { unitIds } = (req.body || {}) as { unitIds?: string[] };
+  if (!Array.isArray(unitIds) || unitIds.length === 0) {
+    res.status(400).json({ error: '缺少 unitIds' });
+    return;
+  }
+  const job = db.prepare('SELECT id, job_no FROM tms_job WHERE id = ? OR job_no = ?').get(jobNo, jobNo) as any;
+  if (!job) {
+    res.status(404).json({ error: '任务不存在' });
+    return;
+  }
+
+  const updateUnit = db.prepare(
+    "UPDATE tms_shipping_unit SET job_id = ?, updated_at = datetime('now') WHERE id = ? OR unit_no = ?"
+  );
+  let bound = 0;
+  for (const uid of unitIds) {
+    const result = updateUnit.run(job.id, uid, uid);
+    if (result.changes > 0) bound++;
+  }
+
+  // JOB PLANNED → LOADING
+  db.prepare(
+    `UPDATE tms_job SET
+       job_status = CASE WHEN job_status = 'PLANNED' THEN 'LOADING' ELSE job_status END,
+       current_node = 'WAREHOUSE_IN',
+       updated_at = datetime('now')
+     WHERE id = ?`
+  ).run(job.id);
+
+  res.json({ data: { success: true, bound, jobId: job.id, jobNo: job.job_no } });
+});
+
+router.post('/jobs/:jobNo/unbind-units', (req: Request, res: Response) => {
+  const db = getDb();
+  const { jobNo } = req.params;
+  const { unitIds } = (req.body || {}) as { unitIds?: string[] };
+  if (!Array.isArray(unitIds) || unitIds.length === 0) {
+    res.status(400).json({ error: '缺少 unitIds' });
+    return;
+  }
+  const job = db.prepare('SELECT id FROM tms_job WHERE id = ? OR job_no = ?').get(jobNo, jobNo) as any;
+  if (!job) {
+    res.status(404).json({ error: '任务不存在' });
+    return;
+  }
+  const unbind = db.prepare(
+    "UPDATE tms_shipping_unit SET job_id = NULL, updated_at = datetime('now') WHERE job_id = ? AND (id = ? OR unit_no = ?)"
+  );
+  let released = 0;
+  for (const uid of unitIds) {
+    const r = unbind.run(job.id, uid, uid);
+    if (r.changes > 0) released++;
+  }
+  res.json({ data: { success: true, released } });
+});
 
 const advanceNodeHandler = (req: Request, res: Response) => {
   try {
