@@ -18,7 +18,7 @@ import {
   getFeeCoverage,
   recordPayment,
 } from '../database/feeRepo';
-import { bindSubOrders, sealUnit, advanceNode } from '../database/jobRepo';
+import { bindSubOrders, sealUnit, advanceNode, unbindSubOrder } from '../database/jobRepo';
 
 const router = Router();
 
@@ -471,6 +471,28 @@ router.post('/warehouse/units/:id/load', (req: Request, res: Response) => {
     res.json({ data: { success: true, bound: result.bound, unitId: unit.id, jobId: unit.job_id } });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : '装箱失败';
+    res.status(500).json({ error: msg });
+  }
+});
+
+// 解绑运单 — 从集装号撤销装箱
+router.delete('/warehouse/units/:id/items/:subOrderId', (req: Request, res: Response) => {
+  try {
+    const db = getDb();
+    const unit = db.prepare('SELECT id FROM tms_shipping_unit WHERE id = ? OR unit_no = ?')
+      .get(req.params.id, req.params.id) as any;
+    if (!unit) {
+      res.status(404).json({ error: '集装单元不存在' });
+      return;
+    }
+    const result = unbindSubOrder(db, { unitId: unit.id, subOrderId: String(req.params.subOrderId) });
+    if (!result.unbound) {
+      res.status(404).json({ error: '该运单未绑定到此集装号' });
+      return;
+    }
+    res.json({ data: { success: true } });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : '解绑失败';
     res.status(500).json({ error: msg });
   }
 });

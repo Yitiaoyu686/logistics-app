@@ -130,6 +130,9 @@ export const warehouseApi = {
   // 装箱:把运单绑到集装号
   loadUnit: (unitId: string, subOrderIds: string[]) =>
     api.post(`/warehouse/units/${unitId}/load`, { subOrderIds }),
+  // 解绑:从集装号撤销运单
+  unbindUnitItem: (unitId: string, subOrderId: string) =>
+    api.delete(`/warehouse/units/${unitId}/items/${subOrderId}`),
 };
 
 // DPN & Delivery

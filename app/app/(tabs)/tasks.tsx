@@ -96,6 +96,9 @@ export default function TasksScreen() {
             progress: { current: j.total_weight_kg || 0, total: 26000 },
             actions: [
               { label: '添加订单', color: colors.success, route: '/task/packing', params: { jobId: j.id, mode: 'add-order' } },
+              ...(j.business_line === 'AIR'
+                ? [{ label: '集装号', color: colors.info, route: '/task/shipping-units', params: { jobId: j.id } }]
+                : []),
               { label: '执行出库', color: colors.warning, route: '/task/packing', params: { jobId: j.id, mode: 'execute-out' } },
             ],
             borderColor: colors.taskPacking,

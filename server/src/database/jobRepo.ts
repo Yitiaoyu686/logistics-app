@@ -209,6 +209,73 @@ export function bindSubOrders(
 }
 
 // ============================================================
+// 解绑：从集装号移除运单（撤销装箱）
+// ============================================================
+
+export interface UnbindSubOrderPayload {
+  unitId: string;
+  subOrderId: string;
+}
+
+export function unbindSubOrder(
+  db: Database.Database,
+  payload: UnbindSubOrderPayload
+): { unbound: boolean } {
+  const { unitId, subOrderId } = payload;
+
+  const rel = db
+    .prepare('SELECT * FROM tms_job_order_rel WHERE shipping_unit_id = ? AND sub_order_id = ?')
+    .get(unitId, subOrderId) as any;
+  if (!rel) return { unbound: false };
+
+  db.prepare('DELETE FROM tms_job_order_rel WHERE id = ?').run(rel.id);
+
+  // 子单回到 INBOUND;stock_status 回到 IN_STOCK
+  db.prepare(
+    `UPDATE oms_sub_order
+     SET sub_status='INBOUND', shipping_unit_id=NULL, job_id=NULL, updated_at=datetime('now')
+     WHERE id=?`
+  ).run(subOrderId);
+  db.prepare(
+    `UPDATE wms_stock SET stock_status='IN_STOCK', updated_at=datetime('now') WHERE sub_order_id=?`
+  ).run(subOrderId);
+
+  // 重算 unit 和 job
+  const unitAgg = db
+    .prepare(
+      `SELECT COALESCE(SUM(so.pieces),0) AS pieces,
+              COALESCE(SUM(so.actual_weight_kg),0) AS weight,
+              COALESCE(SUM(so.volume_cbm),0) AS volume
+       FROM tms_job_order_rel rel
+       LEFT JOIN oms_sub_order so ON so.id = rel.sub_order_id
+       WHERE rel.shipping_unit_id = ?`
+    )
+    .get(unitId) as { pieces: number; weight: number; volume: number };
+  const remaining = (db.prepare('SELECT COUNT(*) as c FROM tms_job_order_rel WHERE shipping_unit_id=?').get(unitId) as any).c;
+  db.prepare(
+    `UPDATE tms_shipping_unit
+     SET unit_status=?, current_weight_kg=?, current_volume_cbm=?, updated_at=datetime('now')
+     WHERE id=?`
+  ).run(remaining === 0 ? 'EMPTY' : 'LOADING', unitAgg.weight, unitAgg.volume, unitId);
+
+  const jobAgg = db
+    .prepare(
+      `SELECT COALESCE(SUM(so.pieces),0) AS pieces,
+              COALESCE(SUM(so.actual_weight_kg),0) AS weight,
+              COALESCE(SUM(so.volume_cbm),0) AS volume
+       FROM tms_job_order_rel rel
+       LEFT JOIN oms_sub_order so ON so.id = rel.sub_order_id
+       WHERE rel.job_id = ?`
+    )
+    .get(rel.job_id) as { pieces: number; weight: number; volume: number };
+  db.prepare(
+    `UPDATE tms_job SET total_pieces=?, total_weight_kg=?, total_volume_cbm=?, updated_at=datetime('now') WHERE id=?`
+  ).run(jobAgg.pieces, jobAgg.weight, jobAgg.volume, rel.job_id);
+
+  return { unbound: true };
+}
+
+// ============================================================
 // 封箱：unit_status → SEALED；job 进入 LOADING 完成态
 // ============================================================
 

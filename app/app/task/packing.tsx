@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TextInput, TouchableOpacity,
   SafeAreaView, Alert, KeyboardAvoidingView, Platform, Pressable, Modal,
@@ -54,6 +54,9 @@ export default function PackingScreen() {
   const [unitPickerOpen, setUnitPickerOpen] = useState(false);
   const [unitSearchKw, setUnitSearchKw] = useState('');
   const [bindingOrder, setBindingOrder] = useState(false);
+  // 先扫运单后扫集装号场景:待绑缓冲区
+  const [pendingOrders, setPendingOrders] = useState<Array<{ id: string; sub_order_no: string; pieces?: number; actual_weight_kg?: number }>>([]);
+  const scanInputRef = useRef<TextInput>(null);
 
   // 执行出库表单
   const [recipientName, setRecipientName] = useState('');
@@ -227,30 +230,40 @@ export default function PackingScreen() {
     setUnitDialogOpen(true);
   };
 
-  // 智能扫码:
-  //   1. 输入匹配本 job 任一 unit.unit_no → 锁定为激活集装号(切换/首次激活)
-  //   2. 否则当运单号处理 → 查 sub_order → 绑到激活集装号
+  // 智能双向扫码:
+  //   - 匹配本 job 某 unit.unit_no → 激活集装号;若缓冲区有待绑运单,自动全部绑定
+  //   - 其他 → 查子单:已激活→直接绑;未激活→进入待绑缓冲区,等扫集装号时一并绑定
   const handleAddOrder = async () => {
     const raw = scanInput.trim();
-    if (!raw) { Alert.alert('请扫描或输入编码'); return; }
+    if (!raw) { scanInputRef.current?.focus(); return; }
     const code = raw.toUpperCase();
 
-    // 判断是不是本 job 的集装号
     const jobUnits = (job?.units || []) as Array<{ id: string; unit_no: string }>;
     const matchedUnit = jobUnits.find((u) => String(u.unit_no || '').toUpperCase() === code);
+
     if (matchedUnit) {
+      // 扫到集装号
       setActiveUnit({ id: matchedUnit.id, unit_no: matchedUnit.unit_no });
       setScanInput('');
+      // 若缓冲区有待绑运单,一并绑定到此集装号
+      if (pendingOrders.length > 0) {
+        setBindingOrder(true);
+        try {
+          await warehouseApi.loadUnit(matchedUnit.id, pendingOrders.map((o) => o.id));
+          setPendingOrders([]);
+          await loadJob(job.job_no || job.id);
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : '批量绑定失败';
+          Alert.alert('部分绑定失败', message);
+        } finally {
+          setBindingOrder(false);
+        }
+      }
+      scanInputRef.current?.focus();
       return;
     }
 
-    // 未激活集装号,提示先扫集装号
-    if (!activeUnit) {
-      Alert.alert('请先扫描集装号', `当前输入 "${raw}" 不是本任务的集装号\n先扫或选择一个集装号,再扫运单码`);
-      return;
-    }
-
-    // 当运单号处理 → 查子单 → 绑定
+    // 非集装号 → 当运单号处理
     setBindingOrder(true);
     try {
       const subRes = await orderApi.getSubByNo(raw);
@@ -259,29 +272,57 @@ export default function PackingScreen() {
         Alert.alert('运单未找到', `${raw} 在系统中不存在,请确认已入库`);
         return;
       }
-      // 检查状态
-      if (!['INBOUND','PENDING_PACKING'].includes(sub.sub_status)) {
-        const proceed = await new Promise<boolean>((resolve) => {
-          Alert.alert(
-            '状态提醒',
-            `${sub.sub_order_no} 当前状态为 ${sub.sub_status},确认绑定吗?`,
-            [
-              { text: '取消', style: 'cancel', onPress: () => resolve(false) },
-              { text: '继续绑定', onPress: () => resolve(true) },
-            ],
-          );
-        });
-        if (!proceed) return;
+
+      if (activeUnit) {
+        // 已激活 → 直接绑
+        await warehouseApi.loadUnit(activeUnit.id, [sub.id]);
+        setScanInput('');
+        await loadJob(job.job_no || job.id);
+      } else {
+        // 未激活 → 进缓冲区,等扫集装号
+        if (pendingOrders.some((o) => o.id === sub.id)) {
+          Alert.alert('已在待绑列表', `${sub.sub_order_no} 已添加过,请扫集装号完成绑定`);
+        } else {
+          setPendingOrders((prev) => [...prev, {
+            id: sub.id,
+            sub_order_no: sub.sub_order_no,
+            pieces: sub.pieces,
+            actual_weight_kg: sub.actual_weight_kg,
+          }]);
+          setScanInput('');
+        }
       }
-      await warehouseApi.loadUnit(activeUnit.id, [sub.id]);
-      setScanInput('');
-      await loadJob(job.job_no || job.id); // 刷新 job.units 重量件数
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : '绑定失败';
-      Alert.alert('绑定失败', message);
+      const message = err instanceof Error ? err.message : '处理失败';
+      Alert.alert('处理失败', message);
     } finally {
       setBindingOrder(false);
+      scanInputRef.current?.focus();
     }
+  };
+
+  // 解绑已绑运单
+  const handleUnbind = async (subOrderId: string, subOrderNo: string) => {
+    if (!activeUnit) return;
+    const confirmed = await new Promise<boolean>((resolve) => {
+      Alert.alert('确认移除', `将 ${subOrderNo} 从 ${activeUnit.unit_no} 中移除?`, [
+        { text: '取消', style: 'cancel', onPress: () => resolve(false) },
+        { text: '移除', style: 'destructive', onPress: () => resolve(true) },
+      ]);
+    });
+    if (!confirmed) return;
+    try {
+      await warehouseApi.unbindUnitItem(activeUnit.id, subOrderId);
+      await loadJob(job.job_no || job.id);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '移除失败';
+      Alert.alert('移除失败', message);
+    }
+  };
+
+  // 从缓冲区移除
+  const handleRemovePending = (orderId: string) => {
+    setPendingOrders((prev) => prev.filter((o) => o.id !== orderId));
   };
 
   const handleExecuteOut = async () => {
@@ -451,7 +492,7 @@ export default function PackingScreen() {
                   );
                 }
 
-                // 空运:两段扫码流程
+                // 空运:极简扫码流程
                 const activeRelations = activeUnit
                   ? relations.filter((r) => r.shipping_unit_id === activeUnit.id)
                   : [];
@@ -461,97 +502,99 @@ export default function PackingScreen() {
 
                 return (
                   <>
-                    {/* 顶部集装号池概况 */}
-                    <View style={styles.section}>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Text style={styles.sectionTitle}>📦 {unitLabel}池 ({jobUnits.length})</Text>
-                        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-                          <TouchableOpacity
-                            style={{ paddingHorizontal: spacing.md, paddingVertical: 6, backgroundColor: colors.primaryLight, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', gap: 4 }}
-                            onPress={openUnitDialog}
-                          >
-                            <Ionicons name="add-circle-outline" size={16} color={colors.primary} />
-                            <Text style={{ fontSize: font.sm, color: colors.primary, fontWeight: '600' }}>批量创建</Text>
-                          </TouchableOpacity>
-                          {jobUnits.length > 0 && (
-                            <TouchableOpacity
-                              style={{ paddingHorizontal: spacing.md, paddingVertical: 6, backgroundColor: '#f5f5f5', borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', gap: 4 }}
-                              onPress={() => {
-                                setPrintUnits(jobUnits.map((u) => ({ id: u.id, unitNo: u.unit_no })));
-                                setLabelVisible(true);
-                              }}
-                            >
-                              <Ionicons name="print-outline" size={16} color={colors.textSecondary} />
-                              <Text style={{ fontSize: font.sm, color: colors.textSecondary, fontWeight: '600' }}>面单({jobUnits.length})</Text>
-                            </TouchableOpacity>
-                          )}
-                        </View>
-                      </View>
-
-                      {jobUnits.length === 0 ? (
-                        <Text style={{ fontSize: font.xs, color: colors.textTertiary, marginTop: spacing.sm }}>
-                          请先批量创建{unitLabel},打印面单贴到商品后,再来扫码绑定
+                    {/* 顶部管理入口 + 空状态引导 */}
+                    <TouchableOpacity
+                      style={styles.manageLink}
+                      onPress={() => router.push({ pathname: '/task/shipping-units', params: { jobId: job.id } })}
+                    >
+                      <Ionicons name="cube-outline" size={16} color={colors.primary} />
+                      <Text style={styles.manageLinkText}>
+                        管理{unitLabel} ({jobUnits.length})
+                      </Text>
+                      <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+                    </TouchableOpacity>
+                    {jobUnits.length === 0 && (
+                      <View style={[styles.section, { alignItems: 'center', paddingVertical: spacing.xl }]}>
+                        <Ionicons name="cube-outline" size={36} color={colors.textTertiary} />
+                        <Text style={{ fontSize: font.sm, color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm }}>
+                          还没有{unitLabel},请先批量创建并打印面单贴到货物上
                         </Text>
-                      ) : (
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm }}>
-                          {['EMPTY', 'LOADING', 'SEALED'].map((status) => {
-                            const count = jobUnits.filter((u) => u.unit_status === status).length;
-                            if (count === 0) return null;
-                            const cfg = {
-                              EMPTY: { label: '空', color: colors.textSecondary, bg: '#f5f5f5' },
-                              LOADING: { label: '装箱中', color: colors.primary, bg: colors.primaryLight },
-                              SEALED: { label: '已封箱', color: colors.success, bg: colors.successLight },
-                            }[status as 'EMPTY' | 'LOADING' | 'SEALED'];
-                            return (
-                              <View key={status} style={{ paddingHorizontal: spacing.sm, paddingVertical: 2, backgroundColor: cfg.bg, borderRadius: radius.sm }}>
-                                <Text style={{ fontSize: font.xs, color: cfg.color, fontWeight: '600' }}>
-                                  {cfg.label} {count}
-                                </Text>
-                              </View>
-                            );
-                          })}
-                        </View>
-                      )}
-                    </View>
+                        <TouchableOpacity
+                          style={[styles.btnPrimary, { marginTop: spacing.md, paddingHorizontal: spacing.lg }]}
+                          onPress={() => router.push({ pathname: '/task/shipping-units', params: { jobId: job.id } })}
+                        >
+                          <Text style={styles.btnPrimaryText}>去创建{unitLabel}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
 
                     {/* 激活的集装号卡(大字显示) */}
                     {activeUnit && activeUnitData && (
                       <View style={[styles.section, styles.activeUnitCard]}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
-                          <Text style={{ fontSize: font.xs, color: '#fff', opacity: 0.9 }}>当前集装号</Text>
+                          <Text style={{ fontSize: font.xs, color: '#fff', opacity: 0.9 }}>当前{unitLabel}</Text>
                           <TouchableOpacity onPress={() => setActiveUnit(null)} style={{ padding: 4 }}>
-                            <Text style={{ fontSize: font.xs, color: '#fff', opacity: 0.9, textDecorationLine: 'underline' }}>切换</Text>
+                            <Text style={{ fontSize: font.xs, color: '#fff', opacity: 0.9, textDecorationLine: 'underline' }}>完成,换下一个</Text>
                           </TouchableOpacity>
                         </View>
                         <Text style={styles.activeUnitNo}>{activeUnit.unit_no}</Text>
-                        <View style={{ flexDirection: 'row', gap: spacing.lg, marginTop: spacing.sm }}>
-                          <View>
+                        <View style={{ flexDirection: 'row', gap: spacing.lg, marginTop: spacing.sm, justifyContent: 'center' }}>
+                          <View style={{ alignItems: 'center' }}>
                             <Text style={{ fontSize: font.xs, color: '#fff', opacity: 0.8 }}>件数</Text>
-                            <Text style={{ fontSize: font.md, color: '#fff', fontWeight: '700' }}>{activeUnitData.current_pieces || 0}</Text>
+                            <Text style={{ fontSize: font.lg, color: '#fff', fontWeight: '700' }}>{activeUnitData.current_pieces || 0}</Text>
                           </View>
-                          <View>
+                          <View style={{ alignItems: 'center' }}>
                             <Text style={{ fontSize: font.xs, color: '#fff', opacity: 0.8 }}>重量</Text>
-                            <Text style={{ fontSize: font.md, color: '#fff', fontWeight: '700' }}>{(activeUnitData.current_weight_kg || 0).toFixed(1)} kg</Text>
+                            <Text style={{ fontSize: font.lg, color: '#fff', fontWeight: '700' }}>{(activeUnitData.current_weight_kg || 0).toFixed(1)} kg</Text>
                           </View>
-                          <View>
+                          <View style={{ alignItems: 'center' }}>
                             <Text style={{ fontSize: font.xs, color: '#fff', opacity: 0.8 }}>运单</Text>
-                            <Text style={{ fontSize: font.md, color: '#fff', fontWeight: '700' }}>{activeRelations.length}</Text>
+                            <Text style={{ fontSize: font.lg, color: '#fff', fontWeight: '700' }}>{activeRelations.length}</Text>
                           </View>
                         </View>
                       </View>
                     )}
 
-                    {/* 本箱已绑运单 */}
+                    {/* 待绑缓冲区(先扫运单后扫集装号场景) */}
+                    {!activeUnit && pendingOrders.length > 0 && (
+                      <View style={styles.section}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
+                          <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>📋 待绑运单 ({pendingOrders.length})</Text>
+                          <Text style={{ fontSize: font.xs, color: colors.warning }}>⏳ 扫集装号绑定</Text>
+                        </View>
+                        {pendingOrders.map((o) => (
+                          <View key={o.id} style={styles.orderItem}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.orderNo}>{o.sub_order_no}</Text>
+                              <Text style={styles.orderMeta}>{o.pieces || 0}件 · {(o.actual_weight_kg || 0).toFixed(1)}kg</Text>
+                            </View>
+                            <TouchableOpacity onPress={() => handleRemovePending(o.id)} style={{ padding: 6 }}>
+                              <Ionicons name="close-circle" size={20} color={colors.danger} />
+                            </TouchableOpacity>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* 本箱已绑运单 — 带删除 */}
                     {activeUnit && (
                       <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>本箱已绑运单 ({activeRelations.length})</Text>
+                        <Text style={styles.sectionTitle}>本箱已装运单 ({activeRelations.length})</Text>
                         {activeRelations.length === 0 ? (
                           <Text style={styles.emptyText}>暂无,请扫运单码添加</Text>
                         ) : (
                           activeRelations.map((r) => (
                             <View key={r.sub_order_id} style={styles.orderItem}>
-                              <Text style={styles.orderNo}>{r.sub_order_no || r.sub_order_id}</Text>
-                              <Text style={styles.orderMeta}>{r.pieces || 0}件 · {(r.actual_weight_kg || 0).toFixed(1)}kg</Text>
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.orderNo}>{r.sub_order_no || r.sub_order_id}</Text>
+                                <Text style={styles.orderMeta}>{r.pieces || 0}件 · {(r.actual_weight_kg || 0).toFixed(1)}kg</Text>
+                              </View>
+                              <TouchableOpacity
+                                onPress={() => handleUnbind(r.sub_order_id, r.sub_order_no || r.sub_order_id)}
+                                style={{ padding: 6 }}
+                              >
+                                <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                              </TouchableOpacity>
                             </View>
                           ))
                         )}
@@ -614,24 +657,30 @@ export default function PackingScreen() {
           <View style={styles.scanBottomBar}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
               <Text style={{ fontSize: font.xs, color: colors.textSecondary, fontWeight: '600' }}>
-                🔍 {activeUnit ? `扫描运单码 → ${activeUnit.unit_no}` : '扫描集装号'}
+                🔍 {activeUnit
+                  ? `扫运单 → ${activeUnit.unit_no}`
+                  : pendingOrders.length > 0
+                    ? `已扫 ${pendingOrders.length} 个运单,请扫集装号一并绑定`
+                    : '扫集装号或运单码'}
               </Text>
               {job?.business_line === 'AIR' && !activeUnit && (job?.units?.length || 0) > 0 && (
                 <TouchableOpacity onPress={() => { setUnitSearchKw(''); setUnitPickerOpen(true); }}>
-                  <Text style={{ fontSize: font.xs, color: colors.primary }}>从列表选择 ›</Text>
+                  <Text style={{ fontSize: font.xs, color: colors.primary }}>选集装号 ›</Text>
                 </TouchableOpacity>
               )}
             </View>
             <View style={styles.scanRow}>
               <TextInput
+                ref={scanInputRef}
                 style={styles.scanInput}
-                placeholder={activeUnit ? '扫码/输入运单号' : '扫码/输入集装号'}
+                placeholder="扫码/输入编码"
                 placeholderTextColor={colors.textTertiary}
                 value={scanInput}
                 onChangeText={setScanInput}
                 onSubmitEditing={handleAddOrder}
                 autoCapitalize="characters"
                 returnKeyType="send"
+                autoFocus
               />
               <TouchableOpacity style={styles.scanBtn}>
                 <Ionicons name="scan-outline" size={20} color={colors.primary} />
@@ -642,7 +691,7 @@ export default function PackingScreen() {
                 disabled={bindingOrder}
               >
                 <Text style={styles.addBtnText}>
-                  {bindingOrder ? '...' : activeUnit ? '绑定' : '锁定'}
+                  {bindingOrder ? '...' : '确认'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1096,7 +1145,11 @@ const styles = StyleSheet.create({
 
   // 激活集装号卡(扫码绑定)
   activeUnitCard: { backgroundColor: colors.primary, borderRadius: radius.lg, padding: spacing.lg },
-  activeUnitNo: { fontSize: 36, fontFamily: font.mono, fontWeight: '900', color: '#fff', letterSpacing: 2, textAlign: 'center' },
+  activeUnitNo: { fontSize: 42, fontFamily: font.mono, fontWeight: '900', color: '#fff', letterSpacing: 3, textAlign: 'center', marginTop: spacing.xs },
+
+  // 管理集装号入口
+  manageLink: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-end', paddingHorizontal: spacing.md, paddingVertical: 6, backgroundColor: colors.primaryLight, borderRadius: radius.md, marginBottom: spacing.sm },
+  manageLinkText: { fontSize: font.sm, color: colors.primary, fontWeight: '600' },
 
   // 底部常驻扫码栏
   scanBottomBar: {
