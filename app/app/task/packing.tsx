@@ -367,33 +367,94 @@ export default function PackingScreen() {
                     </TouchableOpacity>
                   )}
                 </View>
-                {(job?.container_no || createdUnit) ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm }}>
-                    <Ionicons name="cube-outline" size={20} color={colors.primary} />
-                    <Text style={{ flex: 1, fontSize: font.md, color: colors.text, fontFamily: font.mono, fontWeight: '600' }}>
-                      {createdUnit?.unitNo || job?.container_no}
-                    </Text>
-                    <TouchableOpacity
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: 4,
-                        paddingHorizontal: spacing.md,
-                        paddingVertical: 6,
-                        backgroundColor: colors.primary,
-                        borderRadius: radius.md,
-                      }}
-                      onPress={() => setLabelVisible(true)}
-                    >
-                      <Ionicons name="print-outline" size={16} color="#fff" />
-                      <Text style={{ fontSize: font.sm, color: '#fff', fontWeight: '600' }}>打印面单</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <Text style={{ fontSize: font.xs, color: colors.textTertiary, marginTop: spacing.sm }}>
-                    请先创建{unitLabel}
-                  </Text>
-                )}
+                {(() => {
+                  // 空运:展示 job.units[] 列表;海运:展示单个 container_no
+                  const jobUnits = (job?.units || []) as Array<{ id: string; unit_no: string; unit_status?: string }>;
+                  const isAir = job?.business_line === 'AIR';
+                  const hasAny = isAir ? jobUnits.length > 0 : !!(job?.container_no || createdUnit);
+
+                  if (!hasAny) {
+                    return (
+                      <Text style={{ fontSize: font.xs, color: colors.textTertiary, marginTop: spacing.sm }}>
+                        请先创建{unitLabel}
+                      </Text>
+                    );
+                  }
+
+                  if (isAir) {
+                    // 空运多集装号:横向滚动芯片 + 右上角统一"打印面单"入口
+                    return (
+                      <View style={{ marginTop: spacing.sm }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
+                          <Text style={{ fontSize: font.sm, color: colors.textSecondary }}>
+                            已创建 {jobUnits.length} 个{unitLabel}
+                          </Text>
+                          <TouchableOpacity
+                            style={{
+                              flexDirection: 'row', alignItems: 'center', gap: 4,
+                              paddingHorizontal: spacing.md, paddingVertical: 6,
+                              backgroundColor: colors.primary, borderRadius: radius.md,
+                            }}
+                            onPress={() => {
+                              setPrintUnits(jobUnits.map((u) => ({ id: u.id, unitNo: u.unit_no })));
+                              setLabelVisible(true);
+                            }}
+                          >
+                            <Ionicons name="print-outline" size={16} color="#fff" />
+                            <Text style={{ fontSize: font.sm, color: '#fff', fontWeight: '600' }}>
+                              打印面单 ({jobUnits.length})
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          contentContainerStyle={{ gap: spacing.sm, paddingBottom: 2 }}
+                        >
+                          {jobUnits.map((u) => (
+                            <View
+                              key={u.id}
+                              style={{
+                                flexDirection: 'row', alignItems: 'center', gap: 4,
+                                paddingHorizontal: spacing.md, paddingVertical: 6,
+                                borderRadius: radius.md,
+                                backgroundColor: u.unit_status === 'EMPTY' ? colors.primaryLight : '#e0f2fe',
+                                borderWidth: 1,
+                                borderColor: u.unit_status === 'EMPTY' ? colors.primary : '#0ea5e9',
+                              }}
+                            >
+                              <Ionicons name="cube-outline" size={14} color={colors.primary} />
+                              <Text style={{ fontSize: font.sm, fontFamily: font.mono, fontWeight: '600', color: colors.primaryDark }}>
+                                {u.unit_no}
+                              </Text>
+                            </View>
+                          ))}
+                        </ScrollView>
+                      </View>
+                    );
+                  }
+
+                  // 海运:单个集装箱号
+                  return (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm }}>
+                      <Ionicons name="cube-outline" size={20} color={colors.primary} />
+                      <Text style={{ flex: 1, fontSize: font.md, color: colors.text, fontFamily: font.mono, fontWeight: '600' }}>
+                        {createdUnit?.unitNo || job?.container_no}
+                      </Text>
+                      <TouchableOpacity
+                        style={{
+                          flexDirection: 'row', alignItems: 'center', gap: 4,
+                          paddingHorizontal: spacing.md, paddingVertical: 6,
+                          backgroundColor: colors.primary, borderRadius: radius.md,
+                        }}
+                        onPress={() => setLabelVisible(true)}
+                      >
+                        <Ionicons name="print-outline" size={16} color="#fff" />
+                        <Text style={{ fontSize: font.sm, color: '#fff', fontWeight: '600' }}>打印面单</Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })()}
               </View>
 
               {/* 扫码添加 */}
