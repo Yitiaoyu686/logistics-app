@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TextInput, TouchableOpacity,
   SafeAreaView, Alert, KeyboardAvoidingView, Platform, Pressable, Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -95,6 +96,13 @@ export default function PackingScreen() {
     if (params.jobId) loadJob(params.jobId as string);
     else setLoading(false);
   }, [params.jobId]);
+
+  // 装箱模式:页面就绪后强制聚焦扫码输入框(Web 端 autoFocus 会被其他元素抢焦点)
+  useEffect(() => {
+    if (mode !== 'add-order' || loading) return;
+    const timer = setTimeout(() => scanInputRef.current?.focus(), 100);
+    return () => clearTimeout(timer);
+  }, [mode, loading, job?.id]);
 
   useEffect(() => {
     if (mode !== 'execute-out') return;
@@ -703,12 +711,12 @@ export default function PackingScreen() {
         {mode === 'add-order' ? (
           <View style={styles.scanBottomBar}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <Text style={{ fontSize: font.xs, color: colors.textSecondary, fontWeight: '600' }}>
-                🔍 {activeUnit
-                  ? `扫运单 → ${activeUnit.unit_no}`
+              <Text style={{ fontSize: font.xs, color: colors.success, fontWeight: '700' }}>
+                {activeUnit
+                  ? `● 扫运单 → ${activeUnit.unit_no}`
                   : pendingOrders.length > 0
-                    ? `已扫 ${pendingOrders.length} 个运单,请扫集装号一并绑定`
-                    : '扫集装号或运单码'}
+                    ? `● 已扫 ${pendingOrders.length} 个运单,扫集装号完成绑定`
+                    : '● 就绪 · 扫集装号或运单码'}
               </Text>
               {job?.business_line === 'AIR' && !activeUnit && (job?.units?.length || 0) > 0 && (
                 <TouchableOpacity onPress={() => { setUnitSearchKw(''); setUnitPickerOpen(true); }}>
@@ -716,11 +724,20 @@ export default function PackingScreen() {
                 </TouchableOpacity>
               )}
             </View>
-            <View style={styles.scanRow}>
+            {/* 扫码就绪输入框:装饰图标 + 脉冲指示灯 */}
+            <TouchableOpacity
+              activeOpacity={1}
+              onPress={() => scanInputRef.current?.focus()}
+              style={styles.scanReadyRow}
+            >
+              <View style={styles.scanPrefix}>
+                <Ionicons name="scan-outline" size={22} color={colors.primary} />
+                <View style={styles.readyDot} />
+              </View>
               <TextInput
                 ref={scanInputRef}
-                style={styles.scanInput}
-                placeholder="扫码/输入编码"
+                style={styles.scanReadyInput}
+                placeholder="扫码就绪,对准条码或手动输入"
                 placeholderTextColor={colors.textTertiary}
                 value={scanInput}
                 onChangeText={setScanInput}
@@ -728,20 +745,16 @@ export default function PackingScreen() {
                 autoCapitalize="characters"
                 returnKeyType="send"
                 autoFocus
+                blurOnSubmit={false}
               />
-              <TouchableOpacity style={styles.scanBtn}>
-                <Ionicons name="scan-outline" size={20} color={colors.primary} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.addBtn, bindingOrder && { opacity: 0.6 }]}
-                onPress={handleAddOrder}
-                disabled={bindingOrder}
-              >
-                <Text style={styles.addBtnText}>
-                  {bindingOrder ? '...' : '确认'}
-                </Text>
-              </TouchableOpacity>
-            </View>
+              {bindingOrder ? (
+                <ActivityIndicator size="small" color={colors.primary} style={{ marginRight: spacing.md }} />
+              ) : scanInput.length > 0 ? (
+                <TouchableOpacity onPress={handleAddOrder} style={styles.scanGoBtn}>
+                  <Ionicons name="arrow-forward" size={18} color="#fff" />
+                </TouchableOpacity>
+              ) : null}
+            </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.bottomBar}>
@@ -1197,6 +1210,18 @@ const styles = StyleSheet.create({
   // 管理集装号入口
   manageLink: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-end', paddingHorizontal: spacing.md, paddingVertical: 6, backgroundColor: colors.primaryLight, borderRadius: radius.md, marginBottom: spacing.sm },
   manageLinkText: { fontSize: font.sm, color: colors.primary, fontWeight: '600' },
+
+  // 扫码就绪输入栏
+  scanReadyRow: {
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 2, borderColor: colors.primary, borderRadius: radius.lg,
+    backgroundColor: colors.card, minHeight: 52,
+    shadowColor: colors.primary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 2,
+  },
+  scanPrefix: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  readyDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.success },
+  scanReadyInput: { flex: 1, fontSize: font.md, color: colors.text, paddingVertical: spacing.sm, paddingRight: spacing.sm },
+  scanGoBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginRight: spacing.sm },
 
   // 连续扫码 toast
   scanToast: {
