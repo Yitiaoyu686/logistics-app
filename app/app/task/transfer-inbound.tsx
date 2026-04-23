@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TextInput, TouchableOpacity, FlatList,
   SafeAreaView, Alert, ActivityIndicator, Modal, KeyboardAvoidingView, Platform,
@@ -8,6 +8,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { warehouseApi } from '../../lib/api';
 import { safeBack } from '../../lib/nav';
+
+// 动态引入 expo-camera,Web 预览降级
+let CameraView: any = null;
+let useCameraPermissions: any = null;
+if (Platform.OS !== 'web') {
+  try {
+    const mod = require('expo-camera');
+    CameraView = mod.CameraView;
+    useCameraPermissions = mod.useCameraPermissions;
+  } catch {/* */}
+}
 
 type InboundMode = 'SCAN' | 'MANUAL';
 type ItemStatus = 'PENDING' | 'RECEIVED';
@@ -48,11 +59,22 @@ export default function TransferInboundScreen() {
 
   const [detail, setDetail] = useState<TransferDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [mode, setMode] = useState<InboundMode>('SCAN');
   const [scanInput, setScanInput] = useState('');
   const [scanning, setScanning] = useState(false);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+
+  // 连续扫码 toast + 相机
+  const scanInputRef = useRef<TextInput>(null);
+  const lastScanRef = useRef<{ code: string; at: number } | null>(null);
+  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'warn'; text: string; detail?: string } | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
+  const [permission, requestPermission] = useCameraPermissions ? useCameraPermissions() : [null, () => {}];
+  const showToast = (type: 'success' | 'error' | 'warn', text: string, d?: string) => {
+    setToast({ type, text, detail: d });
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => setToast(null), 2500) as unknown as number;
+  };
 
   // 手动添加表单
   const [manualVisible, setManualVisible] = useState(false);
@@ -87,46 +109,145 @@ export default function TransferInboundScreen() {
     return { total, received, pending: total - received };
   }, [detail]);
 
-  const handleScan = async () => {
-    const keyword = scanInput.trim();
-    if (!keyword || !detail) {
-      Alert.alert('请扫描或输入集装号/运单号');
-      return;
-    }
+  const handleScan = async (override?: string) => {
+    const keyword = (override || scanInput).trim();
+    // 立即清空 + 保焦点,准备下一次扫码
+    setScanInput('');
+    scanInputRef.current?.focus();
+    if (!keyword || !detail) return;
+
+    // 600ms 同值去重
+    const now = Date.now();
+    if (lastScanRef.current && lastScanRef.current.code === keyword && now - lastScanRef.current.at < 600) return;
+    lastScanRef.current = { code: keyword, at: now };
+
     setScanning(true);
     try {
       const res = await warehouseApi.scanInboundTransfer(detail.id, { keyword, method: 'SCAN' });
       const updated = res.data?.updated || 0;
       const hits = res.data?.hits || [];
       if (updated === 0) {
-        Alert.alert('未匹配', `运单号 ${keyword} 不在本调拨单中或已入库`);
+        showToast('warn', '未匹配', `${keyword} 不在本调拨单或已入库`);
       } else {
         if (hits[0]) setHighlightedId(hits[0]);
-        setScanInput('');
+        showToast('success', `✓ 已入库 ${updated} 件`, keyword);
         await load();
       }
-    } catch (err: any) {
-      Alert.alert('扫码失败', err.message || '请重试');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '请重试';
+      showToast('error', '扫码失败', msg);
     } finally {
       setScanning(false);
+      scanInputRef.current?.focus();
     }
   };
 
-  // 点击列表项手动切换状态（手动模式）
+  // 相机扫码回调
+  const handleBarcodeScanned = (event: { data: string }) => {
+    if (!event?.data) return;
+    void handleScan(String(event.data));
+  };
+
+  // 页面挂载时主动请求相机权限
+  useEffect(() => {
+    if (Platform.OS !== 'web' && permission && !permission.granted) {
+      requestPermission();
+    }
+  }, [permission]);
+
+  // 点击列表项手动入库(已入库的不可撤销)
   const handleToggleItem = async (item: TransferItem) => {
-    if (mode !== 'MANUAL') return;
-    if (item.inbound_status === 'RECEIVED') return; // 已入库的不切换回去
-    if (!detail) return;
+    if (item.inbound_status === 'RECEIVED' || !detail) return;
     try {
       await warehouseApi.scanInboundTransfer(detail.id, {
         keyword: item.sub_order_no,
         method: 'MANUAL',
       });
       setHighlightedId(item.id);
+      showToast('success', `✓ 手动入库 ${item.sub_order_no}`);
       await load();
-    } catch (err: any) {
-      Alert.alert('入库失败', err.message || '请重试');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '请重试';
+      showToast('error', '入库失败', msg);
     }
+  };
+
+  // 扫码区:原生相机,Web 方形占位
+  const renderScanner = () => {
+    if (Platform.OS === 'web' || !CameraView) {
+      return (
+        <View style={styles.scannerWebArea}>
+          <View style={styles.scannerStatusBar}>
+            <Text style={styles.scannerStatusText}>
+              ● {scanning ? '处理中...' : '就绪 · 对准条码自动识别'}
+            </Text>
+          </View>
+          <View style={styles.scanFrame}>
+            <View style={[styles.scanCorner, styles.cornerTL]} />
+            <View style={[styles.scanCorner, styles.cornerTR]} />
+            <View style={[styles.scanCorner, styles.cornerBL]} />
+            <View style={[styles.scanCorner, styles.cornerBR]} />
+            <Ionicons name="scan-outline" size={72} color="rgba(96,165,250,0.4)" />
+          </View>
+          <View style={styles.scannerWebInputWrap}>
+            <TextInput
+              ref={scanInputRef}
+              style={styles.scannerWebInput}
+              placeholder="Web 预览:手动输入集装号/运单号"
+              placeholderTextColor="rgba(255,255,255,0.5)"
+              value={scanInput}
+              onChangeText={setScanInput}
+              onSubmitEditing={() => { void handleScan(); }}
+              autoCapitalize="characters"
+              returnKeyType="send"
+              autoFocus
+              blurOnSubmit={false}
+            />
+            {scanning ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : scanInput.length > 0 ? (
+              <TouchableOpacity onPress={() => { void handleScan(); }} style={styles.scanGoBtn}>
+                <Ionicons name="arrow-forward" size={18} color="#fff" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
+      );
+    }
+    if (!permission?.granted) {
+      return (
+        <View style={styles.scannerPermArea}>
+          <Ionicons name="camera-outline" size={64} color="rgba(255,255,255,0.4)" />
+          <Text style={styles.scannerPermText}>需要相机权限才能扫码</Text>
+          <TouchableOpacity style={styles.scannerPermBtn} onPress={requestPermission}>
+            <Text style={styles.scannerPermBtnText}>授予权限</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.scannerCameraArea}>
+        <CameraView
+          style={StyleSheet.absoluteFill}
+          facing="back"
+          barcodeScannerSettings={{
+            barcodeTypes: ['qr', 'ean13', 'ean8', 'code128', 'code39', 'upc_a', 'upc_e', 'pdf417'],
+          }}
+          onBarcodeScanned={scanning ? undefined : handleBarcodeScanned}
+        />
+        <View style={styles.scanFrame}>
+          <View style={[styles.scanCorner, styles.cornerTL]} />
+          <View style={[styles.scanCorner, styles.cornerTR]} />
+          <View style={[styles.scanCorner, styles.cornerBL]} />
+          <View style={[styles.scanCorner, styles.cornerBR]} />
+        </View>
+        <View style={styles.scannerStatusBar}>
+          <Text style={styles.scannerStatusText}>
+            ● {scanning ? '处理中...' : '就绪 · 对准条码自动识别'}
+          </Text>
+        </View>
+      </View>
+    );
   };
 
   const handleAddManual = async () => {
@@ -197,11 +318,11 @@ export default function TransferInboundScreen() {
         style={[
           styles.itemCard,
           isReceived && styles.itemCardReceived,
-          !isReceived && mode === 'MANUAL' && styles.itemCardClickable,
+          !isReceived && styles.itemCardClickable,
           isHighlighted && styles.itemCardHighlight,
         ]}
         onPress={() => handleToggleItem(item)}
-        activeOpacity={mode === 'MANUAL' && !isReceived ? 0.7 : 1}
+        activeOpacity={!isReceived ? 0.7 : 1}
       >
         <View style={styles.itemHeader}>
           <Text style={styles.itemNo}>{item.sub_order_no}</Text>
@@ -304,76 +425,17 @@ export default function TransferInboundScreen() {
             </View>
           </View>
 
-          {/* 模式切换 */}
-          <View style={styles.modeRow}>
-            <TouchableOpacity
-              style={[styles.modeBtn, mode === 'SCAN' && styles.modeBtnActive]}
-              onPress={() => setMode('SCAN')}
-            >
-              <Ionicons name="scan" size={18} color={mode === 'SCAN' ? '#fff' : colors.textSecondary} />
-              <Text style={[styles.modeText, mode === 'SCAN' && styles.modeTextActive]}>扫码入库</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modeBtn, mode === 'MANUAL' && styles.modeBtnActive]}
-              onPress={() => setMode('MANUAL')}
-            >
-              <Ionicons name="create" size={18} color={mode === 'MANUAL' ? '#fff' : colors.textSecondary} />
-              <Text style={[styles.modeText, mode === 'MANUAL' && styles.modeTextActive]}>手动入库</Text>
+          {/* 相机扫码区(原生)/ Web 方形占位 */}
+          {renderScanner()}
+
+          {/* 手动入库提示 + 添加新运单 */}
+          <View style={styles.manualHintRow}>
+            <Text style={styles.manualHintText}>点击下方卡片也可手动入库</Text>
+            <TouchableOpacity style={styles.addInlineBtn} onPress={() => setManualVisible(true)}>
+              <Ionicons name="add-circle" size={18} color={colors.primary} />
+              <Text style={styles.addInlineBtnText}>添加新运单</Text>
             </TouchableOpacity>
           </View>
-
-          {/* 扫码输入区 */}
-          {mode === 'SCAN' && (
-            <View style={styles.scanCard}>
-              <Text style={styles.scanLabel}>📷 扫描集装号或运单号</Text>
-              <View style={styles.scanInputRow}>
-                <TextInput
-                  style={styles.scanInput}
-                  value={scanInput}
-                  onChangeText={setScanInput}
-                  placeholder="扫描后回车 / 输入运单号"
-                  placeholderTextColor={colors.textTertiary}
-                  onSubmitEditing={handleScan}
-                  returnKeyType="done"
-                  autoFocus
-                />
-                <TouchableOpacity style={styles.scanIconBtn}>
-                  <Ionicons name="scan-outline" size={22} color={colors.primary} />
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity
-                style={[styles.recordBtn, scanning && styles.btnDisabled]}
-                onPress={handleScan}
-                disabled={scanning}
-              >
-                {scanning ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <>
-                    <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                    <Text style={styles.recordBtnText}>记录入库</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-              <Text style={styles.scanHint}>
-                💡 扫集装号 = 整箱完成入库；扫运单号 = 逐票登记
-              </Text>
-            </View>
-          )}
-
-          {/* 手动模式提示 */}
-          {mode === 'MANUAL' && (
-            <View style={styles.manualCard}>
-              <Text style={styles.manualLabel}>✏️ 手动入库</Text>
-              <Text style={styles.manualHint}>
-                点击下方运单卡片即可标记入库；如需添加新运单点下方按钮
-              </Text>
-              <TouchableOpacity style={styles.addBtn} onPress={() => setManualVisible(true)}>
-                <Ionicons name="add-circle" size={20} color={colors.primary} />
-                <Text style={styles.addBtnText}>添加新运单</Text>
-              </TouchableOpacity>
-            </View>
-          )}
 
           {/* 运单列表 */}
           <View style={styles.listSection}>
@@ -387,6 +449,29 @@ export default function TransferInboundScreen() {
             )}
           </View>
         </ScrollView>
+
+        {/* 连续扫码 toast */}
+        {toast && (
+          <View
+            style={[
+              styles.scanToast,
+              toast.type === 'success' && { backgroundColor: colors.success },
+              toast.type === 'error' && { backgroundColor: colors.danger },
+              toast.type === 'warn' && { backgroundColor: colors.warning },
+            ]}
+            pointerEvents="none"
+          >
+            <Ionicons
+              name={toast.type === 'success' ? 'checkmark-circle' : toast.type === 'error' ? 'close-circle' : 'alert-circle'}
+              size={20}
+              color="#fff"
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.scanToastText}>{toast.text}</Text>
+              {toast.detail && <Text style={styles.scanToastDetail}>{toast.detail}</Text>}
+            </View>
+          </View>
+        )}
 
         {/* 底部最终确认 */}
         <View style={styles.bottomBar}>
@@ -506,6 +591,41 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: font.xs, color: colors.textSecondary, marginTop: 2 },
 
   // 模式切换
+  // 相机扫码区
+  scannerCameraArea: { height: 320, backgroundColor: '#000', borderRadius: radius.lg, overflow: 'hidden', marginBottom: spacing.md, position: 'relative', alignItems: 'center', justifyContent: 'center' },
+  scannerWebArea: { height: 340, backgroundColor: '#1a1a2e', borderRadius: radius.lg, marginBottom: spacing.md, position: 'relative', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  scannerWebInputWrap: { position: 'absolute', bottom: spacing.md, left: spacing.md, right: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: radius.md, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderWidth: 1, borderColor: 'rgba(96,165,250,0.5)' },
+  scannerWebInput: { flex: 1, height: 40, fontSize: font.md, color: '#fff', fontFamily: font.mono, fontWeight: '700', paddingHorizontal: spacing.sm },
+  scannerPermArea: { height: 240, backgroundColor: '#1a1a2e', borderRadius: radius.lg, marginBottom: spacing.md, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
+  scannerPermText: { color: 'rgba(255,255,255,0.7)', fontSize: font.sm },
+  scannerPermBtn: { paddingHorizontal: spacing.xl, paddingVertical: spacing.md, backgroundColor: colors.primary, borderRadius: radius.full },
+  scannerPermBtnText: { color: '#fff', fontSize: font.md, fontWeight: '600' },
+  scannerStatusBar: { position: 'absolute', top: spacing.md, left: spacing.md, right: spacing.md, backgroundColor: 'rgba(0,0,0,0.6)', paddingVertical: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radius.full, alignItems: 'center' },
+  scannerStatusText: { color: colors.success, fontSize: font.sm, fontWeight: '700' },
+  scanFrame: { width: 220, height: 220, alignItems: 'center', justifyContent: 'center' },
+  scanCorner: { position: 'absolute', width: 22, height: 22, borderColor: colors.primary },
+  cornerTL: { top: 0, left: 0, borderTopWidth: 3, borderLeftWidth: 3 },
+  cornerTR: { top: 0, right: 0, borderTopWidth: 3, borderRightWidth: 3 },
+  cornerBL: { bottom: 0, left: 0, borderBottomWidth: 3, borderLeftWidth: 3 },
+  cornerBR: { bottom: 0, right: 0, borderBottomWidth: 3, borderRightWidth: 3 },
+  scanGoBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+
+  // 手动提示
+  manualHintRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, marginBottom: spacing.sm },
+  manualHintText: { fontSize: font.xs, color: colors.textSecondary },
+  addInlineBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.md, paddingVertical: 6, backgroundColor: colors.primaryLight, borderRadius: radius.md },
+  addInlineBtnText: { fontSize: font.sm, color: colors.primary, fontWeight: '600' },
+
+  // 扫码 toast
+  scanToast: {
+    position: 'absolute', left: spacing.md, right: spacing.md, bottom: 104,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 4,
+  },
+  scanToastText: { color: '#fff', fontSize: font.sm, fontWeight: '700' },
+  scanToastDetail: { color: '#fff', fontSize: font.xs, opacity: 0.9, marginTop: 1 },
+
   modeRow: { flexDirection: 'row', backgroundColor: colors.card, borderRadius: radius.md, padding: 4, marginBottom: spacing.md, gap: 4 },
   modeBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingVertical: spacing.md, borderRadius: radius.sm },
   modeBtnActive: { backgroundColor: colors.primary },

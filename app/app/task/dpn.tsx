@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TextInput, TouchableOpacity,
   SafeAreaView, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, Modal,
@@ -8,6 +8,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { deliveryApi, orderApi, systemApi } from '../../lib/api';
 import { safeBack } from '../../lib/nav';
+
+// 动态引入 expo-camera
+let CameraView: any = null;
+let useCameraPermissions: any = null;
+if (Platform.OS !== 'web') {
+  try {
+    const mod = require('expo-camera');
+    CameraView = mod.CameraView;
+    useCameraPermissions = mod.useCameraPermissions;
+  } catch {/* */}
+}
 
 interface SupplierOption {
   id: string;
@@ -89,6 +100,17 @@ export default function DpnScreen() {
     inbound_status: 'PENDING' | 'RECEIVED';
   }>>([]);
   const [receiveScanInput, setReceiveScanInput] = useState('');
+  const receiveScanRef = useRef<TextInput>(null);
+  const lastScanRef = useRef<{ code: string; at: number } | null>(null);
+  const [receiveScanning, setReceiveScanning] = useState(false);
+  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'warn'; text: string; detail?: string } | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
+  const [permission, requestPermission] = useCameraPermissions ? useCameraPermissions() : [null, () => {}];
+  const showToast = (type: 'success' | 'error' | 'warn', text: string, detail?: string) => {
+    setToast({ type, text, detail });
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => setToast(null), 2500) as unknown as number;
+  };
 
   useEffect(() => {
     if (mode === 'bind') loadAvailableSubOrders();
@@ -115,19 +137,41 @@ export default function DpnScreen() {
     }
   };
 
-  const handleReceiveScan = async () => {
-    const code = receiveScanInput.trim();
-    if (!code) { Alert.alert('请输入运单号'); return; }
-    if (!params.dpnId) return;
+  const handleReceiveScan = async (override?: string) => {
+    const code = (override || receiveScanInput).trim();
+    setReceiveScanInput('');
+    receiveScanRef.current?.focus();
+    if (!code || !params.dpnId) return;
+
+    const now = Date.now();
+    if (lastScanRef.current && lastScanRef.current.code === code && now - lastScanRef.current.at < 600) return;
+    lastScanRef.current = { code, at: now };
+
+    setReceiveScanning(true);
     try {
       await deliveryApi.scanReceiveDpn(params.dpnId as string, { code, method: 'SCAN' });
-      setReceiveScanInput('');
+      showToast('success', `✓ 已入库 ${code}`);
       loadReceiveItems();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '扫码失败';
-      Alert.alert('未匹配', message);
+      showToast('error', '未匹配', message);
+    } finally {
+      setReceiveScanning(false);
+      receiveScanRef.current?.focus();
     }
   };
+
+  const handleReceiveBarcodeScanned = (event: { data: string }) => {
+    if (!event?.data) return;
+    void handleReceiveScan(String(event.data));
+  };
+
+  // 进入 receive 模式时请求相机权限
+  useEffect(() => {
+    if (mode === 'receive' && Platform.OS !== 'web' && permission && !permission.granted) {
+      requestPermission();
+    }
+  }, [mode, permission]);
 
   const handleMarkReceived = async (subOrderNo: string) => {
     if (!params.dpnId) return;
@@ -424,7 +468,7 @@ export default function DpnScreen() {
             </View>
           )}
 
-          {/* Receive Mode — 扫码逐件 */}
+          {/* Receive Mode — 相机扫码连续入库 */}
           {mode === 'receive' && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
@@ -434,27 +478,78 @@ export default function DpnScreen() {
                 </Text>
               </View>
 
-              {/* 扫码输入 */}
-              <View style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md }}>
-                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', borderWidth: 2, borderColor: colors.primary, borderRadius: radius.md, paddingHorizontal: spacing.md, height: 48, gap: spacing.sm }}>
-                  <Ionicons name="scan" size={20} color={colors.primary} />
-                  <TextInput
-                    style={{ flex: 1, fontSize: font.md, color: colors.text, fontFamily: font.mono }}
-                    value={receiveScanInput}
-                    onChangeText={setReceiveScanInput}
-                    placeholder="扫描或输入运单号"
-                    placeholderTextColor={colors.textTertiary}
-                    onSubmitEditing={handleReceiveScan}
-                    returnKeyType="done"
-                  />
+              {/* 扫码区:相机/Web 方形占位 */}
+              {Platform.OS === 'web' || !CameraView ? (
+                <View style={styles.receiveScannerWeb}>
+                  <View style={styles.receiveStatusBar}>
+                    <Text style={styles.receiveStatusText}>
+                      ● {receiveScanning ? '处理中...' : '就绪 · 对准条码自动识别'}
+                    </Text>
+                  </View>
+                  <View style={styles.receiveScanFrame}>
+                    <View style={[styles.receiveCorner, styles.rcTL]} />
+                    <View style={[styles.receiveCorner, styles.rcTR]} />
+                    <View style={[styles.receiveCorner, styles.rcBL]} />
+                    <View style={[styles.receiveCorner, styles.rcBR]} />
+                    <Ionicons name="scan-outline" size={64} color="rgba(96,165,250,0.4)" />
+                  </View>
+                  <View style={styles.receiveInputWrap}>
+                    <TextInput
+                      ref={receiveScanRef}
+                      style={styles.receiveInput}
+                      placeholder="Web 预览:手动输入运单号"
+                      placeholderTextColor="rgba(255,255,255,0.5)"
+                      value={receiveScanInput}
+                      onChangeText={setReceiveScanInput}
+                      onSubmitEditing={() => { void handleReceiveScan(); }}
+                      autoCapitalize="characters"
+                      returnKeyType="send"
+                      autoFocus
+                      blurOnSubmit={false}
+                    />
+                    {receiveScanning ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : receiveScanInput.length > 0 ? (
+                      <TouchableOpacity onPress={() => { void handleReceiveScan(); }} style={styles.receiveGoBtn}>
+                        <Ionicons name="arrow-forward" size={18} color="#fff" />
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
                 </View>
-                <TouchableOpacity
-                  style={{ backgroundColor: colors.primary, paddingHorizontal: spacing.lg, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' }}
-                  onPress={handleReceiveScan}
-                >
-                  <Text style={{ color: '#fff', fontSize: font.md, fontWeight: '600' }}>入库</Text>
-                </TouchableOpacity>
-              </View>
+              ) : !permission?.granted ? (
+                <View style={styles.receivePermArea}>
+                  <Ionicons name="camera-outline" size={56} color="rgba(255,255,255,0.4)" />
+                  <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: font.sm, marginTop: 6 }}>需要相机权限</Text>
+                  <TouchableOpacity
+                    style={{ paddingHorizontal: spacing.xl, paddingVertical: spacing.md, backgroundColor: colors.primary, borderRadius: radius.full, marginTop: spacing.md }}
+                    onPress={requestPermission}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '600' }}>授予权限</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.receiveScannerCamera}>
+                  <CameraView
+                    style={StyleSheet.absoluteFill}
+                    facing="back"
+                    barcodeScannerSettings={{
+                      barcodeTypes: ['qr', 'ean13', 'ean8', 'code128', 'code39', 'upc_a', 'upc_e', 'pdf417'],
+                    }}
+                    onBarcodeScanned={receiveScanning ? undefined : handleReceiveBarcodeScanned}
+                  />
+                  <View style={styles.receiveScanFrame}>
+                    <View style={[styles.receiveCorner, styles.rcTL]} />
+                    <View style={[styles.receiveCorner, styles.rcTR]} />
+                    <View style={[styles.receiveCorner, styles.rcBL]} />
+                    <View style={[styles.receiveCorner, styles.rcBR]} />
+                  </View>
+                  <View style={styles.receiveStatusBar}>
+                    <Text style={styles.receiveStatusText}>
+                      ● {receiveScanning ? '处理中...' : '就绪 · 对准条码自动识别'}
+                    </Text>
+                  </View>
+                </View>
+              )}
 
               {receiveItems.length === 0 ? (
                 <Text style={styles.empty}>该 DPN 未绑定运单</Text>
@@ -502,6 +597,29 @@ export default function DpnScreen() {
             </View>
           )}
         </ScrollView>
+
+        {/* 扫码 toast */}
+        {toast && mode === 'receive' && (
+          <View
+            style={[
+              styles.dpnToast,
+              toast.type === 'success' && { backgroundColor: colors.success },
+              toast.type === 'error' && { backgroundColor: colors.danger },
+              toast.type === 'warn' && { backgroundColor: colors.warning },
+            ]}
+            pointerEvents="none"
+          >
+            <Ionicons
+              name={toast.type === 'success' ? 'checkmark-circle' : toast.type === 'error' ? 'close-circle' : 'alert-circle'}
+              size={20}
+              color="#fff"
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.dpnToastText}>{toast.text}</Text>
+              {toast.detail && <Text style={styles.dpnToastDetail}>{toast.detail}</Text>}
+            </View>
+          </View>
+        )}
 
         {/* Bottom */}
         <View style={styles.bottomBar}>
@@ -641,6 +759,25 @@ const styles = StyleSheet.create({
   // Section
   section: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.md },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
+
+  // receive 模式扫码
+  receiveScannerCamera: { height: 260, backgroundColor: '#000', borderRadius: radius.lg, overflow: 'hidden', marginBottom: spacing.md, position: 'relative', alignItems: 'center', justifyContent: 'center' },
+  receiveScannerWeb: { height: 280, backgroundColor: '#1a1a2e', borderRadius: radius.lg, marginBottom: spacing.md, position: 'relative', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  receivePermArea: { height: 200, backgroundColor: '#1a1a2e', borderRadius: radius.lg, marginBottom: spacing.md, alignItems: 'center', justifyContent: 'center' },
+  receiveStatusBar: { position: 'absolute', top: spacing.sm, left: spacing.md, right: spacing.md, backgroundColor: 'rgba(0,0,0,0.6)', paddingVertical: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radius.full, alignItems: 'center' },
+  receiveStatusText: { color: colors.success, fontSize: font.xs, fontWeight: '700' },
+  receiveScanFrame: { width: 180, height: 180, alignItems: 'center', justifyContent: 'center' },
+  receiveCorner: { position: 'absolute', width: 20, height: 20, borderColor: colors.primary },
+  rcTL: { top: 0, left: 0, borderTopWidth: 3, borderLeftWidth: 3 },
+  rcTR: { top: 0, right: 0, borderTopWidth: 3, borderRightWidth: 3 },
+  rcBL: { bottom: 0, left: 0, borderBottomWidth: 3, borderLeftWidth: 3 },
+  rcBR: { bottom: 0, right: 0, borderBottomWidth: 3, borderRightWidth: 3 },
+  receiveInputWrap: { position: 'absolute', bottom: spacing.md, left: spacing.md, right: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: radius.md, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderWidth: 1, borderColor: 'rgba(96,165,250,0.5)' },
+  receiveInput: { flex: 1, height: 36, fontSize: font.sm, color: '#fff', fontFamily: font.mono, fontWeight: '700', paddingHorizontal: spacing.sm },
+  receiveGoBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  dpnToast: { position: 'absolute', left: spacing.md, right: spacing.md, bottom: 104, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 4 },
+  dpnToastText: { color: '#fff', fontSize: font.sm, fontWeight: '700' },
+  dpnToastDetail: { color: '#fff', fontSize: font.xs, opacity: 0.9, marginTop: 1 },
   sectionTitle: { fontSize: font.md, fontWeight: '600', color: colors.text },
   selectedCount: { fontSize: font.sm, color: colors.primary, fontWeight: '600' },
   empty: { fontSize: font.sm, color: colors.textTertiary, textAlign: 'center', paddingVertical: spacing.lg },

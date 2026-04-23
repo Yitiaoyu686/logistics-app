@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TextInput, TouchableOpacity,
   SafeAreaView, Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
@@ -8,6 +8,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { jobApi, warehouseApi } from '../../lib/api';
 import { safeBack } from '../../lib/nav';
+
+let CameraView: any = null;
+let useCameraPermissions: any = null;
+if (Platform.OS !== 'web') {
+  try {
+    const mod = require('expo-camera');
+    CameraView = mod.CameraView;
+    useCameraPermissions = mod.useCameraPermissions;
+  } catch {/* */}
+}
 
 type DeliveryStatus = 'ARRIVED_WAREHOUSE' | 'DIRECT_TO_CUSTOMER';
 type CargoStatus = 'INTACT' | 'DAMAGED_GOODS' | 'DAMAGED_PACKAGE' | 'LOST';
@@ -46,6 +56,17 @@ export default function DestInboundScreen() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [scanInput, setScanInput] = useState('');
+  const scanInputRef = useRef<TextInput>(null);
+  const lastScanRef = useRef<{ code: string; at: number } | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'warn'; text: string; detail?: string } | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
+  const [permission, requestPermission] = useCameraPermissions ? useCameraPermissions() : [null, () => {}];
+  const showToast = (type: 'success' | 'error' | 'warn', text: string, d?: string) => {
+    setToast({ type, text, detail: d });
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => setToast(null), 2500) as unknown as number;
+  };
   const [remark, setRemark] = useState('');
   const [photoCount, setPhotoCount] = useState(0);
 
@@ -87,19 +108,25 @@ export default function DestInboundScreen() {
     return { total, completed, intact, damaged, lost, progress: total > 0 ? Math.round(completed / total * 100) : 0 };
   }, [items]);
 
-  const handleScan = () => {
-    const code = scanInput.trim();
-    if (!code) { Alert.alert('请输入运单号'); return; }
+  const handleScan = (override?: string) => {
+    const code = (override || scanInput).trim();
+    setScanInput('');
+    scanInputRef.current?.focus();
+    if (!code) return;
 
+    const now = Date.now();
+    if (lastScanRef.current && lastScanRef.current.code === code && now - lastScanRef.current.at < 600) return;
+    lastScanRef.current = { code, at: now };
+
+    setScanning(true);
     const idx = items.findIndex((i) => i.sub_order_no.includes(code) || i.order_no.includes(code));
     if (idx === -1) {
-      Alert.alert('未找到', `运单号 ${code} 不在本次任务清单中`, [
-        { text: '无单处理', style: 'default' },
-        { text: '取消', style: 'cancel' },
-      ]);
+      showToast('warn', '未匹配', `${code} 不在本次任务清单`);
+      setScanning(false);
       return;
     }
-    // 扫码快速填入默认值（到达仓库+完好），仓管可手动改
+    // 扫码快速填入默认值(到达仓库+完好),仓管可手动改
+    const hitNo = items[idx].sub_order_no;
     setItems((prev) =>
       prev.map((it, i) =>
         i === idx
@@ -111,8 +138,20 @@ export default function DestInboundScreen() {
           : it,
       ),
     );
-    setScanInput('');
+    showToast('success', `✓ 已核对 ${hitNo}`, '默认完好入仓,可手动改');
+    setScanning(false);
   };
+
+  const handleBarcodeScanned = (event: { data: string }) => {
+    if (!event?.data) return;
+    handleScan(String(event.data));
+  };
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' && permission && !permission.granted) {
+      requestPermission();
+    }
+  }, [permission]);
 
   const updateItem = (id: string, patch: Partial<CheckItem>) => {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
@@ -242,27 +281,78 @@ export default function DestInboundScreen() {
             </View>
           </View>
 
-          {/* 扫码核对输入 */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📷 扫码核对</Text>
-            <View style={styles.scanRow}>
-              <View style={styles.scanInputWrap}>
-                <Ionicons name="scan" size={20} color={colors.primary} />
+          {/* 相机扫码核对 */}
+          {Platform.OS === 'web' || !CameraView ? (
+            <View style={styles.destScannerWeb}>
+              <View style={styles.destStatusBar}>
+                <Text style={styles.destStatusText}>
+                  ● {scanning ? '处理中...' : '就绪 · 对准运单条码自动核对'}
+                </Text>
+              </View>
+              <View style={styles.destScanFrame}>
+                <View style={[styles.destCorner, styles.dcTL]} />
+                <View style={[styles.destCorner, styles.dcTR]} />
+                <View style={[styles.destCorner, styles.dcBL]} />
+                <View style={[styles.destCorner, styles.dcBR]} />
+                <Ionicons name="scan-outline" size={72} color="rgba(96,165,250,0.4)" />
+              </View>
+              <View style={styles.destInputWrap}>
                 <TextInput
-                  style={styles.scanInput}
+                  ref={scanInputRef}
+                  style={styles.destInput}
+                  placeholder="Web 预览:手动输入运单号"
+                  placeholderTextColor="rgba(255,255,255,0.5)"
                   value={scanInput}
                   onChangeText={setScanInput}
-                  placeholder="扫描或输入运单号"
-                  placeholderTextColor={colors.textTertiary}
-                  onSubmitEditing={handleScan}
-                  returnKeyType="done"
+                  onSubmitEditing={() => handleScan()}
+                  autoCapitalize="characters"
+                  returnKeyType="send"
+                  autoFocus
+                  blurOnSubmit={false}
                 />
+                {scanning ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : scanInput.length > 0 ? (
+                  <TouchableOpacity onPress={() => handleScan()} style={styles.destGoBtn}>
+                    <Ionicons name="arrow-forward" size={18} color="#fff" />
+                  </TouchableOpacity>
+                ) : null}
               </View>
-              <TouchableOpacity style={styles.scanBtn} onPress={handleScan}>
-                <Text style={styles.scanBtnText}>核对</Text>
+            </View>
+          ) : !permission?.granted ? (
+            <View style={styles.destPermArea}>
+              <Ionicons name="camera-outline" size={56} color="rgba(255,255,255,0.4)" />
+              <Text style={{ color: 'rgba(255,255,255,0.7)', marginTop: 6 }}>需要相机权限</Text>
+              <TouchableOpacity
+                style={{ paddingHorizontal: spacing.xl, paddingVertical: spacing.md, backgroundColor: colors.primary, borderRadius: radius.full, marginTop: spacing.md }}
+                onPress={requestPermission}
+              >
+                <Text style={{ color: '#fff', fontWeight: '600' }}>授予权限</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          ) : (
+            <View style={styles.destScannerCamera}>
+              <CameraView
+                style={StyleSheet.absoluteFill}
+                facing="back"
+                barcodeScannerSettings={{
+                  barcodeTypes: ['qr', 'ean13', 'ean8', 'code128', 'code39', 'upc_a', 'upc_e', 'pdf417'],
+                }}
+                onBarcodeScanned={scanning ? undefined : handleBarcodeScanned}
+              />
+              <View style={styles.destScanFrame}>
+                <View style={[styles.destCorner, styles.dcTL]} />
+                <View style={[styles.destCorner, styles.dcTR]} />
+                <View style={[styles.destCorner, styles.dcBL]} />
+                <View style={[styles.destCorner, styles.dcBR]} />
+              </View>
+              <View style={styles.destStatusBar}>
+                <Text style={styles.destStatusText}>
+                  ● {scanning ? '处理中...' : '就绪 · 对准运单条码自动核对'}
+                </Text>
+              </View>
+            </View>
+          )}
 
           {/* 运单清单 */}
           <View style={styles.section}>
@@ -390,6 +480,29 @@ export default function DestInboundScreen() {
           </View>
         </ScrollView>
 
+        {/* 扫码 toast */}
+        {toast && (
+          <View
+            style={[
+              styles.destToast,
+              toast.type === 'success' && { backgroundColor: colors.success },
+              toast.type === 'error' && { backgroundColor: colors.danger },
+              toast.type === 'warn' && { backgroundColor: colors.warning },
+            ]}
+            pointerEvents="none"
+          >
+            <Ionicons
+              name={toast.type === 'success' ? 'checkmark-circle' : toast.type === 'error' ? 'close-circle' : 'alert-circle'}
+              size={20}
+              color="#fff"
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.destToastText}>{toast.text}</Text>
+              {toast.detail && <Text style={styles.destToastDetail}>{toast.detail}</Text>}
+            </View>
+          </View>
+        )}
+
         {/* 底部按钮 */}
         <View style={styles.bottomBar}>
           <TouchableOpacity
@@ -476,6 +589,25 @@ const styles = StyleSheet.create({
   textarea: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md, fontSize: font.md, color: colors.text, minHeight: 60, textAlignVertical: 'top', backgroundColor: colors.card },
   // Bottom
   bottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.card, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xl, borderTopWidth: 0.5, borderTopColor: colors.borderLight },
+
+  // 相机扫码区
+  destScannerCamera: { height: 320, backgroundColor: '#000', borderRadius: radius.lg, overflow: 'hidden', marginBottom: spacing.md, position: 'relative', alignItems: 'center', justifyContent: 'center' },
+  destScannerWeb: { height: 340, backgroundColor: '#1a1a2e', borderRadius: radius.lg, marginBottom: spacing.md, position: 'relative', overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  destPermArea: { height: 240, backgroundColor: '#1a1a2e', borderRadius: radius.lg, marginBottom: spacing.md, alignItems: 'center', justifyContent: 'center' },
+  destStatusBar: { position: 'absolute', top: spacing.md, left: spacing.md, right: spacing.md, backgroundColor: 'rgba(0,0,0,0.6)', paddingVertical: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radius.full, alignItems: 'center' },
+  destStatusText: { color: colors.success, fontSize: font.sm, fontWeight: '700' },
+  destScanFrame: { width: 220, height: 220, alignItems: 'center', justifyContent: 'center' },
+  destCorner: { position: 'absolute', width: 22, height: 22, borderColor: colors.primary },
+  dcTL: { top: 0, left: 0, borderTopWidth: 3, borderLeftWidth: 3 },
+  dcTR: { top: 0, right: 0, borderTopWidth: 3, borderRightWidth: 3 },
+  dcBL: { bottom: 0, left: 0, borderBottomWidth: 3, borderLeftWidth: 3 },
+  dcBR: { bottom: 0, right: 0, borderBottomWidth: 3, borderRightWidth: 3 },
+  destInputWrap: { position: 'absolute', bottom: spacing.md, left: spacing.md, right: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: radius.md, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderWidth: 1, borderColor: 'rgba(96,165,250,0.5)' },
+  destInput: { flex: 1, height: 40, fontSize: font.md, color: '#fff', fontFamily: font.mono, fontWeight: '700', paddingHorizontal: spacing.sm },
+  destGoBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  destToast: { position: 'absolute', left: spacing.md, right: spacing.md, bottom: 104, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 8, elevation: 4 },
+  destToastText: { color: '#fff', fontSize: font.sm, fontWeight: '700' },
+  destToastDetail: { color: '#fff', fontSize: font.xs, opacity: 0.9, marginTop: 1 },
   confirmBtn: { height: 52, backgroundColor: colors.primary, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: spacing.sm, shadowColor: colors.primary, shadowOpacity: 0.25, shadowOffset: { width: 0, height: 4 }, shadowRadius: 8 },
   confirmBtnText: { color: '#fff', fontSize: font.lg, fontWeight: '600', letterSpacing: 2 },
   btnDisabled: { opacity: 0.6 },
