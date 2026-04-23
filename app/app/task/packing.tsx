@@ -389,15 +389,42 @@ export default function PackingScreen() {
 
   // 扫码区:原生显示相机,Web 显示输入框占位
   const renderScanner = () => {
-    // Web 降级:输入框扫码区(保留现有体验)
+    // Web 降级:相机不可用,内嵌输入框
     if (Platform.OS === 'web' || !CameraView) {
       return (
         <View style={styles.scannerWebFallback}>
-          <View style={styles.scannerHint}>
-            <Ionicons name="scan-outline" size={40} color={colors.primary} />
-            <Text style={styles.scannerHintText}>
-              Web 预览不支持相机,请在下方输入框模拟扫码
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm }}>
+            <Ionicons name="scan-outline" size={22} color={colors.primary} />
+            <View style={styles.readyDot} />
+            <Text style={{ fontSize: font.xs, color: colors.success, fontWeight: '700' }}>
+              {activeUnit
+                ? `扫运单 → ${activeUnit.unit_no}`
+                : pendingOrders.length > 0
+                  ? `已扫 ${pendingOrders.length} 单,扫集装号完成绑定`
+                  : '就绪 · 扫集装号或运单码'}
             </Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+            <TextInput
+              ref={scanInputRef}
+              style={[styles.input, { flex: 1, height: 44, fontFamily: font.mono, fontWeight: '700' }]}
+              placeholder="Web 预览:手动输入编码模拟扫码"
+              placeholderTextColor={colors.textTertiary}
+              value={scanInput}
+              onChangeText={setScanInput}
+              onSubmitEditing={() => { void handleAddOrder(); }}
+              autoCapitalize="characters"
+              returnKeyType="send"
+              autoFocus
+              blurOnSubmit={false}
+            />
+            {bindingOrder ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : scanInput.length > 0 ? (
+              <TouchableOpacity onPress={() => { void handleAddOrder(); }} style={styles.scanGoBtn}>
+                <Ionicons name="arrow-forward" size={18} color="#fff" />
+              </TouchableOpacity>
+            ) : null}
           </View>
         </View>
       );
@@ -809,56 +836,8 @@ export default function PackingScreen() {
           </View>
         )}
 
-        {/* 底部:添加订单模式常驻扫码;执行出库模式保留确认按钮 */}
-        {mode === 'add-order' ? (
-          <View style={styles.scanBottomBar}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <Text style={{ fontSize: font.xs, color: colors.success, fontWeight: '700' }}>
-                {activeUnit
-                  ? `● 扫运单 → ${activeUnit.unit_no}`
-                  : pendingOrders.length > 0
-                    ? `● 已扫 ${pendingOrders.length} 个运单,扫集装号完成绑定`
-                    : '● 就绪 · 扫集装号或运单码'}
-              </Text>
-              {job?.business_line === 'AIR' && !activeUnit && (job?.units?.length || 0) > 0 && (
-                <TouchableOpacity onPress={() => { setUnitSearchKw(''); setUnitPickerOpen(true); }}>
-                  <Text style={{ fontSize: font.xs, color: colors.primary }}>选集装号 ›</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            {/* 扫码就绪输入框:装饰图标 + 脉冲指示灯 */}
-            <TouchableOpacity
-              activeOpacity={1}
-              onPress={() => scanInputRef.current?.focus()}
-              style={styles.scanReadyRow}
-            >
-              <View style={styles.scanPrefix}>
-                <Ionicons name="scan-outline" size={22} color={colors.primary} />
-                <View style={styles.readyDot} />
-              </View>
-              <TextInput
-                ref={scanInputRef}
-                style={styles.scanReadyInput}
-                placeholder="扫码就绪,对准条码或手动输入"
-                placeholderTextColor={colors.textTertiary}
-                value={scanInput}
-                onChangeText={setScanInput}
-                onSubmitEditing={() => { void handleAddOrder(); }}
-                autoCapitalize="characters"
-                returnKeyType="send"
-                autoFocus
-                blurOnSubmit={false}
-              />
-              {bindingOrder ? (
-                <ActivityIndicator size="small" color={colors.primary} style={{ marginRight: spacing.md }} />
-              ) : scanInput.length > 0 ? (
-                <TouchableOpacity onPress={() => { void handleAddOrder(); }} style={styles.scanGoBtn}>
-                  <Ionicons name="arrow-forward" size={18} color="#fff" />
-                </TouchableOpacity>
-              ) : null}
-            </TouchableOpacity>
-          </View>
-        ) : (
+        {/* 执行出库模式保留确认按钮;添加订单模式无底部按钮,扫码在相机/Web 输入区完成 */}
+        {mode === 'execute-out' && (
           <View style={styles.bottomBar}>
             <TouchableOpacity
               style={[styles.btnExecute, submitting && { opacity: 0.6 }]}
@@ -1374,9 +1353,12 @@ const styles = StyleSheet.create({
   scannerPermText: { color: 'rgba(255,255,255,0.7)', fontSize: font.sm },
   scannerPermBtn: { paddingHorizontal: spacing.xl, paddingVertical: spacing.md, backgroundColor: colors.primary, borderRadius: radius.full },
   scannerPermBtnText: { color: '#fff', fontSize: font.md, fontWeight: '600' },
-  scannerWebFallback: { height: 120, backgroundColor: colors.primaryLight, borderRadius: radius.lg, marginBottom: spacing.md, alignItems: 'center', justifyContent: 'center' },
-  scannerHint: { alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg },
-  scannerHintText: { fontSize: font.sm, color: colors.primary, textAlign: 'center' },
+  scannerWebFallback: {
+    backgroundColor: colors.card, borderRadius: radius.lg,
+    padding: spacing.md, marginBottom: spacing.md,
+    borderWidth: 2, borderColor: colors.primary,
+    shadowColor: colors.primary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 2,
+  },
 
   // 扫码就绪输入栏
   scanReadyRow: {
