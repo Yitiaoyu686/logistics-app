@@ -788,24 +788,41 @@ export default function InboundScreen() {
         </Modal>
 
         {/* 底部操作按钮 */}
-        <View style={styles.bottomBar}>
-          <TouchableOpacity
-            style={[styles.btnPrimary, submitting && styles.btnDisabled]}
-            onPress={() => handleSubmit(true)}
-            disabled={submitting}
-          >
-            <Text style={styles.btnPrimaryText}>
-              {submitting ? '处理中...' : '确认入库并打印面单'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.btnSecondary}
-            onPress={() => handleSubmit(false)}
-            disabled={submitting}
-          >
-            <Text style={styles.btnSecondaryText}>仅入库不打印</Text>
-          </TouchableOpacity>
-        </View>
+        {(() => {
+          // 实时校验,按钮 disabled 并给出引导文案
+          const validationHint = !order
+            ? '请先从任务列表选择订单'
+            : !weight || Number(weight) <= 0
+              ? '请填写实际重量'
+              : null;
+          const disabled = submitting || !!validationHint;
+          return (
+            <View style={styles.bottomBar}>
+              {validationHint && (
+                <View style={styles.validationBanner}>
+                  <Ionicons name="alert-circle" size={16} color={colors.warning} />
+                  <Text style={styles.validationBannerText}>{validationHint}</Text>
+                </View>
+              )}
+              <TouchableOpacity
+                style={[styles.btnPrimary, disabled && styles.btnDisabled]}
+                onPress={() => handleSubmit(true)}
+                disabled={disabled}
+              >
+                <Text style={styles.btnPrimaryText}>
+                  {submitting ? '处理中...' : validationHint || '确认入库并打印面单'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.btnSecondary, disabled && styles.btnDisabled]}
+                onPress={() => handleSubmit(false)}
+                disabled={disabled}
+              >
+                <Text style={styles.btnSecondaryText}>仅入库不打印</Text>
+              </TouchableOpacity>
+            </View>
+          );
+        })()}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -943,4 +960,6 @@ const styles = StyleSheet.create({
   btnSecondary: { height: 36, alignItems: 'center', justifyContent: 'center' },
   btnSecondaryText: { color: colors.textTertiary, fontSize: font.sm },
   btnDisabled: { opacity: 0.6 },
+  validationBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.warningLight, borderRadius: radius.md, marginBottom: 6 },
+  validationBannerText: { fontSize: font.sm, color: colors.warning, fontWeight: '600' },
 });
