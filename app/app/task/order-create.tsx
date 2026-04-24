@@ -182,7 +182,16 @@ export default function OrderCreateScreen() {
     setStep(step + 1);
   };
 
+  const submitHint = !customerId
+    ? '请先选择客户'
+    : packages.length === 0
+      ? '请至少添加一个包裹'
+      : !consigneeName || !consigneePhone || !consigneeAddress
+        ? '收货信息不完整'
+        : null;
+
   const handleSubmit = async () => {
+    if (submitHint) return;
     setSubmitting(true);
     try {
       const userStr = await AsyncStorage.getItem('user');
@@ -229,16 +238,25 @@ export default function OrderCreateScreen() {
           // 非致命：订单已创建
         }
       }
-      Alert.alert(
-        '✅ 订单创建成功',
-        `运单号：${res.data?.orderNo}\n入仓号：${res.data?.warehouseEntryNo}${fromUnmatchedId ? '\n已自动关联无单快递' : ''}`,
-        [
-          { text: '继续创建', onPress: () => { setStep(1); setPackages([{ expressCompany: '顺丰', trackingNo: '', goodsName: '', goodsCategory: 'OTHER', pieces: 1, weight: 0 }]); } },
+      const successTitle = '订单创建成功';
+      const successMsg = `运单号:${res.data?.orderNo}\n入仓号:${res.data?.warehouseEntryNo}${fromUnmatchedId ? '\n已自动关联无单快递' : ''}`;
+      const resetForm = () => {
+        setStep(1);
+        setPackages([{ expressCompany: '顺丰', trackingNo: '', goodsName: '', goodsCategory: 'OTHER', pieces: 1, weight: 0 }]);
+      };
+      if (Platform.OS === 'web') {
+        window.alert(`${successTitle}\n${successMsg}`);
+        safeBack(router);
+      } else {
+        Alert.alert(successTitle, successMsg, [
+          { text: '继续创建', onPress: resetForm },
           { text: '完成', onPress: () => safeBack(router) },
-        ]
-      );
+        ]);
+      }
     } catch (err: any) {
-      Alert.alert('创建失败', err.message || '请重试');
+      const msg = err?.message || '请重试';
+      if (Platform.OS === 'web') window.alert(`创建失败:${msg}`);
+      else Alert.alert('创建失败', msg);
     } finally {
       setSubmitting(false);
     }
@@ -510,20 +528,28 @@ export default function OrderCreateScreen() {
               <Ionicons name="arrow-forward" size={20} color="#fff" />
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity
-              style={[styles.submitBtn, submitting && styles.btnDisabled]}
-              onPress={handleSubmit}
-              disabled={submitting}
-            >
-              {submitting ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <>
-                  <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                  <Text style={styles.submitBtnText}>确认提交</Text>
-                </>
+            <>
+              {submitHint && (
+                <View style={styles.hintBanner}>
+                  <Ionicons name="alert-circle-outline" size={16} color={colors.warning} />
+                  <Text style={styles.hintText}>{submitHint}</Text>
+                </View>
               )}
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.submitBtn, (submitting || !!submitHint) && styles.btnDisabled]}
+                onPress={handleSubmit}
+                disabled={submitting || !!submitHint}
+              >
+                {submitting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                    <Text style={styles.submitBtnText}>{submitHint || '确认提交'}</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </>
           )}
         </View>
 
@@ -673,6 +699,8 @@ const styles = StyleSheet.create({
   submitBtn: { flexDirection: 'row', height: 52, backgroundColor: colors.success, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   submitBtnText: { color: '#fff', fontSize: font.lg, fontWeight: '600', letterSpacing: 2 },
   btnDisabled: { opacity: 0.6 },
+  hintBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.warningLight, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, marginBottom: spacing.sm },
+  hintText: { flex: 1, fontSize: font.xs, color: colors.warning, fontWeight: '500' },
 
   modalMask: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modalSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.lg, maxHeight: '80%' },

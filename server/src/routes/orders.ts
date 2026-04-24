@@ -78,64 +78,83 @@ router.post('/', (req: Request, res: Response) => {
   const orderNo = generateOrderNo(businessLine);
   const entryNo = b.warehouseEntryNo || `${b.customerCode || 'X'}${String(Math.floor(Math.random() * 999)).padStart(3, '0')}`;
 
-  // Insert master order
-  db.prepare(`INSERT INTO oms_order (id, order_no, warehouse_entry_no, business_line, service_type, customer_id, customer_name, sales_user_id, route_code, export_mode, order_status, payment_method, currency_code, total_declared_pieces, total_declared_weight_kg, sender_name, sender_phone, sender_address, consignee_name, consignee_phone, consignee_email, consignee_address, consignee_country, consignee_city, remark, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
-    orderId, orderNo, entryNo, businessLine,
-    b.serviceType || b.service_type,
-    b.customerId || b.customer_id,
-    b.customerName || b.customer_name,
-    b.salesUserId || b.sales_user_id,
-    b.routeCode || b.route_code,
-    b.exportMode || b.export_mode || 'BUYER_EXPORT',
-    'PENDING_INBOUND',
-    b.paymentMethod || b.payment_method,
-    b.currencyCode || b.currency_code || 'CNY',
-    b.totalPieces || 0,
-    b.totalWeight || 0,
-    b.senderName || b.sender_name,
-    b.senderPhone || b.sender_phone,
-    b.senderAddress || b.sender_address,
-    b.consigneeName || b.consignee_name,
-    b.consigneePhone || b.consignee_phone,
-    b.consigneeEmail || b.consignee_email,
-    b.consigneeAddress || b.consignee_address,
-    b.consigneeCountry || b.consignee_country,
-    b.consigneeCity || b.consignee_city,
-    b.remark,
-    b.createdBy || b.created_by
-  );
+  // 校验 FK：客户必须存在；销售如果传了也必须存在,否则置 null（避免 FK 500）
+  const customerId = b.customerId || b.customer_id;
+  if (!customerId) { res.status(400).json({ error: '缺少 customerId' }); return; }
+  const customerExists = db.prepare('SELECT 1 FROM crm_customer WHERE id = ?').get(customerId);
+  if (!customerExists) { res.status(400).json({ error: `客户不存在: ${customerId}` }); return; }
 
-  // Insert packages and create sub-orders
+  let salesUserId: string | null = b.salesUserId || b.sales_user_id || null;
+  if (salesUserId) {
+    const userExists = db.prepare('SELECT 1 FROM sys_user WHERE id = ?').get(salesUserId);
+    if (!userExists) salesUserId = null;
+  }
+
   const items = b.items || b.packages || [];
-  let lineNo = 1;
-  for (const item of items) {
-    const pkgId = uuid();
-    db.prepare('INSERT INTO oms_package_initial (id, order_id, line_no, express_company, tracking_no, goods_name, goods_category, cargo_type, declared_weight_kg, pieces, length_cm, width_cm, height_cm, remark) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(
-      pkgId, orderId, lineNo,
-      item.expressCompany || item.express_company,
-      item.trackingNo || item.tracking_no,
-      item.goodsName || item.goods_name,
-      item.goodsCategory || item.goods_category,
-      item.cargoType || item.cargo_type || 'GENERAL',
-      item.weight || item.declared_weight_kg || 0,
-      item.pieces || 1,
-      item.lengthCm || item.length_cm,
-      item.widthCm || item.width_cm,
-      item.heightCm || item.height_cm,
-      item.remark
-    );
 
-    // Create sub-order per package
-    const subId = uuid();
-    const subNo = generateSubOrderNo(orderNo, lineNo);
-    db.prepare('INSERT INTO oms_sub_order (id, sub_order_no, order_id, line_no, business_line, sub_status, route_code, pieces, actual_weight_kg) VALUES (?,?,?,?,?,?,?,?,?)').run(
-      subId, subNo, orderId, lineNo, businessLine, 'PENDING_INBOUND',
+  // 所有插入放在一个事务里,出错原子回滚
+  const tx = db.transaction(() => {
+    db.prepare(`INSERT INTO oms_order (id, order_no, warehouse_entry_no, business_line, service_type, customer_id, customer_name, sales_user_id, route_code, export_mode, order_status, payment_method, currency_code, total_declared_pieces, total_declared_weight_kg, sender_name, sender_phone, sender_address, consignee_name, consignee_phone, consignee_email, consignee_address, consignee_country, consignee_city, remark, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      orderId, orderNo, entryNo, businessLine,
+      b.serviceType || b.service_type,
+      customerId,
+      b.customerName || b.customer_name,
+      salesUserId,
       b.routeCode || b.route_code,
-      item.pieces || 1,
-      item.weight || item.declared_weight_kg || 0
+      b.exportMode || b.export_mode || 'BUYER_EXPORT',
+      'PENDING_INBOUND',
+      b.paymentMethod || b.payment_method,
+      b.currencyCode || b.currency_code || 'CNY',
+      b.totalPieces || 0,
+      b.totalWeight || 0,
+      b.senderName || b.sender_name,
+      b.senderPhone || b.sender_phone,
+      b.senderAddress || b.sender_address,
+      b.consigneeName || b.consignee_name,
+      b.consigneePhone || b.consignee_phone,
+      b.consigneeEmail || b.consignee_email,
+      b.consigneeAddress || b.consignee_address,
+      b.consigneeCountry || b.consignee_country,
+      b.consigneeCity || b.consignee_city,
+      b.remark,
+      b.createdBy || b.created_by
     );
 
-    lineNo++;
+    let lineNo = 1;
+    for (const item of items) {
+      const pkgId = uuid();
+      db.prepare('INSERT INTO oms_package_initial (id, order_id, line_no, express_company, tracking_no, goods_name, goods_category, cargo_type, declared_weight_kg, pieces, length_cm, width_cm, height_cm, remark) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(
+        pkgId, orderId, lineNo,
+        item.expressCompany || item.express_company,
+        item.trackingNo || item.tracking_no,
+        item.goodsName || item.goods_name,
+        item.goodsCategory || item.goods_category,
+        item.cargoType || item.cargo_type || 'GENERAL',
+        item.weight || item.declared_weight_kg || 0,
+        item.pieces || 1,
+        item.lengthCm || item.length_cm,
+        item.widthCm || item.width_cm,
+        item.heightCm || item.height_cm,
+        item.remark
+      );
+
+      const subId = uuid();
+      const subNo = generateSubOrderNo(orderNo, lineNo);
+      db.prepare('INSERT INTO oms_sub_order (id, sub_order_no, order_id, line_no, business_line, sub_status, route_code, pieces, actual_weight_kg) VALUES (?,?,?,?,?,?,?,?,?)').run(
+        subId, subNo, orderId, lineNo, businessLine, 'PENDING_INBOUND',
+        b.routeCode || b.route_code,
+        item.pieces || 1,
+        item.weight || item.declared_weight_kg || 0
+      );
+      lineNo++;
+    }
+  });
+
+  try {
+    tx();
+  } catch (err: any) {
+    res.status(400).json({ error: `创建订单失败: ${err?.message || err}` });
+    return;
   }
 
   res.json({ data: { id: orderId, orderNo, warehouseEntryNo: entryNo } });
