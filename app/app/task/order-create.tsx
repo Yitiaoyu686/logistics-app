@@ -35,6 +35,15 @@ interface PackageItem {
 }
 
 interface CustomerDetail {
+  senders: Array<{
+    id: string;
+    sender_name: string;
+    sender_phone: string;
+    sender_address: string;
+    sender_city: string;
+    sender_country: string;
+    is_default: number;
+  }>;
   recipients: Array<{
     id: string;
     recipient_name: string;
@@ -107,8 +116,12 @@ export default function OrderCreateScreen() {
     return [{ expressCompany: '顺丰', trackingNo: '', goodsName: '', goodsCategory: 'OTHER', pieces: 1, weight: 0 }];
   });
 
-  // Step 3: 收货信息
+  // Step 3: 发货 + 收货信息
   const [customerDetail, setCustomerDetail] = useState<CustomerDetail | null>(null);
+  const [selectedSenderId, setSelectedSenderId] = useState<string>('');
+  const [senderName, setSenderName] = useState<string>((params.senderName as string) || '');
+  const [senderPhone, setSenderPhone] = useState<string>((params.senderPhone as string) || '');
+  const [senderAddress, setSenderAddress] = useState('');
   const [selectedRecipientId, setSelectedRecipientId] = useState<string>('');
   const [consigneeName, setConsigneeName] = useState('');
   const [consigneePhone, setConsigneePhone] = useState('');
@@ -127,14 +140,22 @@ export default function OrderCreateScreen() {
     if (customerId) {
       customerApi.get(customerId).then((r) => {
         setCustomerDetail(r.data);
-        const def = (r.data?.recipients || []).find((x: any) => x.is_default === 1) || (r.data?.recipients || [])[0];
-        if (def) {
-          setSelectedRecipientId(def.id);
-          setConsigneeName(def.recipient_name || '');
-          setConsigneePhone(def.recipient_phone || '');
-          setConsigneeAddress(def.detail_address || '');
-          setConsigneeCountry(def.country || '');
-          setConsigneeCity(def.city || '');
+        const defSender = (r.data?.senders || []).find((x: any) => x.is_default === 1) || (r.data?.senders || [])[0];
+        if (defSender) {
+          setSelectedSenderId(defSender.id);
+          // 无订单快递跳入时,URL 带了发件人姓名/电话,优先保留,但仍带出地址作为参考
+          setSenderName((prev) => prev || defSender.sender_name || '');
+          setSenderPhone((prev) => prev || defSender.sender_phone || '');
+          setSenderAddress(defSender.sender_address || '');
+        }
+        const defRecipient = (r.data?.recipients || []).find((x: any) => x.is_default === 1) || (r.data?.recipients || [])[0];
+        if (defRecipient) {
+          setSelectedRecipientId(defRecipient.id);
+          setConsigneeName(defRecipient.recipient_name || '');
+          setConsigneePhone(defRecipient.recipient_phone || '');
+          setConsigneeAddress(defRecipient.detail_address || '');
+          setConsigneeCountry(defRecipient.country || '');
+          setConsigneeCity(defRecipient.city || '');
         }
       }).catch(() => {});
     }
@@ -175,6 +196,9 @@ export default function OrderCreateScreen() {
       if (invalid) { Alert.alert('请填写所有包裹的品名和件数'); return; }
     }
     if (step === 3) {
+      if (!senderName || !senderPhone || !senderAddress) {
+        Alert.alert('请填写完整的发货信息'); return;
+      }
       if (!consigneeName || !consigneePhone || !consigneeAddress) {
         Alert.alert('请填写完整的收货信息'); return;
       }
@@ -186,9 +210,11 @@ export default function OrderCreateScreen() {
     ? '请先选择客户'
     : packages.length === 0
       ? '请至少添加一个包裹'
-      : !consigneeName || !consigneePhone || !consigneeAddress
-        ? '收货信息不完整'
-        : null;
+      : !senderName || !senderPhone || !senderAddress
+        ? '发货信息不完整'
+        : !consigneeName || !consigneePhone || !consigneeAddress
+          ? '收货信息不完整'
+          : null;
 
   const handleSubmit = async () => {
     if (submitHint) return;
@@ -205,6 +231,9 @@ export default function OrderCreateScreen() {
         routeCode,
         exportMode,
         paymentMethod,
+        senderName,
+        senderPhone,
+        senderAddress,
         consigneeName,
         consigneePhone,
         consigneeAddress,
@@ -394,6 +423,42 @@ export default function OrderCreateScreen() {
 
   const renderStep3 = () => (
     <ScrollView contentContainerStyle={styles.scroll}>
+      {/* 发货信息 */}
+      {(customerDetail?.senders?.length || 0) > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>📤 客户已有发货人</Text>
+          {customerDetail?.senders.map((s) => (
+            <TouchableOpacity
+              key={s.id}
+              style={[styles.recipientCard, selectedSenderId === s.id && styles.recipientCardActive]}
+              onPress={() => {
+                setSelectedSenderId(s.id);
+                setSenderName(s.sender_name || '');
+                setSenderPhone(s.sender_phone || '');
+                setSenderAddress(s.sender_address || '');
+              }}
+            >
+              <View style={styles.recipientHeader}>
+                <Text style={styles.recipientName}>{s.sender_name}</Text>
+                {s.is_default === 1 && (
+                  <View style={styles.defaultBadge}><Text style={styles.defaultText}>默认</Text></View>
+                )}
+              </View>
+              <Text style={styles.recipientText}>{s.sender_phone}</Text>
+              <Text style={styles.recipientText}>{[s.sender_country, s.sender_city, s.sender_address].filter(Boolean).join(' · ')}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>✏️ 发货信息（可修改）</Text>
+        <FormField label="发件人 *" value={senderName} onChangeText={setSenderName} placeholder="发件人姓名" />
+        <FormField label="联系电话 *" value={senderPhone} onChangeText={setSenderPhone} placeholder="发件电话" keyboardType="phone-pad" />
+        <FormField label="详细地址 *" value={senderAddress} onChangeText={setSenderAddress} placeholder="发货详细地址" />
+      </View>
+
+      {/* 收货信息 */}
       {(customerDetail?.recipients?.length || 0) > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📥 客户已有收件人</Text>
@@ -473,6 +538,20 @@ export default function OrderCreateScreen() {
           <Text style={styles.confirmLabel}>总重量</Text>
           <Text style={styles.confirmValue}>{totalWeight.toFixed(1)} kg</Text>
         </View>
+        <View style={styles.confirmDivider} />
+        <View style={styles.confirmRow}>
+          <Text style={styles.confirmLabel}>发件人</Text>
+          <Text style={styles.confirmValue}>{senderName}</Text>
+        </View>
+        <View style={styles.confirmRow}>
+          <Text style={styles.confirmLabel}>发件电话</Text>
+          <Text style={styles.confirmValue}>{senderPhone}</Text>
+        </View>
+        <View style={styles.confirmRow}>
+          <Text style={styles.confirmLabel}>发货地址</Text>
+          <Text style={[styles.confirmValue, { flex: 1, textAlign: 'right' }]} numberOfLines={2}>{senderAddress || '-'}</Text>
+        </View>
+        <View style={styles.confirmDivider} />
         <View style={styles.confirmRow}>
           <Text style={styles.confirmLabel}>收件人</Text>
           <Text style={styles.confirmValue}>{consigneeName}</Text>
@@ -480,6 +559,10 @@ export default function OrderCreateScreen() {
         <View style={styles.confirmRow}>
           <Text style={styles.confirmLabel}>收件电话</Text>
           <Text style={styles.confirmValue}>{consigneePhone}</Text>
+        </View>
+        <View style={styles.confirmRow}>
+          <Text style={styles.confirmLabel}>收货地址</Text>
+          <Text style={[styles.confirmValue, { flex: 1, textAlign: 'right' }]} numberOfLines={2}>{consigneeAddress || '-'}</Text>
         </View>
       </View>
 
@@ -685,9 +768,10 @@ const styles = StyleSheet.create({
   defaultText: { fontSize: font.xs, color: colors.warning, fontWeight: '600' },
   recipientText: { fontSize: font.sm, color: colors.textSecondary, lineHeight: 20 },
 
-  confirmRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing.sm, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
+  confirmRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing.sm, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight, gap: spacing.md },
   confirmLabel: { fontSize: font.sm, color: colors.textSecondary },
   confirmValue: { fontSize: font.sm, color: colors.text, fontWeight: '500' },
+  confirmDivider: { height: spacing.sm },
 
   feeLabel: { fontSize: font.sm, color: colors.textSecondary, textAlign: 'center' },
   feeValue: { fontSize: 32, fontWeight: '700', color: colors.primary, textAlign: 'center', marginVertical: spacing.sm },
