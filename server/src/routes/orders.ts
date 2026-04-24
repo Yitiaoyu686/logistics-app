@@ -76,7 +76,15 @@ router.post('/', (req: Request, res: Response) => {
   const orderId = uuid();
   const businessLine = b.businessLine || b.business_line || 'SEA';
   const orderNo = generateOrderNo(businessLine);
-  const entryNo = b.warehouseEntryNo || `${b.customerCode || 'X'}${String(Math.floor(Math.random() * 999)).padStart(3, '0')}`;
+  // 入仓号规则(对齐 Web OrderCreate):客户编号 + 3 位流水(100-999)
+  // 优先级:payload 传入 > customerCode / shortCode > 从 DB 回查 customer_code > 兜底 'X'
+  let entryCode = b.customerCode || b.shortCode;
+  if (!entryCode) {
+    const custRow = db.prepare('SELECT customer_code FROM crm_customer WHERE id = ?').get(b.customerId || b.customer_id) as { customer_code?: string } | undefined;
+    entryCode = custRow?.customer_code;
+  }
+  const entrySeq = String(Math.floor(Math.random() * 900) + 100);
+  const entryNo = b.warehouseEntryNo || `${entryCode || 'X'}${entrySeq}`;
 
   // 校验 FK：客户必须存在；销售如果传了也必须存在,否则置 null（避免 FK 500）
   const customerId = b.customerId || b.customer_id;

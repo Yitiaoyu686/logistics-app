@@ -96,6 +96,7 @@ export default function OrderCreateScreen() {
   // Step 1: 客户与基础信息
   const [customerId, setCustomerId] = useState<string>(params.customerId as string || '');
   const [customerName, setCustomerName] = useState<string>(params.customerName as string || '');
+  const [customerCode, setCustomerCode] = useState<string>('');
   const [serviceType, setServiceType] = useState<ServiceType>('EXPRESS');
   const [exportMode, setExportMode] = useState<ExportMode>('BUYER_EXPORT');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('PREPAID');
@@ -142,6 +143,9 @@ export default function OrderCreateScreen() {
     if (customerId) {
       customerApi.get(customerId).then((r) => {
         setCustomerDetail(r.data);
+        if (r.data?.customerCode || r.data?.shortCode) {
+          setCustomerCode(r.data.customerCode || r.data.shortCode);
+        }
         const defSender = (r.data?.senders || []).find((x: any) => x.is_default === 1) || (r.data?.senders || [])[0];
         if (defSender) {
           setSelectedSenderId(defSender.id);
@@ -224,11 +228,18 @@ export default function OrderCreateScreen() {
     try {
       const userStr = await AsyncStorage.getItem('user');
       const user = userStr ? JSON.parse(userStr) : {};
+      // 入仓号规则（对齐 Web OrderCreate）:客户编号 + 3 位流水(100-999)
+      const entryCode = customerCode || customerId.slice(-3).toUpperCase();
+      const entrySeq = String(Math.floor(Math.random() * 900) + 100);
+      const warehouseEntryNo = `${entryCode}${entrySeq}`;
+
       const res = await orderApi.create({
         businessLine: 'SEA',
         serviceType,
         customerId,
         customerName,
+        customerCode,
+        warehouseEntryNo,
         salesUserId: user.id || 'user-sales1',
         routeCode,
         exportMode,
@@ -636,6 +647,7 @@ export default function OrderCreateScreen() {
                     onPress={() => {
                       setCustomerId(c.id);
                       setCustomerName(c.customerName);
+                      setCustomerCode(c.customerCode || '');
                       setShowCustomerPicker(false);
                     }}
                   >
