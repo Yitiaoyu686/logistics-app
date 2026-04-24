@@ -52,20 +52,20 @@ interface SenderProfile {
 
 interface CustomerDetail {
   id: string;
-  customer_code: string;
-  customer_name: string;
-  customer_type: string;
+  customerCode: string;
+  customerName: string;
+  customerType: string;
   country: string;
   industry: string | null;
-  contact_name: string;
-  contact_phone: string;
-  contact_email: string | null;
-  pool_type: PoolType;
+  contactName: string;
+  contactPhone: string;
+  contactEmail: string | null;
+  poolType: PoolType;
   status: string;
   remark: string | null;
-  preferred_transport: string | null;
-  preferred_payment: string | null;
-  owner_user_id: string | null;
+  preferredTransport: string | null;
+  preferredPayment: string | null;
+  ownerUserId: string | null;
   recipients: RecipientAddress[];
   senders: SenderProfile[];
 }
@@ -250,7 +250,7 @@ export default function CustomerScreen({ embedded = false }: CustomerScreenProps
 
   const handleRelease = async () => {
     if (!detail) return;
-    Alert.alert('释放客户', `确认将 "${detail.customer_name}" 释放回公海池吗？`, [
+    Alert.alert('释放客户', `确认将 "${detail.customerName}" 释放回公海池吗？`, [
       { text: '取消', style: 'cancel' },
       {
         text: '释放',
@@ -419,13 +419,13 @@ export default function CustomerScreen({ embedded = false }: CustomerScreenProps
                 {/* Hero */}
                 <View style={styles.detailHero}>
                   <View style={styles.detailAvatar}>
-                    <Text style={styles.detailAvatarText}>{(detail.customer_name || '?')[0]}</Text>
+                    <Text style={styles.detailAvatarText}>{(detail.customerName || '?')[0]}</Text>
                   </View>
-                  <Text style={styles.detailName}>{detail.customer_name}</Text>
-                  <Text style={styles.detailCode}>{detail.customer_code}</Text>
+                  <Text style={styles.detailName}>{detail.customerName}</Text>
+                  <Text style={styles.detailCode}>{detail.customerCode}</Text>
                   <View style={styles.detailTags}>
                     <View style={styles.tagPill}>
-                      <Text style={styles.tagText}>{TYPE_LABEL[detail.customer_type] || detail.customer_type}</Text>
+                      <Text style={styles.tagText}>{TYPE_LABEL[detail.customerType] || detail.customerType}</Text>
                     </View>
                     <View style={[styles.tagPill, { backgroundColor: colors.successLight }]}>
                       <Text style={[styles.tagText, { color: colors.success }]}>
@@ -437,15 +437,15 @@ export default function CustomerScreen({ embedded = false }: CustomerScreenProps
 
                 {/* 快捷操作 */}
                 <View style={styles.quickRow}>
-                  <TouchableOpacity style={styles.quickBtn} onPress={() => handleCall(detail.contact_phone)}>
+                  <TouchableOpacity style={styles.quickBtn} onPress={() => handleCall(detail.contactPhone)}>
                     <Ionicons name="call" size={20} color={colors.primary} />
                     <Text style={styles.quickText}>拨打</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.quickBtn} onPress={() => Alert.alert('短信', `准备发送给 ${detail.contact_phone}`)}>
+                  <TouchableOpacity style={styles.quickBtn} onPress={() => Alert.alert('短信', `准备发送给 ${detail.contactPhone}`)}>
                     <Ionicons name="chatbubble-ellipses" size={20} color={colors.primary} />
                     <Text style={styles.quickText}>短信</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.quickBtn} onPress={() => { setSelectedId(null); router.push({ pathname: '/task/order-create' as any, params: { customerId: detail.id, customerName: detail.customer_name } }); }}>
+                  <TouchableOpacity style={styles.quickBtn} onPress={() => { setSelectedId(null); router.push({ pathname: '/task/order-create' as any, params: { customerId: detail.id, customerName: detail.customerName } }); }}>
                     <Ionicons name="document-text" size={20} color={colors.primary} />
                     <Text style={styles.quickText}>下单</Text>
                   </TouchableOpacity>
@@ -459,7 +459,7 @@ export default function CustomerScreen({ embedded = false }: CustomerScreenProps
                 <View style={styles.entrySection}>
                   <Text style={styles.entryLabel}>🏷️ 入仓号</Text>
                   <View style={styles.entryCard}>
-                    <Text style={styles.entryCode}>{detail.customer_code}</Text>
+                    <Text style={styles.entryCode}>{detail.customerCode}</Text>
                     <Text style={styles.entryHint}>
                       客户包裹填写此入仓号可自动关联订单
                     </Text>
@@ -469,7 +469,7 @@ export default function CustomerScreen({ embedded = false }: CustomerScreenProps
                       <View key={i} style={styles.entryChip}>
                         <Text style={styles.entryChipLabel}>{wh}</Text>
                         <Text style={styles.entryChipValue}>
-                          {detail.customer_code}-{['GZ', 'SZ', 'LOS'][i]}
+                          {detail.customerCode}-{['GZ', 'SZ', 'LOS'][i]}
                         </Text>
                       </View>
                     ))}
@@ -478,20 +478,20 @@ export default function CustomerScreen({ embedded = false }: CustomerScreenProps
 
                 {/* 折叠区：基本信息 */}
                 <CollapseSection title="📋 基本信息" defaultOpen>
-                  <DetailLine label="客户编号" value={detail.customer_code} />
-                  <DetailLine label="客户名称" value={detail.customer_name} />
-                  <DetailLine label="客户类型" value={TYPE_LABEL[detail.customer_type] || detail.customer_type} />
+                  <DetailLine label="客户编号" value={detail.customerCode} />
+                  <DetailLine label="客户名称" value={detail.customerName} />
+                  <DetailLine label="客户类型" value={TYPE_LABEL[detail.customerType] || detail.customerType} />
                   <DetailLine label="所在国家" value={detail.country} />
                   <DetailLine label="行业" value={detail.industry || '-'} />
                   <DetailLine label="状态" value={detail.status === 'ACTIVE' ? '活跃' : detail.status} />
-                  <DetailLine label="池类型" value={detail.pool_type === 'PRIVATE' ? '我的客户' : '公海池'} />
+                  <DetailLine label="池类型" value={detail.poolType === 'PRIVATE' ? '我的客户' : '公海池'} />
                 </CollapseSection>
 
                 {/* 折叠区：联系人 */}
                 <CollapseSection title="👤 联系人" defaultOpen>
-                  <DetailLine label="联系人" value={detail.contact_name} />
-                  <DetailLine label="电话" value={detail.contact_phone} highlight />
-                  <DetailLine label="邮箱" value={detail.contact_email || '-'} />
+                  <DetailLine label="联系人" value={detail.contactName} />
+                  <DetailLine label="电话" value={detail.contactPhone} highlight />
+                  <DetailLine label="邮箱" value={detail.contactEmail || '-'} />
                 </CollapseSection>
 
                 {/* 折叠区：发货人 */}
@@ -532,8 +532,8 @@ export default function CustomerScreen({ embedded = false }: CustomerScreenProps
 
                 {/* 折叠区：物流偏好 */}
                 <CollapseSection title="🚢 物流偏好">
-                  <DetailLine label="运输方式" value={detail.preferred_transport || '未设置'} />
-                  <DetailLine label="付款方式" value={detail.preferred_payment || '未设置'} />
+                  <DetailLine label="运输方式" value={detail.preferredTransport || '未设置'} />
+                  <DetailLine label="付款方式" value={detail.preferredPayment || '未设置'} />
                 </CollapseSection>
 
                 {/* 折叠区：客户订单 */}
@@ -563,7 +563,7 @@ export default function CustomerScreen({ embedded = false }: CustomerScreenProps
                 )}
 
                 {/* 操作按钮 */}
-                {detail.pool_type === 'PRIVATE' && (
+                {detail.poolType === 'PRIVATE' && (
                   <TouchableOpacity
                     style={[styles.releaseBtn, actionLoading && styles.btnDisabled]}
                     onPress={handleRelease}
