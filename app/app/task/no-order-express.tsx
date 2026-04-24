@@ -115,8 +115,13 @@ export default function NoOrderExpressScreen() {
     return result;
   }, [list, filter, keyword]);
 
+  const createHint = !trackingNo.trim()
+    ? '请填写快递单号'
+    : !expressCompany ? '请选择快递公司'
+    : null;
+
   const handleCreate = async () => {
-    if (!trackingNo.trim()) { Alert.alert('请填写快递单号'); return; }
+    if (createHint) return;
     setSubmitting(true);
     try {
       await warehouseApi.createUnmatched({
@@ -130,11 +135,19 @@ export default function NoOrderExpressScreen() {
         grossWeightKg: Number(weight) || 0,
         customerHint: customerHint || undefined,
       });
-      Alert.alert('登记成功', `${trackingNo} 已加入待匹配队列`, [
-        { text: '确定', onPress: () => { setCreateVisible(false); resetCreateForm(); load(); } },
-      ]);
+      const finish = () => { setCreateVisible(false); resetCreateForm(); load(); };
+      if (Platform.OS === 'web') {
+        window.alert(`${trackingNo} 已加入待匹配队列`);
+        finish();
+      } else {
+        Alert.alert('登记成功', `${trackingNo} 已加入待匹配队列`, [
+          { text: '确定', onPress: finish },
+        ]);
+      }
     } catch (err: any) {
-      Alert.alert('登记失败', err.message || '请重试');
+      const msg = err?.message || '请重试';
+      if (Platform.OS === 'web') window.alert(`登记失败：${msg}`);
+      else Alert.alert('登记失败', msg);
     } finally {
       setSubmitting(false);
     }
@@ -172,11 +185,19 @@ export default function NoOrderExpressScreen() {
         customerId: cust.id,
         customerName: cust.customerName,
       });
-      Alert.alert('匹配成功', `${matchTarget.tracking_no} 已关联到 ${cust.customerName}`, [
-        { text: '确定', onPress: () => { setMatchTarget(null); load(); } },
-      ]);
+      const finish = () => { setMatchTarget(null); load(); };
+      if (Platform.OS === 'web') {
+        window.alert(`${matchTarget.tracking_no} 已关联到 ${cust.customerName}`);
+        finish();
+      } else {
+        Alert.alert('匹配成功', `${matchTarget.tracking_no} 已关联到 ${cust.customerName}`, [
+          { text: '确定', onPress: finish },
+        ]);
+      }
     } catch (err: any) {
-      Alert.alert('匹配失败', err.message || '请重试');
+      const msg = err?.message || '请重试';
+      if (Platform.OS === 'web') window.alert(`匹配失败：${msg}`);
+      else Alert.alert('匹配失败', msg);
     } finally {
       setMatching(false);
     }
@@ -309,12 +330,22 @@ export default function NoOrderExpressScreen() {
                 <FormField label="客户提示" value={customerHint} onChangeText={setCustomerHint} placeholder="如：可能是XXX的货" />
               </ScrollView>
 
+              {createHint && (
+                <View style={styles.hintBanner}>
+                  <Ionicons name="alert-circle-outline" size={16} color={colors.warning} />
+                  <Text style={styles.hintText}>{createHint}</Text>
+                </View>
+              )}
               <TouchableOpacity
-                style={[styles.submitBtn, submitting && styles.btnDisabled]}
+                style={[styles.submitBtn, (submitting || !!createHint) && styles.btnDisabled]}
                 onPress={handleCreate}
-                disabled={submitting}
+                disabled={submitting || !!createHint}
               >
-                {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>登记</Text>}
+                {submitting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.submitBtnText}>{createHint || '登记'}</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -457,6 +488,8 @@ const styles = StyleSheet.create({
   submitBtn: { height: 52, backgroundColor: colors.primary, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center', marginTop: spacing.sm },
   submitBtnText: { color: '#fff', fontSize: font.lg, fontWeight: '600', letterSpacing: 2 },
   btnDisabled: { opacity: 0.6 },
+  hintBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.warningLight, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, marginTop: spacing.sm },
+  hintText: { flex: 1, fontSize: font.xs, color: colors.warning, fontWeight: '500' },
 
   infoCard: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md, borderLeftWidth: 3, borderLeftColor: colors.warning },
   infoTitle: { fontSize: font.md, fontWeight: '700', color: colors.primary, fontFamily: font.mono, marginBottom: 4 },

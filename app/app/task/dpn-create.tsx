@@ -26,8 +26,12 @@ export default function DpnCreateScreen() {
   const [remark, setRemark] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const createHint = !fromSite.trim()
+    ? '请填写起运站点'
+    : !toSite.trim() ? '请填写目的站点' : null;
+
   const handleCreate = async () => {
-    if (!toSite.trim()) { Alert.alert('请填写目的站点'); return; }
+    if (createHint) return;
     setSubmitting(true);
     try {
       const res = await deliveryApi.createDpn({
@@ -39,30 +43,34 @@ export default function DpnCreateScreen() {
         eta: eta || undefined,
         remark: remark || undefined,
       });
-      Alert.alert(
-        '创建成功',
-        `DPN: ${res.data?.dpnNo}\n请继续绑定运单`,
-        [
-          {
-            text: '去绑运单',
-            onPress: () =>
-              router.replace({
-                pathname: '/task/dpn',
-                params: {
-                  dpnId: res.data?.id,
-                  dpnNo: res.data?.dpnNo,
-                  dpnStatus: 'PENDING_BIND',
-                  fromSite,
-                  toSite,
-                },
-              }),
+      const goBind = () =>
+        router.replace({
+          pathname: '/task/dpn',
+          params: {
+            dpnId: res.data?.id,
+            dpnNo: res.data?.dpnNo,
+            dpnStatus: 'PENDING_BIND',
+            fromSite,
+            toSite,
           },
-          { text: '稍后', onPress: () => safeBack(router) },
-        ],
-      );
+        });
+      if (Platform.OS === 'web') {
+        window.alert(`创建成功 DPN: ${res.data?.dpnNo}\n即将跳转绑运单`);
+        goBind();
+      } else {
+        Alert.alert(
+          '创建成功',
+          `DPN: ${res.data?.dpnNo}\n请继续绑定运单`,
+          [
+            { text: '去绑运单', onPress: goBind },
+            { text: '稍后', onPress: () => safeBack(router) },
+          ],
+        );
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '请重试';
-      Alert.alert('创建失败', message);
+      if (Platform.OS === 'web') window.alert(`创建失败：${message}`);
+      else Alert.alert('创建失败', message);
     } finally {
       setSubmitting(false);
     }
@@ -140,15 +148,21 @@ export default function DpnCreateScreen() {
         </ScrollView>
 
         <View style={styles.bottomBar}>
+          {createHint && (
+            <View style={styles.hintBanner}>
+              <Ionicons name="alert-circle-outline" size={16} color={colors.warning} />
+              <Text style={styles.hintText}>{createHint}</Text>
+            </View>
+          )}
           <TouchableOpacity
-            style={[styles.submitBtn, submitting && { opacity: 0.6 }]}
+            style={[styles.submitBtn, (submitting || !!createHint) && { opacity: 0.6 }]}
             onPress={handleCreate}
-            disabled={submitting}
+            disabled={submitting || !!createHint}
           >
             {submitting ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.submitBtnText}>创建 DPN 并绑运单</Text>
+              <Text style={styles.submitBtnText}>{createHint || '创建 DPN 并绑运单'}</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -195,4 +209,6 @@ const styles = StyleSheet.create({
   bottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.card, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xl, borderTopWidth: 0.5, borderTopColor: colors.borderLight },
   submitBtn: { height: 52, backgroundColor: colors.primary, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
   submitBtnText: { color: '#fff', fontSize: font.lg, fontWeight: '600', letterSpacing: 2 },
+  hintBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.warningLight, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, marginBottom: spacing.sm },
+  hintText: { flex: 1, fontSize: font.xs, color: colors.warning, fontWeight: '500' },
 });

@@ -375,6 +375,10 @@ router.post('/transfers', (req: Request, res: Response) => {
 });
 
 // PUT /api/warehouse/transfers/:id
+const ALLOWED_TRANSFER_STATUSES = new Set([
+  'PENDING', 'IN_TRANSIT', 'ARRIVED', 'RECEIVED', 'CANCELLED',
+]);
+
 router.put('/transfers/:id', (req: Request, res: Response) => {
   const db = getDb();
   const b = req.body;
@@ -391,6 +395,12 @@ router.put('/transfers/:id', (req: Request, res: Response) => {
     driverPhone: 'driver_phone', plateNo: 'plate_no', dispatchTime: 'dispatch_time',
     arrivalTime: 'arrival_time', receiveTime: 'receive_time', remark: 'remark',
   };
+
+  const incomingStatus = b.transferStatus ?? b.transfer_status;
+  if (incomingStatus !== undefined && !ALLOWED_TRANSFER_STATUSES.has(incomingStatus)) {
+    res.status(400).json({ error: `transfer_status invalid: ${incomingStatus}` });
+    return;
+  }
 
   for (const [jsKey, dbKey] of Object.entries(fieldMap)) {
     if (b[jsKey] !== undefined) { sets.push(`${dbKey} = ?`); vals.push(b[jsKey]); }

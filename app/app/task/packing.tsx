@@ -492,15 +492,19 @@ export default function PackingScreen() {
     );
   };
 
-  const handleExecuteOut = async () => {
-    if (!recipientName || !recipientPhone || !recipientAddress) {
-      Alert.alert('请填写发往地址'); return;
-    }
-    if (!truckingCompany || !driverName || !driverPhone || !plateNo) {
-      Alert.alert('请填写拖车公司/司机信息'); return;
-    }
-    if (!job) { Alert.alert('任务信息缺失'); return; }
+  const executeOutHint = !job
+    ? '任务信息缺失'
+    : !recipientName.trim() ? '请填写收货人姓名'
+    : !recipientPhone.trim() ? '请填写联系电话'
+    : !recipientAddress.trim() ? '请填写详细地址'
+    : !truckingCompany ? '请选择拖车公司'
+    : !driverName.trim() ? '请填写司机姓名'
+    : !driverPhone.trim() ? '请填写司机电话'
+    : !plateNo.trim() ? '请填写车牌号码'
+    : null;
 
+  const handleExecuteOut = async () => {
+    if (executeOutHint || !job) { return; }
     setSubmitting(true);
     try {
       await jobApi.update(job.job_no || job.id, {
@@ -531,9 +535,11 @@ export default function PackingScreen() {
       Alert.alert('执行成功', '任务已安排发运', [
         { text: '确定', onPress: () => safeBack(router) },
       ]);
+      if (Platform.OS === 'web') safeBack(router);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '请重试';
       Alert.alert('执行失败', message);
+      if (Platform.OS === 'web') window.alert(`执行失败: ${message}`);
     } finally {
       setSubmitting(false);
     }
@@ -847,12 +853,20 @@ export default function PackingScreen() {
         {/* 执行出库模式保留确认按钮;添加订单模式无底部按钮,扫码在相机/Web 输入区完成 */}
         {mode === 'execute-out' && (
           <View style={styles.bottomBar}>
+            {executeOutHint && (
+              <View style={styles.executeHintBanner}>
+                <Ionicons name="alert-circle" size={16} color={colors.warning} />
+                <Text style={styles.executeHintText}>{executeOutHint}</Text>
+              </View>
+            )}
             <TouchableOpacity
-              style={[styles.btnExecute, submitting && { opacity: 0.6 }]}
+              style={[styles.btnExecute, (submitting || executeOutHint) && { opacity: 0.5 }]}
               onPress={handleExecuteOut}
-              disabled={submitting}
+              disabled={submitting || !!executeOutHint}
             >
-              <Text style={styles.btnPrimaryText}>{submitting ? '处理中...' : '确认执行出库'}</Text>
+              <Text style={styles.btnPrimaryText}>
+                {submitting ? '处理中...' : executeOutHint || '确认执行出库'}
+              </Text>
             </TouchableOpacity>
           </View>
         )}
@@ -1427,6 +1441,8 @@ const styles = StyleSheet.create({
   supplierSub: { fontSize: font.xs, color: colors.textSecondary, marginTop: 2 },
 
   bottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.card, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xl, borderTopWidth: 0.5, borderTopColor: colors.borderLight },
+  executeHintBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.warningLight, borderRadius: radius.md, marginBottom: 6 },
+  executeHintText: { fontSize: font.sm, color: colors.warning, fontWeight: '600' },
   btnPrimary: { height: 52, backgroundColor: colors.primary, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
   btnExecute: { height: 52, backgroundColor: '#f97316', borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
   btnPrimaryText: { color: '#fff', fontSize: font.lg, fontWeight: '600', letterSpacing: 2 },

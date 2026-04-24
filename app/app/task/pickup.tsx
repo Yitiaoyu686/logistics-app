@@ -27,35 +27,56 @@ export default function PickupScreen() {
   const [codAmount, setCodAmount] = useState('');
   const [codMethod, setCodMethod] = useState<'CASH' | 'TRANSFER'>('CASH');
 
+  const notifyHint = !params.pickupId
+    ? '缺少自提单 ID'
+    : !params.recipientPhone ? '收件人电话缺失，无法发送短信'
+    : null;
+
+  const verifyHint = !inputCode.trim()
+    ? '请输入提货码'
+    : inputCode.trim().length !== 6 ? '提货码必须为 6 位'
+    : null;
+
   const handleNotify = async () => {
+    if (notifyHint) return;
     setSubmitting(true);
     try {
       if (params.pickupId) {
         await deliveryApi.notifyPickup(params.pickupId as string);
       }
-      Alert.alert(
-        '通知已发送',
-        `短信已发送到 ${params.recipientPhone}\n包含提货码、自提站点地址和营业时间`,
-        [{ text: '确定', onPress: () => safeBack(router) }]
-      );
+      const msg = `短信已发送到 ${params.recipientPhone}\n包含提货码、自提站点地址和营业时间`;
+      if (Platform.OS === 'web') {
+        window.alert(`通知已发送\n${msg}`);
+        safeBack(router);
+      } else {
+        Alert.alert('通知已发送', msg, [{ text: '确定', onPress: () => safeBack(router) }]);
+      }
     } catch (err: any) {
-      Alert.alert('发送失败', err.message || '请重试');
+      const m = err?.message || '请重试';
+      if (Platform.OS === 'web') window.alert(`发送失败：${m}`);
+      else Alert.alert('发送失败', m);
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleVerify = async () => {
-    if (!inputCode.trim()) { Alert.alert('请输入提货码'); return; }
-
+    if (verifyHint) return;
     setSubmitting(true);
     try {
       if (params.pickupId) {
         await deliveryApi.completePickup(params.pickupId as string);
       }
-      Alert.alert('核销成功', '客户已取货', [{ text: '确定', onPress: () => safeBack(router) }]);
+      if (Platform.OS === 'web') {
+        window.alert('核销成功：客户已取货');
+        safeBack(router);
+      } else {
+        Alert.alert('核销成功', '客户已取货', [{ text: '确定', onPress: () => safeBack(router) }]);
+      }
     } catch (err: any) {
-      Alert.alert('核销失败', err.message || '请重试');
+      const m = err?.message || '请重试';
+      if (Platform.OS === 'web') window.alert(`核销失败：${m}`);
+      else Alert.alert('核销失败', m);
     } finally {
       setSubmitting(false);
     }
@@ -197,23 +218,43 @@ export default function PickupScreen() {
         {/* 底部按钮 */}
         <View style={styles.bottomBar}>
           {mode === 'notify' ? (
-            <TouchableOpacity
-              style={[styles.btnPrimary, submitting && styles.btnDisabled]}
-              onPress={handleNotify}
-              disabled={submitting}
-            >
-              <Ionicons name="send-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={styles.btnText}>{submitting ? '发送中...' : '发送自提通知'}</Text>
-            </TouchableOpacity>
+            <>
+              {notifyHint && (
+                <View style={styles.hintBanner}>
+                  <Ionicons name="alert-circle-outline" size={16} color={colors.warning} />
+                  <Text style={styles.hintText}>{notifyHint}</Text>
+                </View>
+              )}
+              <TouchableOpacity
+                style={[styles.btnPrimary, (submitting || !!notifyHint) && styles.btnDisabled]}
+                onPress={handleNotify}
+                disabled={submitting || !!notifyHint}
+              >
+                <Ionicons name="send-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+                <Text style={styles.btnText}>
+                  {submitting ? '发送中...' : (notifyHint || '发送自提通知')}
+                </Text>
+              </TouchableOpacity>
+            </>
           ) : (
-            <TouchableOpacity
-              style={[styles.btnSuccess, submitting && styles.btnDisabled]}
-              onPress={handleVerify}
-              disabled={submitting}
-            >
-              <Ionicons name="checkmark-circle-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={styles.btnText}>{submitting ? '核销中...' : '确认核销'}</Text>
-            </TouchableOpacity>
+            <>
+              {verifyHint && (
+                <View style={styles.hintBanner}>
+                  <Ionicons name="alert-circle-outline" size={16} color={colors.warning} />
+                  <Text style={styles.hintText}>{verifyHint}</Text>
+                </View>
+              )}
+              <TouchableOpacity
+                style={[styles.btnSuccess, (submitting || !!verifyHint) && styles.btnDisabled]}
+                onPress={handleVerify}
+                disabled={submitting || !!verifyHint}
+              >
+                <Ionicons name="checkmark-circle-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+                <Text style={styles.btnText}>
+                  {submitting ? '核销中...' : (verifyHint || '确认核销')}
+                </Text>
+              </TouchableOpacity>
+            </>
           )}
         </View>
       </KeyboardAvoidingView>
@@ -270,4 +311,6 @@ const styles = StyleSheet.create({
   btnSuccess: { flexDirection: 'row', height: 52, backgroundColor: colors.success, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center' },
   btnText: { color: '#fff', fontSize: font.lg, fontWeight: '600', letterSpacing: 2 },
   btnDisabled: { opacity: 0.6 },
+  hintBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.warningLight, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, marginBottom: spacing.sm },
+  hintText: { flex: 1, fontSize: font.xs, color: colors.warning, fontWeight: '500' },
 });

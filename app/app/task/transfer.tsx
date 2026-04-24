@@ -188,22 +188,30 @@ export default function TransferScreen() {
           weightKg: it.weightKg,
         });
       }
-      Alert.alert('绑定成功', `已添加 ${newItems.length} 条运单到 ${bindTarget.transfer_no}`, [
-        { text: '确定', onPress: () => { setBindTarget(null); setBindItems([]); load(); } },
-      ]);
+      const successMsg = `已添加 ${newItems.length} 条运单到 ${bindTarget.transfer_no}`;
+      const finish = () => { setBindTarget(null); setBindItems([]); load(); };
+      if (Platform.OS === 'web') {
+        window.alert(`绑定成功：${successMsg}`);
+        finish();
+      } else {
+        Alert.alert('绑定成功', successMsg, [{ text: '确定', onPress: finish }]);
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '请重试';
-      Alert.alert('绑定失败', message);
+      if (Platform.OS === 'web') window.alert(`绑定失败：${message}`);
+      else Alert.alert('绑定失败', message);
     } finally {
       setBindSubmitting(false);
     }
   };
 
+  const createHint = !cFromWh.trim()
+    ? '请填写来源仓'
+    : !cToWh.trim() ? '请填写目标仓'
+    : null;
+
   const handleCreate = async () => {
-    if (!cFromWh.trim() || !cToWh.trim()) {
-      Alert.alert('请填写来源仓和目标仓');
-      return;
-    }
+    if (createHint) return;
     setCreating(true);
     try {
       await warehouseApi.createTransfer({
@@ -216,29 +224,37 @@ export default function TransferScreen() {
         totalWeightKg: 0,
         remark: cRemark || undefined,
       });
-      Alert.alert('创建成功', '调拨单已创建，请到详情页绑定运单', [
-        { text: '确定', onPress: () => {
-          setCreateVisible(false);
-          setCFromWh(''); setCToWh(''); setCRoute(''); setCRemark('');
-          load();
-        } },
-      ]);
+      const resetAndReload = () => {
+        setCreateVisible(false);
+        setCFromWh(''); setCToWh(''); setCRoute(''); setCRemark('');
+        load();
+      };
+      if (Platform.OS === 'web') {
+        window.alert('调拨单已创建,请到详情页绑定运单');
+        resetAndReload();
+      } else {
+        Alert.alert('创建成功', '调拨单已创建,请到详情页绑定运单', [
+          { text: '确定', onPress: resetAndReload },
+        ]);
+      }
     } catch (err: any) {
-      Alert.alert('创建失败', err.message || '请重试');
+      const msg = err?.message || '请重试';
+      if (Platform.OS === 'web') window.alert(`创建失败：${msg}`);
+      else Alert.alert('创建失败', msg);
     } finally {
       setCreating(false);
     }
   };
 
+  const submitHint = !selected || !actionMode
+    ? '请选择操作'
+    : actionMode === 'dispatch'
+      ? (!driverName.trim() ? '请填写司机姓名' : !plateNo.trim() ? '请填写车牌号' : null)
+      : null;
+
   const handleSubmit = async () => {
     if (!selected || !actionMode) return;
-
-    if (actionMode === 'dispatch') {
-      if (!driverName.trim() || !plateNo.trim()) {
-        Alert.alert('请填写司机姓名和车牌号');
-        return;
-      }
-    }
+    if (submitHint) return;
 
     setSubmitting(true);
     try {
@@ -261,13 +277,18 @@ export default function TransferScreen() {
       }
 
       await warehouseApi.updateTransfer(selected.id, update);
-      Alert.alert(
-        '操作成功',
-        actionMode === 'dispatch' ? '已发车' : actionMode === 'arrive' ? '已确认到达' : '已确认入库',
-        [{ text: '确定', onPress: () => { setSelected(null); setActionMode(null); load(); } }]
-      );
+      const successMsg = actionMode === 'dispatch' ? '已发车' : actionMode === 'arrive' ? '已确认到达' : '已确认入库';
+      const finish = () => { setSelected(null); setActionMode(null); load(); };
+      if (Platform.OS === 'web') {
+        window.alert(`操作成功：${successMsg}`);
+        finish();
+      } else {
+        Alert.alert('操作成功', successMsg, [{ text: '确定', onPress: finish }]);
+      }
     } catch (err: any) {
-      Alert.alert('操作失败', err.message || '请重试');
+      const msg = err?.message || '请重试';
+      if (Platform.OS === 'web') window.alert(`操作失败：${msg}`);
+      else Alert.alert('操作失败', msg);
     } finally {
       setSubmitting(false);
     }
@@ -452,18 +473,28 @@ export default function TransferScreen() {
                 </ScrollView>
               )}
 
+              {submitHint && (
+                <View style={styles.hintBanner}>
+                  <Ionicons name="alert-circle-outline" size={16} color={colors.warning} />
+                  <Text style={styles.hintText}>{submitHint}</Text>
+                </View>
+              )}
               <TouchableOpacity
-                style={[styles.submitBtn, submitting && styles.btnDisabled]}
+                style={[styles.submitBtn, (submitting || !!submitHint) && styles.btnDisabled]}
                 onPress={handleSubmit}
-                disabled={submitting}
+                disabled={submitting || !!submitHint}
               >
                 {submitting ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
                   <Text style={styles.submitBtnText}>
-                    {actionMode === 'dispatch' && '确认发车'}
-                    {actionMode === 'arrive' && '确认到达'}
-                    {actionMode === 'receive' && '确认入库'}
+                    {submitHint
+                      ? submitHint
+                      : actionMode === 'dispatch'
+                        ? '确认发车'
+                        : actionMode === 'arrive'
+                          ? '确认到达'
+                          : '确认入库'}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -617,12 +648,22 @@ export default function TransferScreen() {
                   <Text style={styles.tipText}>创建后可在详情中绑定运单或后续到达自动入库</Text>
                 </View>
               </ScrollView>
+              {createHint && (
+                <View style={styles.hintBanner}>
+                  <Ionicons name="alert-circle-outline" size={16} color={colors.warning} />
+                  <Text style={styles.hintText}>{createHint}</Text>
+                </View>
+              )}
               <TouchableOpacity
-                style={[styles.submitBtn, creating && styles.btnDisabled]}
+                style={[styles.submitBtn, (creating || !!createHint) && styles.btnDisabled]}
                 onPress={handleCreate}
-                disabled={creating}
+                disabled={creating || !!createHint}
               >
-                {creating ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>创建调拨单</Text>}
+                {creating ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.submitBtnText}>{createHint || '创建调拨单'}</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -707,4 +748,7 @@ const styles = StyleSheet.create({
   submitBtn: { height: 52, backgroundColor: colors.primary, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center', marginTop: spacing.sm },
   submitBtnText: { color: '#fff', fontSize: font.lg, fontWeight: '600', letterSpacing: 2 },
   btnDisabled: { opacity: 0.6 },
+
+  hintBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.warningLight, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, marginTop: spacing.sm },
+  hintText: { flex: 1, fontSize: font.xs, color: colors.warning, fontWeight: '500' },
 });

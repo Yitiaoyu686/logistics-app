@@ -10,7 +10,7 @@ import { colors, spacing, radius, font } from '../../lib/theme';
 import { customerApi, systemApi } from '../../lib/api';
 import { safeBack } from '../../lib/nav';
 
-type CustomerType = 'COMPANY_CN' | 'COMPANY_OS' | 'PERSONAL';
+type CustomerType = 'COMPANY_CN' | 'COMPANY_OVERSEAS' | 'INDIVIDUAL';
 type Transport = 'SEA' | 'AIR' | 'BOTH';
 
 interface Country {
@@ -22,8 +22,8 @@ interface Country {
 
 const TYPE_OPTIONS: { value: CustomerType; label: string }[] = [
   { value: 'COMPANY_CN', label: '🏭 国内企业' },
-  { value: 'COMPANY_OS', label: '🏢 海外企业' },
-  { value: 'PERSONAL', label: '👤 个人客户' },
+  { value: 'COMPANY_OVERSEAS', label: '🏢 海外企业' },
+  { value: 'INDIVIDUAL', label: '👤 个人客户' },
 ];
 
 const TRANSPORT_OPTIONS: { value: Transport; label: string }[] = [

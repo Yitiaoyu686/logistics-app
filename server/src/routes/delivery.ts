@@ -40,15 +40,21 @@ router.get('/dpns/:id', (req: Request, res: Response) => {
 });
 
 // POST /api/v2/pod/dpns — 创建DPN
+const ALLOWED_DELIVERY_METHODS = new Set(['DELIVERY', 'SELF_PICKUP', 'SATELLITE_STATION']);
+const ALLOWED_DPN_TYPES = new Set(['DELIVERY', 'TRANSFER']);
+
 router.post('/dpns', (req: Request, res: Response) => {
   const db = getDb();
   const id = uuid();
   const b = req.body;
   const dpnNo = generateDpnNo();
 
-  db.prepare('INSERT INTO pod_dpn (id, dpn_no, business_line, dpn_type, from_site, to_site, dpn_status, total_orders, total_pieces, total_weight_kg, remark, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)').run(
-    id, dpnNo, b.businessLine || 'SEA', b.dpnType || 'DELIVERY',
-    b.fromSite, b.toSite, 'PENDING_BIND',
+  const dpnType = ALLOWED_DPN_TYPES.has(b.dpnType) ? b.dpnType : 'DELIVERY';
+  const deliveryMethod = ALLOWED_DELIVERY_METHODS.has(b.deliveryMethod) ? b.deliveryMethod : 'DELIVERY';
+
+  db.prepare('INSERT INTO pod_dpn (id, dpn_no, business_line, dpn_type, from_site, to_site, delivery_method, dpn_status, total_orders, total_pieces, total_weight_kg, remark, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)').run(
+    id, dpnNo, b.businessLine || 'SEA', dpnType,
+    b.fromSite, b.toSite, deliveryMethod, 'PENDING_BIND',
     0, 0, 0, b.remark, b.createdBy
   );
   res.json({ data: { id, dpnNo } });
@@ -121,6 +127,11 @@ router.post('/dpns/:id/bind-sub-orders', (req: Request, res: Response) => {
 });
 
 // PUT /api/v2/pod/dpns/:id — 更新DPN（执行发车等）
+const ALLOWED_DPN_STATUSES = new Set([
+  'DRAFT', 'PENDING_BIND', 'PENDING_DISPATCH', 'IN_TRANSIT', 'ARRIVED',
+  'PENDING_INBOUND', 'INBOUND', 'DELIVERED', 'SIGNED', 'CANCELLED',
+]);
+
 router.put('/dpns/:id', (req: Request, res: Response) => {
   const db = getDb();
   const b = req.body;
@@ -137,6 +148,12 @@ router.put('/dpns/:id', (req: Request, res: Response) => {
     plateNo: 'plate_no', dispatchTime: 'dispatch_time',
     arrivalTime: 'arrival_time', remark: 'remark',
   };
+
+  const incomingStatus = b.dpnStatus ?? b.dpn_status;
+  if (incomingStatus !== undefined && !ALLOWED_DPN_STATUSES.has(incomingStatus)) {
+    res.status(400).json({ error: `dpn_status invalid: ${incomingStatus}` });
+    return;
+  }
 
   for (const [jsKey, dbKey] of Object.entries(fieldMap)) {
     if (b[jsKey] !== undefined) { sets.push(`${dbKey} = ?`); vals.push(b[jsKey]); }
