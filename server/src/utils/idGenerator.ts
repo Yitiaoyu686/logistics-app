@@ -13,19 +13,22 @@ const COUNTER_SOURCES: Record<string, { table: string; column: string }> = {
   fee: { table: 'fin_fee', column: 'fee_no' },
 };
 
-function bootstrapCounter(prefix: string): void {
+function bootstrapCounter(prefix: string, digits: number = 5): void {
   if (bootstrappedPrefixes.has(prefix)) return;
   bootstrappedPrefixes.add(prefix);
   const src = COUNTER_SOURCES[prefix];
   if (!src) return;
   try {
     const rows = getDb().prepare(`SELECT ${src.column} AS v FROM ${src.table}`).all() as Array<{ v: string }>;
+    const maxSeq = Math.pow(10, digits);
     let max = 0;
     for (const row of rows) {
       const m = row.v && row.v.match(/(\d+)$/);
       if (m) {
-        const n = Number(m[1]);
-        if (n > max) max = n;
+        // 只截取尾部 digits 位,防止历史脏数据(例如 28 位数字)溢出 Number
+        const lastN = m[1].slice(-digits);
+        const n = Number(lastN);
+        if (Number.isFinite(n) && n > max && n < maxSeq) max = n;
       }
     }
     counters[prefix] = max;
@@ -35,9 +38,12 @@ function bootstrapCounter(prefix: string): void {
 }
 
 function nextSeq(prefix: string, digits: number = 5): string {
-  bootstrapCounter(prefix);
-  counters[prefix] = (counters[prefix] || 0) + 1;
-  return String(counters[prefix]).padStart(digits, '0');
+  bootstrapCounter(prefix, digits);
+  const maxSeq = Math.pow(10, digits);
+  let next = (counters[prefix] || 0) + 1;
+  if (next >= maxSeq) next = 1;
+  counters[prefix] = next;
+  return String(next).padStart(digits, '0');
 }
 
 function dateStr(): string {
