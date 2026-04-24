@@ -59,11 +59,6 @@ export default function CustomerCreateScreen() {
   }, []);
 
   const handleSubmit = async () => {
-    if (!customerName.trim()) { Alert.alert('请填写客户名称'); return; }
-    if (!country) { Alert.alert('请选择国家'); return; }
-    if (!contactName.trim()) { Alert.alert('请填写联系人'); return; }
-    if (!contactPhone.trim()) { Alert.alert('请填写联系电话'); return; }
-
     setSubmitting(true);
     try {
       const res = await customerApi.create({
@@ -80,13 +75,17 @@ export default function CustomerCreateScreen() {
         status: 'ACTIVE',
         remark: remark || undefined,
       });
-      Alert.alert(
-        '创建成功',
-        `客户编号：${res.data?.customerCode || '-'}`,
-        [{ text: '完成', onPress: () => safeBack(router) }]
-      );
+      // 同时弹 Alert 和返回,原生端 Alert 能正常弹出
+      Alert.alert('创建成功', `客户编号：${res.data?.customerCode || '-'}`, [
+        { text: '完成', onPress: () => safeBack(router) },
+      ]);
+      // Web 端 Alert 可能不弹,直接返回
+      if (Platform.OS === 'web') safeBack(router);
     } catch (err: any) {
       Alert.alert('创建失败', err.message || '请重试');
+      if (Platform.OS === 'web') {
+        window.alert(`创建失败: ${err.message || '请重试'}`);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -207,22 +206,42 @@ export default function CustomerCreateScreen() {
           </View>
         </ScrollView>
 
-        <View style={styles.bottomBar}>
-          <TouchableOpacity
-            style={[styles.submitBtn, submitting && styles.btnDisabled]}
-            onPress={handleSubmit}
-            disabled={submitting}
-          >
-            {submitting ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                <Text style={styles.submitBtnText}>创建客户</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
+        {(() => {
+          const hint = !customerName.trim()
+            ? '请填写客户名称'
+            : !country
+              ? '请选择国家'
+              : !contactName.trim()
+                ? '请填写联系人'
+                : !contactPhone.trim()
+                  ? '请填写联系电话'
+                  : null;
+          const disabled = submitting || !!hint;
+          return (
+            <View style={styles.bottomBar}>
+              {hint && (
+                <View style={styles.validationBanner}>
+                  <Ionicons name="alert-circle" size={16} color={colors.warning} />
+                  <Text style={styles.validationBannerText}>{hint}</Text>
+                </View>
+              )}
+              <TouchableOpacity
+                style={[styles.submitBtn, disabled && styles.btnDisabled]}
+                onPress={handleSubmit}
+                disabled={disabled}
+              >
+                {submitting ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                    <Text style={styles.submitBtnText}>{hint || '创建客户'}</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          );
+        })()}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -283,4 +302,6 @@ const styles = StyleSheet.create({
   submitBtn: { flexDirection: 'row', height: 52, backgroundColor: colors.primary, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, shadowColor: colors.primary, shadowOpacity: 0.25, shadowOffset: { width: 0, height: 4 }, shadowRadius: 8 },
   submitBtnText: { color: '#fff', fontSize: font.lg, fontWeight: '600', letterSpacing: 2 },
   btnDisabled: { opacity: 0.6 },
+  validationBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.warningLight, borderRadius: radius.md, marginBottom: 6 },
+  validationBannerText: { fontSize: font.sm, color: colors.warning, fontWeight: '600' },
 });

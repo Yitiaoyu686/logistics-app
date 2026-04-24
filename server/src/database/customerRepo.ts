@@ -95,11 +95,18 @@ export function createCustomerRecord(
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const createdAt = payload.createdAt || new Date().toISOString().replace('T', ' ').substring(0, 19);
+  // 兼容 App 端旧枚举:COMPANY_OS → COMPANY_OVERSEAS, PERSONAL → INDIVIDUAL
+  const normalizeCustomerType = (t?: string): string => {
+    if (!t) return 'COMPANY_CN';
+    if (t === 'COMPANY_OS') return 'COMPANY_OVERSEAS';
+    if (t === 'PERSONAL') return 'INDIVIDUAL';
+    return t;
+  };
   insertCustomer.run(
     id,
     customerCode,
     payload.name,
-    payload.customerType || payload.enterpriseInfo?.entityType || 'COMPANY_CN',
+    normalizeCustomerType(payload.customerType || payload.enterpriseInfo?.entityType),
     payload.country ?? null,
     payload.address ?? null,
     payload.industry ?? null,
