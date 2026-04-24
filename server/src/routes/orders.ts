@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../database/schema';
 import { uuid, generateOrderNo, generateSubOrderNo } from '../utils/idGenerator';
+import { calcFreight } from '../utils/freight';
 
 const router = Router();
 
@@ -105,11 +106,16 @@ router.post('/', (req: Request, res: Response) => {
 
   const items = b.items || b.packages || [];
 
+  // 预估运费:按申报总重量 × 服务类型系数
+  const declaredWeight = Number(b.totalWeight || b.total_declared_weight_kg || 0);
+  const serviceType = b.serviceType || b.service_type;
+  const estimatedFreight = calcFreight(declaredWeight, serviceType);
+
   // 所有插入放在一个事务里,出错原子回滚
   const tx = db.transaction(() => {
-    db.prepare(`INSERT INTO oms_order (id, order_no, warehouse_entry_no, business_line, service_type, customer_id, customer_name, sales_user_id, route_code, export_mode, order_status, payment_method, currency_code, total_declared_pieces, total_declared_weight_kg, sender_name, sender_phone, sender_address, consignee_name, consignee_phone, consignee_email, consignee_address, consignee_country, consignee_city, remark, created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+    db.prepare(`INSERT INTO oms_order (id, order_no, warehouse_entry_no, business_line, service_type, customer_id, customer_name, sales_user_id, route_code, export_mode, order_status, payment_method, currency_code, total_declared_pieces, total_declared_weight_kg, sender_name, sender_phone, sender_address, consignee_name, consignee_phone, consignee_email, consignee_address, consignee_country, consignee_city, remark, created_by, estimated_freight, freight_currency) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
       orderId, orderNo, entryNo, businessLine,
-      b.serviceType || b.service_type,
+      serviceType,
       customerId,
       b.customerName || b.customer_name,
       salesUserId,
@@ -119,7 +125,7 @@ router.post('/', (req: Request, res: Response) => {
       b.paymentMethod || b.payment_method,
       b.currencyCode || b.currency_code || 'CNY',
       b.totalPieces || 0,
-      b.totalWeight || 0,
+      declaredWeight,
       b.senderName || b.sender_name,
       b.senderPhone || b.sender_phone,
       b.senderAddress || b.sender_address,
@@ -130,7 +136,9 @@ router.post('/', (req: Request, res: Response) => {
       b.consigneeCountry || b.consignee_country,
       b.consigneeCity || b.consignee_city,
       b.remark,
-      b.createdBy || b.created_by
+      b.createdBy || b.created_by,
+      estimatedFreight,
+      b.currencyCode || b.currency_code || 'CNY'
     );
 
     let lineNo = 1;
@@ -171,6 +179,27 @@ router.post('/', (req: Request, res: Response) => {
   }
 
   res.json({ data: { id: orderId, orderNo, warehouseEntryNo: entryNo } });
+});
+
+// POST /api/v2/oms/orders/:id/pay — 客户支付(按 actual_freight)
+router.post('/:id/pay', (req: Request, res: Response) => {
+  const db = getDb();
+  const row = db.prepare(
+    'SELECT id, actual_freight, payment_status FROM oms_order WHERE id = ?'
+  ).get(req.params.id) as { id: string; actual_freight: number | null; payment_status: string } | undefined;
+  if (!row) { res.status(404).json({ error: '订单不存在' }); return; }
+  if (!row.actual_freight || row.actual_freight <= 0) {
+    res.status(400).json({ error: '实际运费未生成,等仓库入库称重后再支付' });
+    return;
+  }
+  if (row.payment_status === 'PAID') {
+    res.json({ data: { id: row.id, alreadyPaid: true } });
+    return;
+  }
+  db.prepare(
+    "UPDATE oms_order SET payment_status='PAID', total_paid_amount=?, total_receivable_amount=?, updated_at=datetime('now') WHERE id=?"
+  ).run(row.actual_freight, row.actual_freight, req.params.id);
+  res.json({ data: { id: req.params.id, paidAmount: row.actual_freight } });
 });
 
 // PUT /api/v2/oms/orders/:id — 更新订单

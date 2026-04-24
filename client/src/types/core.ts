@@ -256,6 +256,11 @@ export interface MasterOrder {
   paidAmount?: number;       // 已支付金额
   paymentStatus?: 'UNPAID' | 'PARTIAL' | 'PAID';
 
+  // 运费预估/实际（下单估算 → 入库称重后实算 → 客户基于实算支付）
+  estimatedFreight?: number;  // 预估运费，按申报重量计算
+  actualFreight?: number;     // 实际运费，按入库称重后计算
+  freightCurrency?: string;   // 默认 CNY
+
   // 时间信息
   orderDate: string;         // 下单时间
   createdAt: string;

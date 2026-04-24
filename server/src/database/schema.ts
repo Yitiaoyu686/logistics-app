@@ -721,6 +721,12 @@ export function createTables(): void {
   ensureColumn('pod_dpn_item', 'inbound_time', 'TEXT');
   ensureColumn('pod_dpn_item', 'inbound_method', 'TEXT');
 
+  // oms_order 运费预估/实际字段
+  // estimated:下单时按申报重量估算;actual:入库称重后按实际重量重算;客户基于 actual 支付
+  ensureColumn('oms_order', 'estimated_freight', 'REAL DEFAULT 0');
+  ensureColumn('oms_order', 'actual_freight', 'REAL DEFAULT 0');
+  ensureColumn('oms_order', 'freight_currency', "TEXT DEFAULT 'CNY'");
+
   // fin_fee 扩展 - 对齐前端 FeeRecord 形状
   ensureColumn('fin_fee', 'related_type', 'TEXT');          // UI 的 ORDER/UNIT/JOB/TRANSFER/DPN(不受 fee_level CHECK 限制)
   ensureColumn('fin_fee', 'fee_type_ui', 'TEXT');           // UI 的 FREIGHT/CUSTOMS/WAREHOUSE/DELIVERY/INSURANCE/HANDLING/OVERWEIGHT/PACKAGING/OTHER

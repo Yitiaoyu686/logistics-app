@@ -71,6 +71,7 @@ export const orderApi = {
   get: (id: string) => api.get(`/v2/oms/orders/${id}/full`),
   create: (data: any) => api.post('/v2/oms/orders', data),
   update: (id: string, data: any) => api.put(`/v2/oms/orders/${id}`, data),
+  pay: (id: string) => api.post(`/v2/oms/orders/${id}/pay`, {}),
   // 扫码按子单号/运单号查子单(返回 id + 基础信息)
   getSubByNo: (subOrderNo: string) => api.get(`/orders/sub/${encodeURIComponent(subOrderNo)}`),
 };

@@ -913,6 +913,21 @@ export const OrderDetail: React.FC<OrderDetailProps> = ({ orderId, onClose }) =>
             >
               <Row gutter={24}>
                 <Col span={16}>
+                  {/* 运费预估/实际 - 下单即估算，入库称重后实算 */}
+                  <div style={{ marginBottom: 16, padding: 12, background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <Text type="secondary">预估运费（按申报重量）</Text>
+                      <Text>¥{(masterOrder.estimatedFreight || 0).toFixed(2)}</Text>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text type="secondary">实际运费（按入库称重）</Text>
+                      {masterOrder.actualFreight && masterOrder.actualFreight > 0 ? (
+                        <Text strong style={{ color: '#389e0d', fontSize: 16 }}>¥{masterOrder.actualFreight.toFixed(2)}</Text>
+                      ) : (
+                        <Text type="secondary" style={{ fontSize: 12 }}>待入库称重后生成</Text>
+                      )}
+                    </div>
+                  </div>
                   <div style={{ marginBottom: 12 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                       <Text type="secondary">总运费</Text>

@@ -1,6 +1,30 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../database/schema';
 import { uuid, generateInboundNo, generateFeeNo } from '../utils/idGenerator';
+import { calcFreight } from '../utils/freight';
+
+/**
+ * 入库称重后按实重重算订单 actual_freight,并把子运单实际重量合计回写到
+ * oms_order.total_actual_weight_kg。没有称重的子单回退到 declared 重量。
+ */
+function recomputeActualFreight(db: import('better-sqlite3').Database, orderId: string) {
+  if (!orderId) return;
+  const subs = db.prepare(
+    'SELECT actual_weight_kg, pieces FROM oms_sub_order WHERE order_id = ?'
+  ).all(orderId) as Array<{ actual_weight_kg: number | null; pieces: number | null }>;
+  const totalActualWeight = subs.reduce((sum, s) => sum + (Number(s.actual_weight_kg) || 0), 0);
+  const totalActualPieces = subs.reduce((sum, s) => sum + (Number(s.pieces) || 0), 0);
+  const order = db.prepare(
+    'SELECT service_type, total_declared_weight_kg FROM oms_order WHERE id = ?'
+  ).get(orderId) as { service_type?: string; total_declared_weight_kg?: number } | undefined;
+  if (!order) return;
+  const weightForFreight = totalActualWeight > 0 ? totalActualWeight : Number(order.total_declared_weight_kg || 0);
+  const actualFreight = calcFreight(weightForFreight, order.service_type);
+  db.prepare(
+    `UPDATE oms_order SET total_actual_weight_kg = ?, total_actual_pieces = ?, actual_freight = ?,
+       updated_at = datetime('now') WHERE id = ?`
+  ).run(totalActualWeight, totalActualPieces, actualFreight, orderId);
+}
 
 const router = Router();
 
@@ -77,17 +101,20 @@ router.post('/inbounds', (req: Request, res: Response) => {
     );
   }
 
-  // Update sub-order status to INBOUND
+  // Update sub-order status to INBOUND + actual weight/pieces (for freight recalc)
   if (b.subOrderId) {
-    db.prepare("UPDATE oms_sub_order SET sub_status='INBOUND', updated_at=datetime('now') WHERE id=?").run(b.subOrderId);
+    db.prepare(
+      "UPDATE oms_sub_order SET sub_status='INBOUND', pieces=?, actual_weight_kg=?, updated_at=datetime('now') WHERE id=?"
+    ).run(b.pieces || 1, Number(b.grossWeightKg) || 0, b.subOrderId);
   }
 
-  // Update master order status if all sub-orders are inbound
+  // Update master order status + actual freight if any sub-order is inbound
   if (b.orderId) {
     const total = (db.prepare('SELECT COUNT(*) as c FROM oms_sub_order WHERE order_id=?').get(b.orderId) as any).c;
     const inbound = (db.prepare("SELECT COUNT(*) as c FROM oms_sub_order WHERE order_id=? AND sub_status='INBOUND'").get(b.orderId) as any).c;
     const newStatus = inbound >= total ? 'INBOUND' : 'PENDING_INBOUND';
     db.prepare("UPDATE oms_order SET order_status=?, updated_at=datetime('now') WHERE id=?").run(newStatus, b.orderId);
+    recomputeActualFreight(db, b.orderId);
   }
 
   res.json({ data: { id, inboundNo } });

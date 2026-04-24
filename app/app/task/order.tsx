@@ -80,6 +80,9 @@ interface OrderDetail extends OrderItem {
   consignee_address: string | null;
   consignee_country: string | null;
   consignee_city: string | null;
+  estimated_freight: number | null;
+  actual_freight: number | null;
+  freight_currency: string | null;
   relatedJobs?: RelatedJob[];
   relatedDpns?: RelatedDpn[];
 }
@@ -478,15 +481,57 @@ export default function OrderScreen({ embedded = false }: OrderScreenProps = {})
                   </View>
                 )}
 
-                {/* 费用 */}
+                {/* 运费 */}
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>💰 费用明细</Text>
-                  {(detail.fees || []).length === 0 ? (
-                    <Text style={styles.empty}>暂无费用记录</Text>
-                  ) : (
-                    detail.fees.map((f: any, i: number) => (
-                      <DetailRow key={i} label={f.fee_name} value={`¥ ${f.amount}`} />
-                    ))
+                  <Text style={styles.sectionTitle}>💰 运费</Text>
+                  <DetailRow
+                    label="预估运费"
+                    value={detail.estimated_freight
+                      ? `¥ ${Number(detail.estimated_freight).toFixed(2)}`
+                      : '-'}
+                  />
+                  <DetailRow
+                    label="实际运费"
+                    value={detail.actual_freight
+                      ? `¥ ${Number(detail.actual_freight).toFixed(2)}`
+                      : '待入库称重后生成'}
+                    highlight={!!detail.actual_freight}
+                  />
+                  <DetailRow
+                    label="付款状态"
+                    value={detail.payment_status === 'PAID' ? '✅ 已付款' : '⏳ 未付款'}
+                  />
+                  {detail.payment_status !== 'PAID' && Number(detail.actual_freight) > 0 && (
+                    <TouchableOpacity
+                      style={styles.payBtn}
+                      onPress={async () => {
+                        try {
+                          await orderApi.pay(detail.id);
+                          Alert.alert('支付成功', `已支付 ¥${Number(detail.actual_freight).toFixed(2)}`, [
+                            { text: '确定', onPress: () => openDetail(detail.id) },
+                          ]);
+                        } catch (err: any) {
+                          Alert.alert('支付失败', err.message || '请重试');
+                        }
+                      }}
+                    >
+                      <Ionicons name="card-outline" size={18} color="#fff" />
+                      <Text style={styles.payBtnText}>立即支付 ¥{Number(detail.actual_freight).toFixed(2)}</Text>
+                    </TouchableOpacity>
+                  )}
+                  {detail.payment_status !== 'PAID' && !detail.actual_freight && (
+                    <View style={styles.payHint}>
+                      <Ionicons name="information-circle-outline" size={14} color={colors.info} />
+                      <Text style={styles.payHintText}>入库称重完成后自动生成实际运费,即可支付</Text>
+                    </View>
+                  )}
+                  {(detail.fees || []).length > 0 && (
+                    <>
+                      <Text style={[styles.detailLabel, { marginTop: spacing.md, marginBottom: 4 }]}>其他费用</Text>
+                      {detail.fees.map((f: any, i: number) => (
+                        <DetailRow key={i} label={f.fee_name || f.fee_item_code || f.fee_type_ui || '其他'} value={`¥ ${Number(f.amount || 0).toFixed(2)}`} />
+                      ))}
+                    </>
                   )}
                 </View>
               </ScrollView>
@@ -568,6 +613,10 @@ const styles = StyleSheet.create({
   detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing.sm, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
   detailLabel: { fontSize: font.sm, color: colors.textSecondary },
   detailValue: { fontSize: font.sm, color: colors.text, fontWeight: '500', flex: 1, textAlign: 'right' },
+  payBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.success, borderRadius: radius.md, paddingVertical: spacing.md, marginTop: spacing.md },
+  payBtnText: { color: '#fff', fontSize: font.md, fontWeight: '600', letterSpacing: 1 },
+  payHint: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.infoLight, padding: spacing.sm, borderRadius: radius.sm, marginTop: spacing.sm },
+  payHintText: { flex: 1, fontSize: font.xs, color: colors.info },
   // Sub
   subCard: { backgroundColor: colors.bg, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, borderLeftWidth: 3, borderLeftColor: colors.primary },
   subHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
