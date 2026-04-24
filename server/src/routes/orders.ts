@@ -29,7 +29,12 @@ router.get('/', (req: Request, res: Response) => {
 // GET /api/v2/oms/orders/:id/full — 订单详情
 router.get('/:id/full', (req: Request, res: Response) => {
   const db = getDb();
-  const order = db.prepare('SELECT * FROM oms_order WHERE id = ?').get(req.params.id) as any;
+  const order = db.prepare(`
+    SELECT o.*, c.customer_code, c.customer_type
+    FROM oms_order o
+    LEFT JOIN crm_customer c ON c.id = o.customer_id
+    WHERE o.id = ?
+  `).get(req.params.id) as any;
   if (!order) { res.status(404).json({ error: 'Order not found' }); return; }
 
   const subOrders = db.prepare('SELECT * FROM oms_sub_order WHERE order_id = ? ORDER BY line_no').all(req.params.id);

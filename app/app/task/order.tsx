@@ -68,11 +68,28 @@ interface OrderDetail extends OrderItem {
   packages: PackageItem[];
   fees: any[];
   remark: string | null;
+  customer_code: string | null;
+  service_type: string | null;
+  export_mode: string | null;
+  payment_method: string | null;
+  currency_code: string | null;
   sender_name: string | null;
   sender_phone: string | null;
+  sender_address: string | null;
+  consignee_email: string | null;
+  consignee_address: string | null;
+  consignee_country: string | null;
+  consignee_city: string | null;
   relatedJobs?: RelatedJob[];
   relatedDpns?: RelatedDpn[];
 }
+
+const SERVICE_TYPE_LABEL: Record<string, string> = {
+  EXPRESS: '⚡ 特快', STANDARD: '📦 普快', ECONOMY: '💰 经济',
+};
+const PAYMENT_METHOD_LABEL: Record<string, string> = {
+  PREPAID: '💳 预付', COD: '💰 到付', MONTHLY: '📅 月结',
+};
 
 const STATUS_FILTERS = [
   { value: 'ALL', label: '全部' },
@@ -340,13 +357,37 @@ export default function OrderScreen({ embedded = false }: OrderScreenProps = {})
                   </View>
                 </View>
 
-                {/* 客户和收件人 */}
+                {/* 基本信息 */}
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>👥 双方信息</Text>
+                  <Text style={styles.sectionTitle}>📋 基本信息</Text>
                   <DetailRow label="客户" value={detail.customer_name} />
-                  <DetailRow label="路线" value={detail.route_code} />
-                  <DetailRow label="收件人" value={detail.consignee_name} />
-                  <DetailRow label="收件电话" value={detail.consignee_phone} highlight />
+                  <DetailRow label="客户编号" value={detail.customer_code || '-'} />
+                  <DetailRow label="下单时间" value={detail.created_at?.slice(0, 16) || '-'} />
+                  <DetailRow label="运输方式" value={detail.business_line === 'SEA' ? '🚢 海运' : '✈️ 空运'} />
+                  <DetailRow label="首选线路" value={detail.route_code} />
+                  <DetailRow label="服务类型" value={SERVICE_TYPE_LABEL[detail.service_type || ''] || detail.service_type || '-'} />
+                  <DetailRow label="付款方式" value={PAYMENT_METHOD_LABEL[detail.payment_method || ''] || detail.payment_method || '-'} />
+                  <DetailRow label="总件数" value={`${detail.total_declared_pieces || 0} 件`} />
+                  <DetailRow label="总重量" value={`${Number(detail.total_declared_weight_kg || 0).toFixed(1)} kg`} />
+                  {detail.remark && <DetailRow label="备注" value={detail.remark} />}
+                </View>
+
+                {/* 发货人 */}
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>📤 发货人</Text>
+                  <DetailRow label="姓名" value={detail.sender_name || '-'} />
+                  <DetailRow label="电话" value={detail.sender_phone || '-'} highlight />
+                  <DetailRow label="地址" value={detail.sender_address || '-'} />
+                </View>
+
+                {/* 收货人 */}
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>📥 收货人</Text>
+                  <DetailRow label="姓名" value={detail.consignee_name || '-'} />
+                  <DetailRow label="电话" value={detail.consignee_phone || '-'} highlight />
+                  {detail.consignee_email && <DetailRow label="邮箱" value={detail.consignee_email} />}
+                  <DetailRow label="国家 / 城市" value={[detail.consignee_country, detail.consignee_city].filter(Boolean).join(' · ') || '-'} />
+                  <DetailRow label="地址" value={detail.consignee_address || '-'} />
                 </View>
 
                 {/* 子运单 */}
