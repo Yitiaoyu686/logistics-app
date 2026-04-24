@@ -90,6 +90,8 @@ export default function OrderCreateScreen() {
 
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
+  const [senderPickerVisible, setSenderPickerVisible] = useState(false);
+  const [recipientPickerVisible, setRecipientPickerVisible] = useState(false);
 
   // Step 1: 客户与基础信息
   const [customerId, setCustomerId] = useState<string>(params.customerId as string || '');
@@ -421,89 +423,59 @@ export default function OrderCreateScreen() {
     </ScrollView>
   );
 
-  const renderStep3 = () => (
-    <ScrollView contentContainerStyle={styles.scroll}>
-      {/* 发货信息 */}
-      {(customerDetail?.senders?.length || 0) > 0 && (
+  const renderStep3 = () => {
+    const senderCount = customerDetail?.senders?.length || 0;
+    const recipientCount = customerDetail?.recipients?.length || 0;
+    return (
+      <ScrollView contentContainerStyle={styles.scroll}>
+        {/* 发货信息 */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📤 客户已有发货人</Text>
-          {customerDetail?.senders.map((s) => (
-            <TouchableOpacity
-              key={s.id}
-              style={[styles.recipientCard, selectedSenderId === s.id && styles.recipientCardActive]}
-              onPress={() => {
-                setSelectedSenderId(s.id);
-                setSenderName(s.sender_name || '');
-                setSenderPhone(s.sender_phone || '');
-                setSenderAddress(s.sender_address || '');
-              }}
-            >
-              <View style={styles.recipientHeader}>
-                <Text style={styles.recipientName}>{s.sender_name}</Text>
-                {s.is_default === 1 && (
-                  <View style={styles.defaultBadge}><Text style={styles.defaultText}>默认</Text></View>
-                )}
-              </View>
-              <Text style={styles.recipientText}>{s.sender_phone}</Text>
-              <Text style={styles.recipientText}>{[s.sender_country, s.sender_city, s.sender_address].filter(Boolean).join(' · ')}</Text>
-            </TouchableOpacity>
-          ))}
+          <View style={styles.sectionHeaderRow}>
+            <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>📤 发货信息</Text>
+            {senderCount > 0 && (
+              <TouchableOpacity onPress={() => setSenderPickerVisible(true)} style={styles.linkBtn}>
+                <Ionicons name="book-outline" size={14} color={colors.primary} />
+                <Text style={styles.linkBtnText}>从地址簿选择（{senderCount}）</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <FormField label="发件人 *" value={senderName} onChangeText={setSenderName} placeholder="发件人姓名" />
+          <FormField label="联系电话 *" value={senderPhone} onChangeText={setSenderPhone} placeholder="发件电话" keyboardType="phone-pad" />
+          <FormField label="详细地址 *" value={senderAddress} onChangeText={setSenderAddress} placeholder="发货详细地址" />
+          {senderCount === 0 && (
+            <Text style={styles.emptyHint}>该客户暂无发货人档案,直接填写即可</Text>
+          )}
         </View>
-      )}
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>✏️ 发货信息（可修改）</Text>
-        <FormField label="发件人 *" value={senderName} onChangeText={setSenderName} placeholder="发件人姓名" />
-        <FormField label="联系电话 *" value={senderPhone} onChangeText={setSenderPhone} placeholder="发件电话" keyboardType="phone-pad" />
-        <FormField label="详细地址 *" value={senderAddress} onChangeText={setSenderAddress} placeholder="发货详细地址" />
-      </View>
-
-      {/* 收货信息 */}
-      {(customerDetail?.recipients?.length || 0) > 0 && (
+        {/* 收货信息 */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📥 客户已有收件人</Text>
-          {customerDetail?.recipients.map((r) => (
-            <TouchableOpacity
-              key={r.id}
-              style={[styles.recipientCard, selectedRecipientId === r.id && styles.recipientCardActive]}
-              onPress={() => {
-                setSelectedRecipientId(r.id);
-                setConsigneeName(r.recipient_name);
-                setConsigneePhone(r.recipient_phone);
-                setConsigneeAddress(r.detail_address);
-                setConsigneeCountry(r.country);
-                setConsigneeCity(r.city);
-              }}
-            >
-              <View style={styles.recipientHeader}>
-                <Text style={styles.recipientName}>{r.recipient_name}</Text>
-                {r.is_default === 1 && (
-                  <View style={styles.defaultBadge}><Text style={styles.defaultText}>默认</Text></View>
-                )}
-              </View>
-              <Text style={styles.recipientText}>{r.recipient_phone}</Text>
-              <Text style={styles.recipientText}>{r.country} · {r.city} · {r.detail_address}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>✏️ 收货信息（可修改）</Text>
-        <FormField label="收件人 *" value={consigneeName} onChangeText={setConsigneeName} placeholder="收件人姓名" />
-        <FormField label="联系电话 *" value={consigneePhone} onChangeText={setConsigneePhone} placeholder="收件电话" keyboardType="phone-pad" />
-        <View style={styles.row2}>
-          <View style={{ flex: 1 }}>
-            <FormField label="国家" value={consigneeCountry} onChangeText={setConsigneeCountry} placeholder="国家" />
+          <View style={styles.sectionHeaderRow}>
+            <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>📥 收货信息</Text>
+            {recipientCount > 0 && (
+              <TouchableOpacity onPress={() => setRecipientPickerVisible(true)} style={styles.linkBtn}>
+                <Ionicons name="book-outline" size={14} color={colors.primary} />
+                <Text style={styles.linkBtnText}>从地址簿选择（{recipientCount}）</Text>
+              </TouchableOpacity>
+            )}
           </View>
-          <View style={{ flex: 1 }}>
-            <FormField label="城市" value={consigneeCity} onChangeText={setConsigneeCity} placeholder="城市" />
+          <FormField label="收件人 *" value={consigneeName} onChangeText={setConsigneeName} placeholder="收件人姓名" />
+          <FormField label="联系电话 *" value={consigneePhone} onChangeText={setConsigneePhone} placeholder="收件电话" keyboardType="phone-pad" />
+          <View style={styles.row2}>
+            <View style={{ flex: 1 }}>
+              <FormField label="国家" value={consigneeCountry} onChangeText={setConsigneeCountry} placeholder="国家" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <FormField label="城市" value={consigneeCity} onChangeText={setConsigneeCity} placeholder="城市" />
+            </View>
           </View>
+          <FormField label="详细地址 *" value={consigneeAddress} onChangeText={setConsigneeAddress} placeholder="街道门牌等" />
+          {recipientCount === 0 && (
+            <Text style={styles.emptyHint}>该客户暂无收货人档案,直接填写即可</Text>
+          )}
         </View>
-        <FormField label="详细地址 *" value={consigneeAddress} onChangeText={setConsigneeAddress} placeholder="街道门牌等" />
-      </View>
-    </ScrollView>
-  );
+      </ScrollView>
+    );
+  };
 
   const renderStep4 = () => (
     <ScrollView contentContainerStyle={styles.scroll}>
@@ -680,6 +652,92 @@ export default function OrderCreateScreen() {
             </View>
           </View>
         </Modal>
+
+        {/* 发货人选择弹窗 */}
+        <Modal visible={senderPickerVisible} transparent animationType="slide" onRequestClose={() => setSenderPickerVisible(false)}>
+          <View style={styles.modalMask}>
+            <View style={styles.modalSheet}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>从地址簿选择发货人</Text>
+                <TouchableOpacity onPress={() => setSenderPickerVisible(false)}>
+                  <Ionicons name="close" size={24} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={{ maxHeight: 480 }}>
+                {(customerDetail?.senders || []).length === 0 ? (
+                  <Text style={styles.emptyHint}>暂无发货人档案</Text>
+                ) : (
+                  (customerDetail?.senders || []).map((s) => (
+                    <TouchableOpacity
+                      key={s.id}
+                      style={[styles.recipientCard, selectedSenderId === s.id && styles.recipientCardActive]}
+                      onPress={() => {
+                        setSelectedSenderId(s.id);
+                        setSenderName(s.sender_name || '');
+                        setSenderPhone(s.sender_phone || '');
+                        setSenderAddress(s.sender_address || '');
+                        setSenderPickerVisible(false);
+                      }}
+                    >
+                      <View style={styles.recipientHeader}>
+                        <Text style={styles.recipientName}>{s.sender_name}</Text>
+                        {s.is_default === 1 && (
+                          <View style={styles.defaultBadge}><Text style={styles.defaultText}>默认</Text></View>
+                        )}
+                      </View>
+                      <Text style={styles.recipientText}>{s.sender_phone}</Text>
+                      <Text style={styles.recipientText}>{[s.sender_country, s.sender_city, s.sender_address].filter(Boolean).join(' · ') || '-'}</Text>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
+        {/* 收件人选择弹窗 */}
+        <Modal visible={recipientPickerVisible} transparent animationType="slide" onRequestClose={() => setRecipientPickerVisible(false)}>
+          <View style={styles.modalMask}>
+            <View style={styles.modalSheet}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>从地址簿选择收件人</Text>
+                <TouchableOpacity onPress={() => setRecipientPickerVisible(false)}>
+                  <Ionicons name="close" size={24} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={{ maxHeight: 480 }}>
+                {(customerDetail?.recipients || []).length === 0 ? (
+                  <Text style={styles.emptyHint}>暂无收件人档案</Text>
+                ) : (
+                  (customerDetail?.recipients || []).map((r) => (
+                    <TouchableOpacity
+                      key={r.id}
+                      style={[styles.recipientCard, selectedRecipientId === r.id && styles.recipientCardActive]}
+                      onPress={() => {
+                        setSelectedRecipientId(r.id);
+                        setConsigneeName(r.recipient_name || '');
+                        setConsigneePhone(r.recipient_phone || '');
+                        setConsigneeAddress(r.detail_address || '');
+                        setConsigneeCountry(r.country || '');
+                        setConsigneeCity(r.city || '');
+                        setRecipientPickerVisible(false);
+                      }}
+                    >
+                      <View style={styles.recipientHeader}>
+                        <Text style={styles.recipientName}>{r.recipient_name}</Text>
+                        {r.is_default === 1 && (
+                          <View style={styles.defaultBadge}><Text style={styles.defaultText}>默认</Text></View>
+                        )}
+                      </View>
+                      <Text style={styles.recipientText}>{r.recipient_phone}</Text>
+                      <Text style={styles.recipientText}>{[r.country, r.city, r.detail_address].filter(Boolean).join(' · ') || '-'}</Text>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -729,6 +787,10 @@ const styles = StyleSheet.create({
   scroll: { padding: spacing.md, paddingBottom: 100 },
   section: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.md },
   sectionTitle: { fontSize: font.md, fontWeight: '600', color: colors.text, marginBottom: spacing.md },
+  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
+  linkBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.sm, paddingVertical: 4 },
+  linkBtnText: { fontSize: font.xs, color: colors.primary, fontWeight: '600' },
+  emptyHint: { fontSize: font.xs, color: colors.textTertiary, paddingVertical: spacing.md, textAlign: 'center' },
 
   customerSelector: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.bg },
   customerSelectedName: { fontSize: font.md, color: colors.text, fontWeight: '500' },
