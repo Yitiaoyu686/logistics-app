@@ -124,7 +124,9 @@ export default function InboundScreen() {
         setPieces(String(firstPkg.pieces || 1));
       }
     } catch (err: any) {
-      Alert.alert('加载失败', err.message || '无法加载订单信息');
+      const msg = err?.message || '无法加载订单信息';
+      if (Platform.OS === 'web') window.alert(`加载失败:${msg}`);
+      else Alert.alert('加载失败', msg);
     } finally {
       setLoading(false);
     }
@@ -245,9 +247,15 @@ export default function InboundScreen() {
 
   const handleSubmit = async (andPrint: boolean) => {
     if (!weight || Number(weight) <= 0) {
-      Alert.alert('请填写实际重量'); return;
+      if (Platform.OS === 'web') window.alert('请填写实际重量');
+      else Alert.alert('请填写实际重量');
+      return;
     }
-    if (!order) { Alert.alert('订单信息缺失'); return; }
+    if (!order) {
+      if (Platform.OS === 'web') window.alert('订单信息缺失');
+      else Alert.alert('订单信息缺失');
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -288,15 +296,20 @@ export default function InboundScreen() {
         remark,
       });
 
-      if (andPrint) {
-        Alert.alert('入库成功', '面单已发送到蓝牙打印机', [
-          { text: '继续扫下一单', onPress: () => safeBack(router) },
-        ]);
+      const title = '入库成功';
+      const msg = andPrint ? '面单已发送到蓝牙打印机' : '';
+      if (Platform.OS === 'web') {
+        window.alert(msg ? `${title}:${msg}` : title);
+        safeBack(router);
       } else {
-        Alert.alert('入库成功', '', [{ text: '确定', onPress: () => safeBack(router) }]);
+        Alert.alert(title, msg, [
+          { text: andPrint ? '继续扫下一单' : '确定', onPress: () => safeBack(router) },
+        ]);
       }
     } catch (err: any) {
-      Alert.alert('入库失败', err.message || '请重试');
+      const msg = err?.message || '请重试';
+      if (Platform.OS === 'web') window.alert(`入库失败:${msg}`);
+      else Alert.alert('入库失败', msg);
     } finally {
       setSubmitting(false);
     }
