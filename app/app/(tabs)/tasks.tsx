@@ -14,7 +14,7 @@ type ActionIntent = 'transfer-dispatch' | 'transfer-arrive' | 'transfer-receive'
 interface TaskItem {
   id: string;
   type: 'inbound' | 'packing' | 'execute' | 'transfer' | 'orphan' | 'dispatch' | 'delivery' | 'pickup' | 'preview'
-    | 'sales-customer' | 'sales-pending' | 'sales-unpaid' | 'sales-new';
+    | 'sales-customer' | 'sales-unpaid';
   icon: string;
   title: string;
   subtitle: string;
@@ -45,7 +45,6 @@ export default function TasksScreen() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('全部');
-  const [salesStats, setSalesStats] = useState<SalesStats>({ myCustomers: 0, pendingOrders: 0, unpaidOrders: 0, monthlyNew: 0 });
   // 内联弹窗状态
   const [transferTarget, setTransferTarget] = useState<TransferTargetItem | null>(null);
   const [transferMode, setTransferMode] = useState<TransferActionMode | null>(null);
@@ -297,98 +296,57 @@ export default function TasksScreen() {
         }
 
       } else if (userRole === 'SALES') {
-        // 1. 加载销售统计
-        const [myCustomersRes, needFollowupRes, allOrdersRes] = await Promise.all([
+        const [myCustomersRes, allOrdersRes] = await Promise.all([
           customerApi.list({ poolType: 'PRIVATE' }),
-          customerApi.list({ poolType: 'PRIVATE', needFollowup: 'true' }),
           orderApi.list({}),
         ]);
-        const myCustomers = (myCustomersRes.data || []).length;
-        const pendingOrdersList = (allOrdersRes.data || []).filter((o: any) => o.order_status === 'PENDING_INBOUND');
-        const unpaidOrdersList = (allOrdersRes.data || []).filter((o: any) => o.payment_status === 'UNPAID' || o.payment_status === 'PARTIAL');
-        const now = new Date();
-        const monthlyNew = (myCustomersRes.data || []).filter((c: any) => {
-          if (!c.createdAt) return false;
-          const d = new Date(c.createdAt);
-          return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-        }).length;
-        setSalesStats({
-          myCustomers,
-          pendingOrders: pendingOrdersList.length,
-          unpaidOrders: unpaidOrdersList.length,
-          monthlyNew,
-        });
+        const myCustomers: any[] = myCustomersRes.data || [];
+        const allOrders: any[] = allOrdersRes.data || [];
 
-        // 2. 逐条待办卡片（不显示汇总统计，直接展示具体任务）
-        // 待跟进客户：逐个展示
-        const needFollowupList = (needFollowupRes.data || []);
-        for (const c of needFollowupList.slice(0, 5)) {
-          items.push({
-            id: `sales-followup-${c.id}`, type: 'sales-customer', icon: '👤',
-            title: '客户待跟进', subtitle: `${c.name || c.customerName} · ${c.shortCode || ''}`,
-            detail: `${c.country || '-'} · ${c.contact?.phone || c.contactPhone || '-'}`,
-            status: c.totalOrders === 0 ? '未下单' : `${c.daysSinceOrder || 0}天未复购`, statusColor: colors.danger,
-            actions: [{ label: '去跟进', color: colors.primary, route: '/task/customer-detail', params: { id: c.id } }],
-            borderColor: colors.taskInbound,
-          });
-        }
-
-        // 待入库订单:最多展示 5 单
-        for (const o of pendingOrdersList.slice(0, 5)) {
-          items.push({
-            id: `sales-pending-${o.id}`, type: 'sales-pending', icon: '📦',
-            title: '订单待入库', subtitle: `${o.order_no} · ${o.customer_name}`,
-            detail: `路线 ${o.route_code || '-'} · ${o.total_declared_pieces || 0}件 ${Number(o.total_declared_weight_kg || 0).toFixed(1)}kg`,
-            status: '待入库', statusColor: colors.warning,
-            actions: [{ label: '查看详情', color: colors.primary, route: '/task/order-detail', params: { id: o.id } }],
-            borderColor: colors.taskInbound,
-          });
-        }
-        // 待收款:最多展示 5 单
-        for (const o of unpaidOrdersList.slice(0, 5)) {
+        // ── 任务1：未收款催收
+        // 条件：订单已到达或已签收，但付款状态仍为 UNPAID / PARTIAL
+        // 这才是销售真正需要行动的——货已到客户手里，钱还没收
+        const urgentUnpaid = allOrders.filter((o: any) =>
+          ['ARRIVED', 'DELIVERED'].includes(o.order_status) &&
+          ['UNPAID', 'PARTIAL'].includes(o.payment_status)
+        );
+        for (const o of urgentUnpaid.slice(0, 10)) {
           const amt = Number(o.total_receivable_amount || o.actual_freight || o.estimated_freight || 0);
+          const isArrived = o.order_status === 'ARRIVED';
           items.push({
-            id: `sales-unpaid-${o.id}`, type: 'sales-unpaid', icon: '💳',
-            title: '订单未收款', subtitle: `${o.order_no} · ${o.customer_name}`,
-            detail: `应收 ¥${amt.toFixed(2)} · ${o.payment_status === 'PARTIAL' ? '部分已付' : '未付款'}`,
-            status: o.payment_status === 'PARTIAL' ? '部分已付' : '未付款', statusColor: colors.danger,
-            actions: [{ label: '催收', color: colors.danger, route: '/task/order-detail', params: { id: o.id } }],
+            id: `sales-unpaid-${o.id}`, type: 'sales-unpaid', icon: '💰',
+            title: '货到未收款',
+            subtitle: `${o.order_no} · ${o.customer_name}`,
+            detail: `应收 ¥${amt > 0 ? amt.toFixed(2) : '待确认'} · ${isArrived ? '已到达' : '已签收'} · ${o.payment_status === 'PARTIAL' ? '部分已付' : '未付款'}`,
+            status: o.payment_status === 'PARTIAL' ? '部分已付' : '未付款',
+            statusColor: colors.danger,
+            actions: [{ label: '去催收', color: colors.danger, route: '/task/order-detail', params: { id: o.id } }],
             borderColor: colors.taskOrphan,
           });
         }
-        // 本月新增客户:独立卡片
-        const monthlyCustomers = (myCustomersRes.data || []).filter((c: any) => {
-          if (!c.createdAt) return false;
-          const d = new Date(c.createdAt);
-          return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-        }).slice(0, 5);
-        for (const c of monthlyCustomers) {
-          items.push({
-            id: `sales-new-${c.id}`, type: 'sales-new', icon: '🆕',
-            title: '新客户首单跟进', subtitle: `${c.customerName || c.name} · ${c.customerCode || c.shortCode || ''}`,
-            detail: `${c.country || '-'} · ${c.contactPhone || c.contact?.phone || '-'}`,
-            status: '本月新增', statusColor: colors.success,
-            actions: [{ label: '去处理', color: colors.success, route: '/task/customer-detail', params: { id: c.id } }],
-            borderColor: colors.taskInbound,
-          });
-        }
 
-        // 3. 运输进度（preview 卡片）— 只显示自己客户的JOB
-        const allJobs = await jobApi.list();
-        const myCustomerNames = new Set((myCustomersRes.data || []).map((c: any) => c.customerName));
-        // 简化：所有进行中 JOB 都算（实际应通过 job-order 关联表过滤）
-        for (const j of (allJobs.data || []).filter((j: any) => !['COMPLETED', 'CANCELLED'].includes(j.job_status)).slice(0, 5)) {
-          const nodeLabel = j.current_node || j.job_status;
+        // ── 任务2：新客户超 14 天未下单
+        // 条件：客户注册超过 14 天，totalOrders === 0
+        const now = Date.now();
+        const DAYS_14 = 14 * 86400000;
+        const newNoOrder = myCustomers.filter((c: any) => {
+          if ((c.totalOrders || 0) > 0) return false;
+          const created = c.createdAt ? new Date(c.createdAt).getTime() : 0;
+          return created > 0 && (now - created) > DAYS_14;
+        });
+        for (const c of newNoOrder.slice(0, 10)) {
+          const daysSince = c.createdAt
+            ? Math.floor((now - new Date(c.createdAt).getTime()) / 86400000)
+            : 0;
           items.push({
-            id: `job-${j.id}`, type: 'preview', icon: '🚢',
-            title: '运输进度', subtitle: `${j.job_no} · ${j.route_code || ''}`,
-            detail: `${j.carrier_name || '-'} · ${j.container_no || '-'}\n当前: ${nodeLabel}`,
-            status: j.etd ? `ETD ${j.etd.substring(5)}` : '', statusColor: colors.info,
-            actions: [
-              { label: '详情', color: colors.primary, route: '/task/order' },
-              { label: '分享', color: colors.textSecondary },
-            ],
-            borderColor: colors.taskPreview,
+            id: `sales-noorder-${c.id}`, type: 'sales-customer', icon: '👤',
+            title: '新客户未下单',
+            subtitle: `${c.customerName || c.name} · ${c.customerCode || c.shortCode || ''}`,
+            detail: `${c.country || '-'} · ${c.contactPhone || c.contact?.phone || '-'}`,
+            status: `已${daysSince}天`,
+            statusColor: daysSince > 30 ? colors.danger : colors.warning,
+            actions: [{ label: '去跟进', color: colors.primary, route: '/task/customer-detail', params: { id: c.id } }],
+            borderColor: colors.taskInbound,
           });
         }
       }
@@ -414,17 +372,15 @@ export default function TasksScreen() {
     : role === 'WAREHOUSE_US'
     ? ['全部', '入库', 'DPN', '配送', '自提']
     : role === 'SALES'
-    ? ['全部', '客户跟进', '待入库', '待收款', '新客户']
+    ? ['全部', '待收款', '新客户']
     : ['全部'];
 
   const tabTypeMap: Record<string, string[]> = {
     '入库': ['inbound'], '装箱': ['packing', 'execute'], '调拨': ['transfer'],
     'DPN': ['dispatch'], '配送': ['delivery'], '自提': ['pickup'],
     '无单': ['orphan'],
-    '客户跟进': ['sales-customer'],
-    '待入库': ['sales-pending'],
     '待收款': ['sales-unpaid'],
-    '新客户': ['sales-new'],
+    '新客户': ['sales-customer'],
   };
 
   const filteredTasks = activeTab === '全部' ? actionTasks : actionTasks.filter(t => (tabTypeMap[activeTab] || []).includes(t.type));
