@@ -352,12 +352,13 @@ export default function TasksScreen() {
         // ── 运输进度 preview（顶部横向滑动区，不是待办）
         const allJobsRes = await jobApi.list();
         for (const j of (allJobsRes.data || []).filter((j: any) => !['COMPLETED', 'CANCELLED'].includes(j.job_status)).slice(0, 5)) {
-          const nodeLabel = j.current_node || j.job_status;
           items.push({
-            id: `job-${j.id}`, type: 'preview', icon: '🚢',
-            title: '运输进度', subtitle: `${j.job_no} · ${j.route_code || ''}`,
-            detail: `${j.carrier_name || '-'} · ${j.container_no || '-'}\n当前: ${nodeLabel}`,
-            status: j.etd ? `ETD ${j.etd.substring(5)}` : '', statusColor: colors.info,
+            id: `job-${j.id}`, type: 'preview', icon: j.business_line === 'AIR' ? '✈️' : '🚢',
+            title: '运输进度',
+            subtitle: `${j.job_no} · ${j.route_code || ''}`,
+            detail: `${j.carrier_name || '-'} · ${j.business_line === 'AIR' ? (j.container_no || '集装号待分配') : (j.container_no || '箱号待分配')}\n${j.job_status}\n${j.business_line || 'SEA'}`,
+            status: j.etd ? `ETD ${j.etd.substring(5)}` : (j.eta ? `ETA ${j.eta.substring(5)}` : ''),
+            statusColor: colors.info,
             actions: [],
             borderColor: colors.taskPreview,
           });
@@ -429,10 +430,26 @@ export default function TasksScreen() {
             // 销售：大卡片竖向排列
             <View style={styles.previewListWrap}>
               {previewTasks.map((task) => {
-                // 解析 detail 里的节点信息
                 const lines = task.detail.split('\n');
                 const shipLine = lines[0] || '';
-                const nodeLine = lines[1] || '';
+                const jobStatus = lines[1] || '';
+                const bizLine = lines[2] || 'SEA';
+                const isAir = bizLine === 'AIR';
+
+                // Job 节点：装箱/集货 → 出口报关 → 已发运 → 运输中 → 清关 → 已到达
+                const SEA_NODES = ['装箱中', '出口报关', '已发运', '运输中', '清关', '已到达'];
+                const AIR_NODES = ['集货中', '出口报关', '已发运', '运输中', '清关', '已到达'];
+                const nodes = isAir ? AIR_NODES : SEA_NODES;
+                const statusStepMap: Record<string, number> = {
+                  'LOADING': 0,
+                  'CUSTOMS_EXPORT': 1,
+                  'DEPARTED': 2,
+                  'IN_TRANSIT': 3,
+                  'CLEARED': 4,
+                  'ARRIVED': 5,
+                };
+                const currentStep = statusStepMap[jobStatus] ?? 0;
+
                 return (
                   <Pressable key={task.id} style={styles.previewBigCard}>
                     <View style={styles.previewBigTop}>
@@ -440,35 +457,32 @@ export default function TasksScreen() {
                         <Text style={styles.previewBigNo}>{task.subtitle}</Text>
                         <Text style={styles.previewBigShip}>{shipLine}</Text>
                       </View>
-                      <View style={[styles.previewBigBadge, { backgroundColor: task.statusColor + '20' }]}>
-                        <Text style={[styles.previewBigBadgeText, { color: task.statusColor }]}>{task.status}</Text>
-                      </View>
+                      {task.status ? (
+                        <View style={[styles.previewBigBadge, { backgroundColor: task.statusColor + '20' }]}>
+                          <Text style={[styles.previewBigBadgeText, { color: task.statusColor }]}>{task.status}</Text>
+                        </View>
+                      ) : null}
                     </View>
                     {/* 进度节点条 */}
                     <View style={styles.previewNodeRow}>
-                      {['起运', '出口', '在途', '到港', '派送', '签收'].map((label, i) => {
-                        const nodeText = nodeLine.replace('当前: ', '');
-                        const nodeMap: Record<string, number> = {
-                          'LOADING': 0, 'CUSTOMS_EXPORT': 1, 'DEPARTED': 2, 'IN_TRANSIT': 2,
-                          'ARRIVED': 3, 'PENDING_DELIVERY': 4, 'DELIVERED': 5,
-                        };
-                        const currentStep = nodeMap[nodeText] ?? -1;
+                      {nodes.map((label, i) => {
                         const done = i <= currentStep;
                         const active = i === currentStep;
                         return (
                           <View key={i} style={styles.previewNodeItem}>
                             <View style={[
                               styles.previewNodeDot,
-                              done && styles.previewNodeDotDone,
+                              done && !active && styles.previewNodeDotDone,
                               active && styles.previewNodeDotActive,
                             ]} />
-                            {i < 5 && <View style={[styles.previewNodeLine, done && i < currentStep && styles.previewNodeLineDone]} />}
+                            {i < nodes.length - 1 && (
+                              <View style={[styles.previewNodeLine, i < currentStep && styles.previewNodeLineDone]} />
+                            )}
                             <Text style={[styles.previewNodeLabel, done && styles.previewNodeLabelDone]}>{label}</Text>
                           </View>
                         );
                       })}
                     </View>
-                    <Text style={styles.previewBigNode}>{nodeLine}</Text>
                   </Pressable>
                 );
               })}
@@ -667,7 +681,6 @@ const styles = StyleSheet.create({
   previewNodeLineDone: { backgroundColor: colors.primary },
   previewNodeLabel: { fontSize: 9, color: colors.textTertiary, textAlign: 'center' },
   previewNodeLabelDone: { color: colors.primary, fontWeight: '600' },
-  previewBigNode: { fontSize: font.xs, color: colors.textSecondary },
   statsRow: { flexDirection: 'row', gap: spacing.sm },
   statCard: { flex: 1, backgroundColor: colors.bg, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center' },
   statNum: { fontSize: font.xl, fontWeight: '700' },
