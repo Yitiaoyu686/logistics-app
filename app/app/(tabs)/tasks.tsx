@@ -419,21 +419,72 @@ export default function TasksScreen() {
         </View>
       </View>
 
-      {/* Preview Cards — 运营预告横向滑动 */}
+      {/* Preview Cards */}
       {previewTasks.length > 0 && (
         <View style={styles.previewSection}>
           <View style={styles.previewHeader}>
             <Text style={styles.previewTitle}>{previewLabel} ({previewTasks.length})</Text>
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.previewScroll}>
-            {previewTasks.map((task) => (
-              <Pressable key={task.id} style={styles.previewCard}>
-                <Text style={styles.previewCardTitle}>{task.subtitle}</Text>
-                <Text style={styles.previewCardDetail} numberOfLines={2}>{task.detail}</Text>
-                <Text style={[styles.previewCardEta, { color: task.statusColor }]}>{task.status}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
+          {role === 'SALES' ? (
+            // 销售：大卡片竖向排列
+            <View style={styles.previewListWrap}>
+              {previewTasks.map((task) => {
+                // 解析 detail 里的节点信息
+                const lines = task.detail.split('\n');
+                const shipLine = lines[0] || '';
+                const nodeLine = lines[1] || '';
+                return (
+                  <Pressable key={task.id} style={styles.previewBigCard}>
+                    <View style={styles.previewBigTop}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.previewBigNo}>{task.subtitle}</Text>
+                        <Text style={styles.previewBigShip}>{shipLine}</Text>
+                      </View>
+                      <View style={[styles.previewBigBadge, { backgroundColor: task.statusColor + '20' }]}>
+                        <Text style={[styles.previewBigBadgeText, { color: task.statusColor }]}>{task.status}</Text>
+                      </View>
+                    </View>
+                    {/* 进度节点条 */}
+                    <View style={styles.previewNodeRow}>
+                      {['起运', '出口', '在途', '到港', '派送', '签收'].map((label, i) => {
+                        const nodeText = nodeLine.replace('当前: ', '');
+                        const nodeMap: Record<string, number> = {
+                          'LOADING': 0, 'CUSTOMS_EXPORT': 1, 'DEPARTED': 2, 'IN_TRANSIT': 2,
+                          'ARRIVED': 3, 'PENDING_DELIVERY': 4, 'DELIVERED': 5,
+                        };
+                        const currentStep = nodeMap[nodeText] ?? -1;
+                        const done = i <= currentStep;
+                        const active = i === currentStep;
+                        return (
+                          <View key={i} style={styles.previewNodeItem}>
+                            <View style={[
+                              styles.previewNodeDot,
+                              done && styles.previewNodeDotDone,
+                              active && styles.previewNodeDotActive,
+                            ]} />
+                            {i < 5 && <View style={[styles.previewNodeLine, done && i < currentStep && styles.previewNodeLineDone]} />}
+                            <Text style={[styles.previewNodeLabel, done && styles.previewNodeLabelDone]}>{label}</Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                    <Text style={styles.previewBigNode}>{nodeLine}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : (
+            // 仓库：原来的小横向卡片
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.previewScroll}>
+              {previewTasks.map((task) => (
+                <Pressable key={task.id} style={styles.previewCard}>
+                  <Text style={styles.previewCardTitle}>{task.subtitle}</Text>
+                  <Text style={styles.previewCardDetail} numberOfLines={2}>{task.detail}</Text>
+                  <Text style={[styles.previewCardEta, { color: task.statusColor }]}>{task.status}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
         </View>
       )}
 
@@ -588,15 +639,35 @@ const styles = StyleSheet.create({
   quickAction: { flex: 1, alignItems: 'center', paddingVertical: spacing.md, backgroundColor: colors.bg, borderRadius: radius.md, gap: 4 },
   quickActionIcon: { fontSize: 24 },
   quickActionLabel: { fontSize: font.xs, color: colors.text, fontWeight: '500' },
-  // Preview section (运营预告横向滑动)
+  // Preview section
   previewSection: { backgroundColor: colors.card, paddingTop: spacing.md, paddingBottom: spacing.md, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
   previewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.lg, marginBottom: spacing.sm },
   previewTitle: { fontSize: font.sm, fontWeight: '600', color: colors.text },
+  // 仓库小卡片（横向滑动）
   previewScroll: { paddingHorizontal: spacing.md, gap: spacing.sm },
   previewCard: { width: 180, backgroundColor: colors.primaryLight, borderRadius: radius.md, padding: spacing.md, borderLeftWidth: 3, borderLeftColor: colors.taskPreview },
   previewCardTitle: { fontSize: font.sm, fontWeight: '600', color: colors.text, fontFamily: font.mono, marginBottom: 4 },
   previewCardDetail: { fontSize: font.xs, color: colors.textSecondary, lineHeight: 16, marginBottom: 6 },
   previewCardEta: { fontSize: font.xs, fontWeight: '600' },
+  // 销售大卡片（竖向全宽）
+  previewListWrap: { paddingHorizontal: spacing.md, gap: spacing.sm },
+  previewBigCard: { backgroundColor: colors.bg, borderRadius: radius.lg, padding: spacing.md, borderWidth: 1, borderColor: colors.borderLight, borderLeftWidth: 3, borderLeftColor: colors.taskPreview },
+  previewBigTop: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: spacing.md },
+  previewBigNo: { fontSize: font.sm, fontWeight: '700', color: colors.text, fontFamily: font.mono, marginBottom: 2 },
+  previewBigShip: { fontSize: font.xs, color: colors.textSecondary },
+  previewBigBadge: { paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.sm },
+  previewBigBadgeText: { fontSize: font.xs, fontWeight: '600' },
+  // 进度节点条
+  previewNodeRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: spacing.sm },
+  previewNodeItem: { flex: 1, alignItems: 'center', position: 'relative' },
+  previewNodeDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.borderLight, borderWidth: 1.5, borderColor: colors.border, marginBottom: 4 },
+  previewNodeDotDone: { backgroundColor: colors.primary, borderColor: colors.primary },
+  previewNodeDotActive: { backgroundColor: '#fff', borderColor: colors.primary, borderWidth: 2.5 },
+  previewNodeLine: { position: 'absolute', top: 4, left: '50%', right: '-50%', height: 1.5, backgroundColor: colors.borderLight },
+  previewNodeLineDone: { backgroundColor: colors.primary },
+  previewNodeLabel: { fontSize: 9, color: colors.textTertiary, textAlign: 'center' },
+  previewNodeLabelDone: { color: colors.primary, fontWeight: '600' },
+  previewBigNode: { fontSize: font.xs, color: colors.textSecondary },
   statsRow: { flexDirection: 'row', gap: spacing.sm },
   statCard: { flex: 1, backgroundColor: colors.bg, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center' },
   statNum: { fontSize: font.xl, fontWeight: '700' },
