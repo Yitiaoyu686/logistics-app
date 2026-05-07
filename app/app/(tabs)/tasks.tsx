@@ -352,13 +352,33 @@ export default function TasksScreen() {
         // ── 运输进度 preview（顶部横向滑动区，不是待办）
         const allJobsRes = await jobApi.list();
         for (const j of (allJobsRes.data || []).filter((j: any) => !['COMPLETED', 'CANCELLED'].includes(j.job_status)).slice(0, 5)) {
+          const isAir = j.business_line === 'AIR';
+          const statusLabelMap: Record<string, string> = {
+            LOADING: isAir ? '集货中' : '装箱中',
+            CUSTOMS_EXPORT: '出口报关',
+            DEPARTED: '已发运',
+            IN_TRANSIT: '运输中',
+            CLEARED: '清关中',
+            ARRIVED: '已到达',
+          };
           items.push({
-            id: `job-${j.id}`, type: 'preview', icon: j.business_line === 'AIR' ? '✈️' : '🚢',
+            id: `job-${j.id}`, type: 'preview', icon: isAir ? '✈️' : '🚢',
             title: '运输进度',
-            subtitle: `${j.job_no} · ${j.route_code || ''}`,
-            detail: `${j.carrier_name || '-'} · ${j.business_line === 'AIR' ? (j.container_no || '集装号待分配') : (j.container_no || '箱号待分配')}\n${j.job_status}\n${j.business_line || 'SEA'}`,
-            status: j.etd ? `ETD ${j.etd.substring(5)}` : (j.eta ? `ETA ${j.eta.substring(5)}` : ''),
-            statusColor: colors.info,
+            subtitle: `${j.origin_port || '-'} → ${j.dest_port || '-'}`,
+            detail: [
+              j.job_no,
+              j.carrier_name || '-',
+              j.container_no || (isAir ? '集装号待分配' : '箱号待分配'),
+              j.container_type || '',
+              String(j.total_pieces || 0),
+              String(j.total_weight_kg || 0),
+              j.etd || '',
+              j.eta || '',
+              j.service_type || '',
+              j.business_line || 'SEA',
+            ].join('|'),
+            status: statusLabelMap[j.job_status] || j.job_status,
+            statusColor: j.job_status === 'ARRIVED' ? colors.success : j.job_status === 'IN_TRANSIT' || j.job_status === 'DEPARTED' ? colors.primary : colors.warning,
             actions: [],
             borderColor: colors.taskPreview,
           });
@@ -427,62 +447,54 @@ export default function TasksScreen() {
             <Text style={styles.previewTitle}>{previewLabel} ({previewTasks.length})</Text>
           </View>
           {role === 'SALES' ? (
-            // 销售：大卡片竖向排列
             <View style={styles.previewListWrap}>
               {previewTasks.map((task) => {
-                const lines = task.detail.split('\n');
-                const shipLine = lines[0] || '';
-                const jobStatus = lines[1] || '';
-                const bizLine = lines[2] || 'SEA';
+                const parts = task.detail.split('|');
+                const [jobNo, carrier, containerNo, containerType, pieces, weight, etd, eta, serviceType, bizLine] = parts;
                 const isAir = bizLine === 'AIR';
-
-                // Job 节点：装箱/集货 → 出口报关 → 已发运 → 运输中 → 清关 → 已到达
-                const SEA_NODES = ['装箱中', '出口报关', '已发运', '运输中', '清关', '已到达'];
-                const AIR_NODES = ['集货中', '出口报关', '已发运', '运输中', '清关', '已到达'];
-                const nodes = isAir ? AIR_NODES : SEA_NODES;
-                const statusStepMap: Record<string, number> = {
-                  'LOADING': 0,
-                  'CUSTOMS_EXPORT': 1,
-                  'DEPARTED': 2,
-                  'IN_TRANSIT': 3,
-                  'CLEARED': 4,
-                  'ARRIVED': 5,
-                };
-                const currentStep = statusStepMap[jobStatus] ?? 0;
-
+                const isExpress = serviceType === 'EXPRESS';
+                const etdShort = etd ? etd.substring(5).replace('-', '/') : '-';
+                const etaShort = eta ? eta.substring(5).replace('-', '/') : '-';
                 return (
                   <Pressable key={task.id} style={styles.previewBigCard}>
+                    {/* 顶部：路线大字 + 状态 */}
                     <View style={styles.previewBigTop}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.previewBigNo}>{task.subtitle}</Text>
-                        <Text style={styles.previewBigShip}>{shipLine}</Text>
-                      </View>
-                      {task.status ? (
-                        <View style={[styles.previewBigBadge, { backgroundColor: task.statusColor + '20' }]}>
-                          <Text style={[styles.previewBigBadgeText, { color: task.statusColor }]}>{task.status}</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                    {/* 进度节点条 */}
-                    <View style={styles.previewNodeRow}>
-                      {nodes.map((label, i) => {
-                        const done = i <= currentStep;
-                        const active = i === currentStep;
-                        return (
-                          <View key={i} style={styles.previewNodeItem}>
-                            <View style={[
-                              styles.previewNodeDot,
-                              done && !active && styles.previewNodeDotDone,
-                              active && styles.previewNodeDotActive,
-                            ]} />
-                            {i < nodes.length - 1 && (
-                              <View style={[styles.previewNodeLine, i < currentStep && styles.previewNodeLineDone]} />
-                            )}
-                            <Text style={[styles.previewNodeLabel, done && styles.previewNodeLabelDone]}>{label}</Text>
+                      <View style={styles.previewRouteWrap}>
+                        <Text style={styles.previewRouteIcon}>{task.icon}</Text>
+                        <Text style={styles.previewRouteText}>{task.subtitle}</Text>
+                        {isExpress && (
+                          <View style={styles.previewExpressBadge}>
+                            <Text style={styles.previewExpressText}>特快</Text>
                           </View>
-                        );
-                      })}
+                        )}
+                      </View>
+                      <View style={[styles.previewBigBadge, { backgroundColor: task.statusColor + '18' }]}>
+                        <Text style={[styles.previewBigBadgeText, { color: task.statusColor }]}>{task.status}</Text>
+                      </View>
                     </View>
+                    {/* ETD / ETA */}
+                    <View style={styles.previewDateRow}>
+                      <View style={styles.previewDateItem}>
+                        <Text style={styles.previewDateLabel}>ETD</Text>
+                        <Text style={styles.previewDateValue}>{etdShort}</Text>
+                      </View>
+                      <View style={styles.previewDateArrow}>
+                        <Text style={styles.previewDateArrowText}>→</Text>
+                      </View>
+                      <View style={styles.previewDateItem}>
+                        <Text style={styles.previewDateLabel}>ETA</Text>
+                        <Text style={styles.previewDateValue}>{etaShort}</Text>
+                      </View>
+                    </View>
+                    {/* 底部：承运商 / 箱号 / 件重 */}
+                    <View style={styles.previewBigMeta}>
+                      <Text style={styles.previewBigMetaText}>{carrier}</Text>
+                      <Text style={styles.previewBigMetaDot}>·</Text>
+                      <Text style={styles.previewBigMetaText}>{isAir ? containerNo : `${containerNo} ${containerType}`}</Text>
+                      <Text style={styles.previewBigMetaDot}>·</Text>
+                      <Text style={styles.previewBigMetaText}>{pieces}件 {weight}kg</Text>
+                    </View>
+                    <Text style={styles.previewBigJobNo}>{jobNo}</Text>
                   </Pressable>
                 );
               })}
@@ -666,21 +678,24 @@ const styles = StyleSheet.create({
   // 销售大卡片（竖向全宽）
   previewListWrap: { paddingHorizontal: spacing.md, gap: spacing.sm },
   previewBigCard: { backgroundColor: colors.bg, borderRadius: radius.lg, padding: spacing.md, borderWidth: 1, borderColor: colors.borderLight, borderLeftWidth: 3, borderLeftColor: colors.taskPreview },
-  previewBigTop: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: spacing.md },
-  previewBigNo: { fontSize: font.sm, fontWeight: '700', color: colors.text, fontFamily: font.mono, marginBottom: 2 },
-  previewBigShip: { fontSize: font.xs, color: colors.textSecondary },
+  previewBigTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
+  previewRouteWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 },
+  previewRouteIcon: { fontSize: 20 },
+  previewRouteText: { fontSize: font.xxl, fontWeight: '800', color: colors.text, letterSpacing: 0.5 },
+  previewExpressBadge: { backgroundColor: colors.warningLight, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.sm },
+  previewExpressText: { fontSize: font.xs, color: colors.warning, fontWeight: '700' },
   previewBigBadge: { paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.sm },
   previewBigBadgeText: { fontSize: font.xs, fontWeight: '600' },
-  // 进度节点条
-  previewNodeRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: spacing.sm },
-  previewNodeItem: { flex: 1, alignItems: 'center', position: 'relative' },
-  previewNodeDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.borderLight, borderWidth: 1.5, borderColor: colors.border, marginBottom: 4 },
-  previewNodeDotDone: { backgroundColor: colors.primary, borderColor: colors.primary },
-  previewNodeDotActive: { backgroundColor: '#fff', borderColor: colors.primary, borderWidth: 2.5 },
-  previewNodeLine: { position: 'absolute', top: 4, left: '50%', right: '-50%', height: 1.5, backgroundColor: colors.borderLight },
-  previewNodeLineDone: { backgroundColor: colors.primary },
-  previewNodeLabel: { fontSize: 9, color: colors.textTertiary, textAlign: 'center' },
-  previewNodeLabelDone: { color: colors.primary, fontWeight: '600' },
+  previewDateRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm },
+  previewDateItem: { flex: 1, alignItems: 'center' },
+  previewDateLabel: { fontSize: font.xs, color: colors.textTertiary, marginBottom: 2 },
+  previewDateValue: { fontSize: font.lg, fontWeight: '700', color: colors.text, fontFamily: font.mono },
+  previewDateArrow: { paddingHorizontal: spacing.md },
+  previewDateArrowText: { fontSize: font.lg, color: colors.textTertiary },
+  previewBigMeta: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4, marginBottom: 4 },
+  previewBigMetaText: { fontSize: font.xs, color: colors.textSecondary },
+  previewBigMetaDot: { fontSize: font.xs, color: colors.textTertiary },
+  previewBigJobNo: { fontSize: font.xs, color: colors.textTertiary, fontFamily: font.mono },
   statsRow: { flexDirection: 'row', gap: spacing.sm },
   statCard: { flex: 1, backgroundColor: colors.bg, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center' },
   statNum: { fontSize: font.xl, fontWeight: '700' },
