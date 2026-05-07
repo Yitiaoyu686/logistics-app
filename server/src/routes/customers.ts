@@ -7,7 +7,7 @@ const router = Router();
 // GET /api/v2/oms/customers
 router.get('/', (req: Request, res: Response) => {
   const db = getDb();
-  const { keyword, status, poolType } = req.query;
+  const { keyword, status, poolType, needFollowup } = req.query;
   let sql = 'SELECT * FROM crm_customer WHERE 1=1';
   const params: any[] = [];
 
@@ -21,7 +21,52 @@ router.get('/', (req: Request, res: Response) => {
 
   sql += ' ORDER BY created_at DESC';
   const rows = db.prepare(sql).all(...params) as any[];
-  res.json({ data: rows.map((r) => mapCustomerRow(db, r)) });
+
+  // 增强：添加跟进统计
+  const customers = rows.map((r) => {
+    const mapped = mapCustomerRow(db, r);
+
+    // 查询该客户的订单统计
+    const orderStats = db.prepare(`
+      SELECT
+        COUNT(*) as total_orders,
+        MAX(created_at) as last_order_date,
+        SUM(CASE WHEN order_status = 'PENDING_INBOUND' THEN 1 ELSE 0 END) as pending_orders,
+        SUM(CASE WHEN payment_status IN ('UNPAID', 'PARTIAL') THEN 1 ELSE 0 END) as unpaid_orders
+      FROM oms_order
+      WHERE customer_id = ?
+    `).get(r.id) as any;
+
+    const totalOrders = orderStats?.total_orders || 0;
+    const lastOrderDate = orderStats?.last_order_date;
+    const daysSinceOrder = lastOrderDate
+      ? Math.floor((Date.now() - new Date(lastOrderDate).getTime()) / 86400000)
+      : null;
+
+    // 判断是否需要跟进
+    const needsFollowup =
+      (totalOrders === 0) || // 新客户未下单
+      (totalOrders > 0 && daysSinceOrder && daysSinceOrder > 30) || // 老客户超30天未下单
+      (orderStats?.pending_orders > 0) || // 有待入库订单
+      (orderStats?.unpaid_orders > 0); // 有未付款订单
+
+    return {
+      ...mapped,
+      totalOrders,
+      lastOrderDate,
+      daysSinceOrder,
+      pendingOrders: orderStats?.pending_orders || 0,
+      unpaidOrders: orderStats?.unpaid_orders || 0,
+      needsFollowup,
+    };
+  });
+
+  // 如果请求需要跟进的客户，则过滤
+  const result = needFollowup === 'true'
+    ? customers.filter(c => c.needsFollowup)
+    : customers;
+
+  res.json({ data: result });
 });
 
 // GET /api/v2/oms/customers/:id

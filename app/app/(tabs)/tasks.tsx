@@ -293,8 +293,9 @@ export default function TasksScreen() {
 
       } else if (userRole === 'SALES') {
         // 1. 加载销售统计
-        const [myCustomersRes, allOrdersRes] = await Promise.all([
+        const [myCustomersRes, needFollowupRes, allOrdersRes] = await Promise.all([
           customerApi.list({ poolType: 'PRIVATE' }),
+          customerApi.list({ poolType: 'PRIVATE', needFollowup: 'true' }),
           orderApi.list({}),
         ]);
         const myCustomers = (myCustomersRes.data || []).length;
@@ -313,58 +314,28 @@ export default function TasksScreen() {
           monthlyNew,
         });
 
-        // 2. 待办任务卡片 - 分类型方便按 tab 过滤
-        items.push({
-          id: 'todo-customer-followup', type: 'sales-customer', icon: '👥',
-          title: '我的客户待跟进', subtitle: `${myCustomers} 个客户`,
-          detail: '查看您负责的所有客户，点击拨打 / 短信跟进',
-          status: `${myCustomers} 个`, statusColor: colors.primary,
-          actions: [{ label: '去处理', color: colors.primary, route: '/task/customer' }],
-          borderColor: colors.taskInbound,
-        });
-
-        if (pendingOrdersList.length > 0) {
+        // 2. 逐条待办卡片（不显示汇总统计，直接展示具体任务）
+        // 待跟进客户：逐个展示
+        const needFollowupList = (needFollowupRes.data || []);
+        for (const c of needFollowupList.slice(0, 5)) {
           items.push({
-            id: 'todo-pending-orders', type: 'sales-pending', icon: '📋',
-            title: '未完成订单', subtitle: `${pendingOrdersList.length} 单待入库`,
-            detail: '客户已下单但货物未到仓，跟进客户尽快发货',
-            status: `${pendingOrdersList.length} 单`, statusColor: colors.warning,
-            actions: [{ label: '去处理', color: colors.primary, route: '/task/order' }],
+            id: `sales-followup-${c.id}`, type: 'sales-customer', icon: '👤',
+            title: '客户待跟进', subtitle: `${c.name || c.customerName} · ${c.shortCode || ''}`,
+            detail: `${c.country || '-'} · ${c.contact?.phone || c.contactPhone || '-'}`,
+            status: c.totalOrders === 0 ? '未下单' : `${c.daysSinceOrder || 0}天未复购`, statusColor: colors.danger,
+            actions: [{ label: '去跟进', color: colors.primary, route: '/task/customer', params: { openId: c.id } }],
             borderColor: colors.taskInbound,
           });
         }
 
-        if (unpaidOrdersList.length > 0) {
-          items.push({
-            id: 'todo-unpaid', type: 'sales-unpaid', icon: '💰',
-            title: '待收款订单', subtitle: `${unpaidOrdersList.length} 单未结清`,
-            detail: '订单已完成但客户尚未付款，建议提醒催收',
-            status: `${unpaidOrdersList.length} 单`, statusColor: colors.danger,
-            actions: [{ label: '去处理', color: colors.danger, route: '/task/order' }],
-            borderColor: colors.taskOrphan,
-          });
-        }
-
-        if (monthlyNew > 0) {
-          items.push({
-            id: 'todo-monthly-new', type: 'sales-new', icon: '✨',
-            title: '本月新增客户', subtitle: `本月新增 ${monthlyNew} 个`,
-            detail: '关注新客户首单转化',
-            status: `${monthlyNew} 个`, statusColor: colors.success,
-            actions: [{ label: '去处理', color: colors.success, route: '/task/customer' }],
-            borderColor: colors.taskInbound,
-          });
-        }
-
-        // 额外拆细:逐单展开成独立卡片,方便销售按 tab 筛选查看
-        // 待入库订单:最多展示 5 单,点击直达订单详情
+        // 待入库订单:最多展示 5 单
         for (const o of pendingOrdersList.slice(0, 5)) {
           items.push({
             id: `sales-pending-${o.id}`, type: 'sales-pending', icon: '📦',
             title: '订单待入库', subtitle: `${o.order_no} · ${o.customer_name}`,
             detail: `路线 ${o.route_code || '-'} · ${o.total_declared_pieces || 0}件 ${Number(o.total_declared_weight_kg || 0).toFixed(1)}kg`,
             status: '待入库', statusColor: colors.warning,
-            actions: [{ label: '查看详情', color: colors.primary, route: '/task/order' }],
+            actions: [{ label: '查看详情', color: colors.primary, route: '/task/order', params: { openId: o.id } }],
             borderColor: colors.taskInbound,
           });
         }
@@ -376,11 +347,11 @@ export default function TasksScreen() {
             title: '订单未收款', subtitle: `${o.order_no} · ${o.customer_name}`,
             detail: `应收 ¥${amt.toFixed(2)} · ${o.payment_status === 'PARTIAL' ? '部分已付' : '未付款'}`,
             status: o.payment_status === 'PARTIAL' ? '部分已付' : '未付款', statusColor: colors.danger,
-            actions: [{ label: '催收', color: colors.danger, route: '/task/order' }],
+            actions: [{ label: '催收', color: colors.danger, route: '/task/order', params: { openId: o.id } }],
             borderColor: colors.taskOrphan,
           });
         }
-        // 本月新增客户:独立卡片(不再堆统计行)
+        // 本月新增客户:独立卡片
         const monthlyCustomers = (myCustomersRes.data || []).filter((c: any) => {
           if (!c.createdAt) return false;
           const d = new Date(c.createdAt);
@@ -389,10 +360,10 @@ export default function TasksScreen() {
         for (const c of monthlyCustomers) {
           items.push({
             id: `sales-new-${c.id}`, type: 'sales-new', icon: '🆕',
-            title: '新客户首单跟进', subtitle: `${c.customerName || c.customer_name} · ${c.customerCode || c.shortCode || ''}`,
+            title: '新客户首单跟进', subtitle: `${c.customerName || c.name} · ${c.customerCode || c.shortCode || ''}`,
             detail: `${c.country || '-'} · ${c.contactPhone || c.contact?.phone || '-'}`,
             status: '本月新增', statusColor: colors.success,
-            actions: [{ label: '去处理', color: colors.success, route: '/task/customer' }],
+            actions: [{ label: '去处理', color: colors.success, route: '/task/customer', params: { openId: c.id } }],
             borderColor: colors.taskInbound,
           });
         }
@@ -400,11 +371,6 @@ export default function TasksScreen() {
         // 3. 运输进度（preview 卡片）— 只显示自己客户的JOB
         const allJobs = await jobApi.list();
         const myCustomerNames = new Set((myCustomersRes.data || []).map((c: any) => c.customerName));
-        const myOrderIds = new Set(
-          (allOrdersRes.data || [])
-            .filter((o: any) => myCustomerNames.has(o.customer_name))
-            .map((o: any) => o.id)
-        );
         // 简化：所有进行中 JOB 都算（实际应通过 job-order 关联表过滤）
         for (const j of (allJobs.data || []).filter((j: any) => !['COMPLETED', 'CANCELLED'].includes(j.job_status)).slice(0, 5)) {
           const nodeLabel = j.current_node || j.job_status;

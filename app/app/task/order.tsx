@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList,
-  SafeAreaView, ActivityIndicator, Modal, ScrollView, Alert,
+  SafeAreaView, ActivityIndicator, ScrollView, Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,74 +26,6 @@ interface OrderItem {
   sub_order_count: number;
 }
 
-interface SubOrder {
-  id: string;
-  sub_order_no: string;
-  sub_status: string;
-  pieces: number;
-  actual_weight_kg: number;
-  container_no: string | null;
-  job_id: string | null;
-}
-
-interface PackageItem {
-  id: string;
-  express_company: string;
-  tracking_no: string;
-  goods_name: string;
-  pieces: number;
-  declared_weight_kg: number;
-}
-
-interface RelatedJob {
-  id: string;
-  job_no: string;
-  job_status: string;
-  route_code?: string;
-  container_no?: string;
-  etd?: string;
-  eta?: string;
-}
-
-interface RelatedDpn {
-  id: string;
-  dpn_no: string;
-  dpn_status: string;
-  from_site?: string;
-  to_site?: string;
-}
-
-interface OrderDetail extends OrderItem {
-  subOrders: SubOrder[];
-  packages: PackageItem[];
-  fees: any[];
-  remark: string | null;
-  customer_code: string | null;
-  service_type: string | null;
-  export_mode: string | null;
-  payment_method: string | null;
-  currency_code: string | null;
-  sender_name: string | null;
-  sender_phone: string | null;
-  sender_address: string | null;
-  consignee_email: string | null;
-  consignee_address: string | null;
-  consignee_country: string | null;
-  consignee_city: string | null;
-  estimated_freight: number | null;
-  actual_freight: number | null;
-  freight_currency: string | null;
-  relatedJobs?: RelatedJob[];
-  relatedDpns?: RelatedDpn[];
-}
-
-const SERVICE_TYPE_LABEL: Record<string, string> = {
-  EXPRESS: '⚡ 特快', STANDARD: '📦 普快', ECONOMY: '💰 经济',
-};
-const PAYMENT_METHOD_LABEL: Record<string, string> = {
-  PREPAID: '💳 预付', COD: '💰 到付', MONTHLY: '📅 月结',
-};
-
 const STATUS_FILTERS = [
   { value: 'ALL', label: '全部' },
   { value: 'PENDING_INBOUND', label: '待入库' },
@@ -104,32 +36,13 @@ const STATUS_FILTERS = [
 ];
 
 const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
-  PENDING_INBOUND: { label: '待入库', color: colors.warning,        bg: colors.warningLight },
-  INBOUND:         { label: '已入库', color: colors.success,        bg: colors.successLight },
-  DEPARTED:        { label: '已发车', color: colors.info,           bg: colors.infoLight },
-  IN_TRANSIT:      { label: '运输中', color: colors.primary,        bg: colors.primaryLight },
-  ARRIVED:         { label: '已到达', color: colors.taskDelivery,   bg: '#fce7f3' },
-  DELIVERED:       { label: '已签收', color: colors.textSecondary,  bg: colors.borderLight },
+  PENDING_INBOUND: { label: '待入库', color: colors.warning,       bg: colors.warningLight },
+  INBOUND:         { label: '已入库', color: colors.success,       bg: colors.successLight },
+  DEPARTED:        { label: '已发车', color: colors.info,          bg: colors.infoLight },
+  IN_TRANSIT:      { label: '运输中', color: colors.primary,       bg: colors.primaryLight },
+  ARRIVED:         { label: '已到达', color: colors.taskDelivery,  bg: '#fce7f3' },
+  DELIVERED:       { label: '已签收', color: colors.textSecondary, bg: colors.borderLight },
 };
-
-// 物流时间线节点（按规格 10 节点）
-const TIMELINE_NODES = [
-  { key: 'CREATED',         label: '已下单',   icon: 'document-text-outline' },
-  { key: 'INBOUND',         label: '已入库',   icon: 'archive-outline' },
-  { key: 'PACKED',          label: '已装箱',   icon: 'cube-outline' },
-  { key: 'CUSTOMS_EXPORT',  label: '出口报关', icon: 'reader-outline' },
-  { key: 'DEPARTED',        label: '已发车',   icon: 'car-outline' },
-  { key: 'IN_TRANSIT',      label: '运输中',   icon: 'boat-outline' },
-  { key: 'ARRIVED',         label: '已到港',   icon: 'flag-outline' },
-  { key: 'CUSTOMS_IMPORT',  label: '清关中',   icon: 'shield-checkmark-outline' },
-  { key: 'DELIVERING',      label: '派送中',   icon: 'bicycle-outline' },
-  { key: 'DELIVERED',       label: '已签收',   icon: 'checkmark-circle-outline' },
-];
-
-function getProgressIndex(status: string): number {
-  const order = ['PENDING_INBOUND', 'INBOUND', 'PACKED', 'CUSTOMS_EXPORT', 'DEPARTED', 'IN_TRANSIT', 'ARRIVED', 'CUSTOMS_IMPORT', 'DELIVERING', 'DELIVERED'];
-  return order.indexOf(status);
-}
 
 interface OrderScreenProps {
   embedded?: boolean;
@@ -141,9 +54,6 @@ export default function OrderScreen({ embedded = false }: OrderScreenProps = {})
   const [loading, setLoading] = useState(true);
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState('ALL');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<OrderDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -156,20 +66,6 @@ export default function OrderScreen({ embedded = false }: OrderScreenProps = {})
       Alert.alert('加载失败', err.message || '请重试');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const openDetail = async (id: string) => {
-    setSelectedId(id);
-    setDetail(null);
-    setDetailLoading(true);
-    try {
-      const res = await orderApi.get(id);
-      setDetail(res.data);
-    } catch (err: any) {
-      Alert.alert('加载失败', err.message || '请重试');
-    } finally {
-      setDetailLoading(false);
     }
   };
 
@@ -192,7 +88,11 @@ export default function OrderScreen({ embedded = false }: OrderScreenProps = {})
   const renderItem = ({ item }: { item: OrderItem }) => {
     const meta = STATUS_META[item.order_status] || { label: item.order_status, color: colors.textSecondary, bg: colors.borderLight };
     return (
-      <TouchableOpacity style={styles.card} onPress={() => openDetail(item.id)} activeOpacity={0.7}>
+      <TouchableOpacity
+        style={styles.card}
+        onPress={() => router.push({ pathname: '/task/order-detail' as any, params: { id: item.id } })}
+        activeOpacity={0.7}
+      >
         <View style={styles.cardHeader}>
           <Text style={styles.orderNo}>{item.order_no}</Text>
           <View style={[styles.statusBadge, { backgroundColor: meta.bg }]}>
@@ -284,271 +184,7 @@ export default function OrderScreen({ embedded = false }: OrderScreenProps = {})
           contentContainerStyle={styles.listContent}
         />
       )}
-
-      {/* Detail Modal */}
-      <Modal visible={!!selectedId} transparent animationType="slide" onRequestClose={() => setSelectedId(null)}>
-        <View style={styles.modalMask}>
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>订单详情</Text>
-              <TouchableOpacity onPress={() => setSelectedId(null)}>
-                <Ionicons name="close" size={24} color={colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-
-            {detailLoading ? (
-              <View style={styles.center}><ActivityIndicator color={colors.primary} /></View>
-            ) : detail ? (
-              <ScrollView contentContainerStyle={{ paddingBottom: spacing.lg }}>
-                {/* 基础信息 */}
-                <View style={styles.heroCard}>
-                  <Text style={styles.heroOrderNo}>{detail.order_no}</Text>
-                  <Text style={styles.heroEntry}>入仓号：{detail.warehouse_entry_no}</Text>
-                  <View style={styles.heroTags}>
-                    {(() => {
-                      const meta = STATUS_META[detail.order_status] || { label: detail.order_status, color: colors.textSecondary, bg: colors.borderLight };
-                      return (
-                        <View style={[styles.statusBadge, { backgroundColor: meta.bg }]}>
-                          <Text style={[styles.statusText, { color: meta.color }]}>{meta.label}</Text>
-                        </View>
-                      );
-                    })()}
-                    <View style={[styles.statusBadge, { backgroundColor: colors.warningLight }]}>
-                      <Text style={[styles.statusText, { color: colors.warning }]}>
-                        {detail.payment_status === 'PAID' ? '已付款' : '未付款'}
-                      </Text>
-                    </View>
-                    <View style={[styles.statusBadge, { backgroundColor: colors.bg }]}>
-                      <Text style={[styles.statusText, { color: colors.textSecondary }]}>
-                        {detail.business_line === 'SEA' ? '🚢 海运' : '✈️ 空运'}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                {/* 物流时间线 */}
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>📍 物流轨迹</Text>
-                  <View style={styles.timeline}>
-                    {TIMELINE_NODES.map((node, idx) => {
-                      const currentIdx = getProgressIndex(detail.order_status);
-                      const passed = idx <= currentIdx;
-                      const isCurrent = idx === currentIdx;
-                      return (
-                        <View key={node.key} style={styles.timelineRow}>
-                          <View style={styles.timelineLeft}>
-                            <View style={[
-                              styles.timelineDot,
-                              passed && styles.timelineDotActive,
-                              isCurrent && styles.timelineDotCurrent,
-                            ]}>
-                              <Ionicons name={node.icon as any} size={14} color={passed ? '#fff' : colors.textTertiary} />
-                            </View>
-                            {idx < TIMELINE_NODES.length - 1 && (
-                              <View style={[styles.timelineLine, passed && styles.timelineLineActive]} />
-                            )}
-                          </View>
-                          <View style={styles.timelineRight}>
-                            <Text style={[styles.timelineLabel, passed && { color: colors.text, fontWeight: '600' }]}>
-                              {node.label}
-                            </Text>
-                            {isCurrent && <Text style={styles.timelineNote}>当前节点</Text>}
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </View>
-                </View>
-
-                {/* 基本信息 */}
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>📋 基本信息</Text>
-                  <DetailRow label="客户" value={detail.customer_name} />
-                  <DetailRow label="客户编号" value={detail.customer_code || '-'} />
-                  <DetailRow label="下单时间" value={detail.created_at?.slice(0, 16) || '-'} />
-                  <DetailRow label="运输方式" value={detail.business_line === 'SEA' ? '🚢 海运' : '✈️ 空运'} />
-                  <DetailRow label="首选线路" value={detail.route_code} />
-                  <DetailRow label="服务类型" value={SERVICE_TYPE_LABEL[detail.service_type || ''] || detail.service_type || '-'} />
-                  <DetailRow label="付款方式" value={PAYMENT_METHOD_LABEL[detail.payment_method || ''] || detail.payment_method || '-'} />
-                  <DetailRow label="总件数" value={`${detail.total_declared_pieces || 0} 件`} />
-                  <DetailRow label="总重量" value={`${Number(detail.total_declared_weight_kg || 0).toFixed(1)} kg`} />
-                  {detail.remark && <DetailRow label="备注" value={detail.remark} />}
-                </View>
-
-                {/* 发货人 */}
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>📤 发货人</Text>
-                  <DetailRow label="姓名" value={detail.sender_name || '-'} />
-                  <DetailRow label="电话" value={detail.sender_phone || '-'} highlight />
-                  <DetailRow label="地址" value={detail.sender_address || '-'} />
-                </View>
-
-                {/* 收货人 */}
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>📥 收货人</Text>
-                  <DetailRow label="姓名" value={detail.consignee_name || '-'} />
-                  <DetailRow label="电话" value={detail.consignee_phone || '-'} highlight />
-                  {detail.consignee_email && <DetailRow label="邮箱" value={detail.consignee_email} />}
-                  <DetailRow label="国家 / 城市" value={[detail.consignee_country, detail.consignee_city].filter(Boolean).join(' · ') || '-'} />
-                  <DetailRow label="地址" value={detail.consignee_address || '-'} />
-                </View>
-
-                {/* 子运单 */}
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>📦 子运单 ({detail.subOrders?.length || 0})</Text>
-                  {(detail.subOrders || []).map((sub) => (
-                    <View key={sub.id} style={styles.subCard}>
-                      <View style={styles.subHeader}>
-                        <Text style={styles.subNo}>{sub.sub_order_no}</Text>
-                        <Text style={styles.subStatus}>{STATUS_META[sub.sub_status]?.label || sub.sub_status}</Text>
-                      </View>
-                      <Text style={styles.subInfo}>
-                        {sub.pieces}件 · {sub.actual_weight_kg}kg
-                        {sub.container_no ? ` · 柜号 ${sub.container_no}` : ''}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-
-                {/* 包裹清单 */}
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>📋 包裹清单 ({detail.packages?.length || 0})</Text>
-                  {(detail.packages || []).map((p) => (
-                    <View key={p.id} style={styles.pkgRow}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.pkgGoods}>{p.goods_name}</Text>
-                        <Text style={styles.pkgTracking}>{p.express_company} · {p.tracking_no}</Text>
-                      </View>
-                      <Text style={styles.pkgWeight}>{p.declared_weight_kg}kg</Text>
-                    </View>
-                  ))}
-                </View>
-
-                {/* 关联任务 */}
-                {((detail.relatedJobs?.length || 0) > 0 || (detail.relatedDpns?.length || 0) > 0) && (
-                  <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>🔗 关联任务</Text>
-                    {(detail.relatedJobs || []).map((j: any) => (
-                      <TouchableOpacity
-                        key={j.id}
-                        style={styles.relCard}
-                        onPress={() => {
-                          setSelectedId(null);
-                          router.push({
-                            pathname: '/task/packing',
-                            params: { jobId: j.id, mode: 'add-order' },
-                          });
-                        }}
-                      >
-                        <Ionicons name="cube-outline" size={18} color={colors.primary} />
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.relNo}>{j.job_no}</Text>
-                          <Text style={styles.relSub}>
-                            JOB · {j.job_status} · {j.route_code || '-'} {j.container_no ? `· ${j.container_no}` : ''}
-                          </Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
-                      </TouchableOpacity>
-                    ))}
-                    {(detail.relatedDpns || []).map((d: any) => (
-                      <TouchableOpacity
-                        key={d.id}
-                        style={styles.relCard}
-                        onPress={() => {
-                          setSelectedId(null);
-                          router.push({
-                            pathname: '/task/dpn',
-                            params: {
-                              dpnId: d.id,
-                              dpnNo: d.dpn_no,
-                              dpnStatus: d.dpn_status,
-                              fromSite: d.from_site,
-                              toSite: d.to_site,
-                            },
-                          });
-                        }}
-                      >
-                        <Ionicons name="document-text-outline" size={18} color={colors.taskDispatch} />
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.relNo}>{d.dpn_no}</Text>
-                          <Text style={styles.relSub}>
-                            DPN · {d.dpn_status} · {d.from_site || '-'} → {d.to_site || '-'}
-                          </Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-
-                {/* 运费 */}
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>💰 运费</Text>
-                  <DetailRow
-                    label="预估运费"
-                    value={detail.estimated_freight
-                      ? `¥ ${Number(detail.estimated_freight).toFixed(2)}`
-                      : '-'}
-                  />
-                  <DetailRow
-                    label="实际运费"
-                    value={detail.actual_freight
-                      ? `¥ ${Number(detail.actual_freight).toFixed(2)}`
-                      : '待入库称重后生成'}
-                    highlight={!!detail.actual_freight}
-                  />
-                  <DetailRow
-                    label="付款状态"
-                    value={detail.payment_status === 'PAID' ? '✅ 已付款' : '⏳ 未付款'}
-                  />
-                  {detail.payment_status !== 'PAID' && Number(detail.actual_freight) > 0 && (
-                    <TouchableOpacity
-                      style={styles.payBtn}
-                      onPress={async () => {
-                        try {
-                          await orderApi.pay(detail.id);
-                          Alert.alert('支付成功', `已支付 ¥${Number(detail.actual_freight).toFixed(2)}`, [
-                            { text: '确定', onPress: () => openDetail(detail.id) },
-                          ]);
-                        } catch (err: any) {
-                          Alert.alert('支付失败', err.message || '请重试');
-                        }
-                      }}
-                    >
-                      <Ionicons name="card-outline" size={18} color="#fff" />
-                      <Text style={styles.payBtnText}>立即支付 ¥{Number(detail.actual_freight).toFixed(2)}</Text>
-                    </TouchableOpacity>
-                  )}
-                  {detail.payment_status !== 'PAID' && !detail.actual_freight && (
-                    <View style={styles.payHint}>
-                      <Ionicons name="information-circle-outline" size={14} color={colors.info} />
-                      <Text style={styles.payHintText}>入库称重完成后自动生成实际运费,即可支付</Text>
-                    </View>
-                  )}
-                  {(detail.fees || []).length > 0 && (
-                    <>
-                      <Text style={[styles.detailLabel, { marginTop: spacing.md, marginBottom: 4 }]}>其他费用</Text>
-                      {detail.fees.map((f: any, i: number) => (
-                        <DetailRow key={i} label={f.fee_name || f.fee_item_code || f.fee_type_ui || '其他'} value={`¥ ${Number(f.amount || 0).toFixed(2)}`} />
-                      ))}
-                    </>
-                  )}
-                </View>
-              </ScrollView>
-            ) : null}
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
-  );
-}
-
-function DetailRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
-  return (
-    <View style={styles.detailRow}>
-      <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={[styles.detailValue, highlight && { color: colors.primary, fontWeight: '600' }]}>{value || '-'}</Text>
-    </View>
   );
 }
 
@@ -556,12 +192,10 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: spacing.md, padding: spacing.lg },
   emptyText: { fontSize: font.sm, color: colors.textTertiary },
-  // Nav
   navBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, paddingHorizontal: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
   navBtn: { padding: spacing.xs },
   navTitle: { flex: 1, marginLeft: spacing.sm, fontSize: font.lg, fontWeight: '600', color: colors.text },
   navExtra: { fontSize: font.sm, color: colors.textSecondary },
-  // Search
   searchRow: { paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm, backgroundColor: colors.card },
   searchInputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bg, borderRadius: radius.md, paddingHorizontal: spacing.md, height: 40, gap: spacing.sm },
   searchInput: { flex: 1, fontSize: font.md, color: colors.text },
@@ -570,7 +204,6 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   chipText: { fontSize: font.sm, color: colors.textSecondary },
   chipTextActive: { color: '#fff', fontWeight: '600' },
-  // List
   listContent: { padding: spacing.md, gap: spacing.md },
   card: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.md },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
@@ -583,50 +216,4 @@ const styles = StyleSheet.create({
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: spacing.sm, borderTopWidth: 0.5, borderTopColor: colors.borderLight },
   footerText: { fontSize: font.xs, color: colors.textSecondary },
   consigneeText: { fontSize: font.xs, color: colors.textSecondary, maxWidth: '50%' },
-  // Modal
-  modalMask: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  modalSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.lg, maxHeight: '92%' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
-  modalTitle: { fontSize: font.lg, fontWeight: '700', color: colors.text },
-  heroCard: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.md },
-  heroOrderNo: { fontSize: font.lg, fontWeight: '700', color: colors.primary, fontFamily: font.mono },
-  heroEntry: { fontSize: font.sm, color: colors.textSecondary, marginTop: 4 },
-  heroTags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
-  section: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.md },
-  sectionTitle: { fontSize: font.md, fontWeight: '600', color: colors.text, marginBottom: spacing.md },
-  // Timeline
-  timeline: { paddingLeft: spacing.sm },
-  timelineRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  timelineLeft: { alignItems: 'center', marginRight: spacing.md },
-  timelineDot: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.borderLight, alignItems: 'center', justifyContent: 'center' },
-  timelineDotActive: { backgroundColor: colors.success },
-  timelineDotCurrent: { backgroundColor: colors.primary, shadowColor: colors.primary, shadowOpacity: 0.4, shadowOffset: { width: 0, height: 0 }, shadowRadius: 6 },
-  timelineLine: { width: 2, height: 24, backgroundColor: colors.borderLight, marginVertical: 2 },
-  timelineLineActive: { backgroundColor: colors.success },
-  timelineRight: { flex: 1, paddingTop: 4, paddingBottom: spacing.md },
-  timelineLabel: { fontSize: font.sm, color: colors.textTertiary },
-  timelineNote: { fontSize: font.xs, color: colors.primary, marginTop: 2 },
-  relCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, backgroundColor: colors.bg, borderRadius: radius.md, marginBottom: spacing.xs, borderLeftWidth: 3, borderLeftColor: colors.primary },
-  relNo: { fontSize: font.sm, fontFamily: font.mono, fontWeight: '700', color: colors.primary },
-  relSub: { fontSize: font.xs, color: colors.textSecondary, marginTop: 2 },
-  // Detail rows
-  detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing.sm, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
-  detailLabel: { fontSize: font.sm, color: colors.textSecondary },
-  detailValue: { fontSize: font.sm, color: colors.text, fontWeight: '500', flex: 1, textAlign: 'right' },
-  payBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.success, borderRadius: radius.md, paddingVertical: spacing.md, marginTop: spacing.md },
-  payBtnText: { color: '#fff', fontSize: font.md, fontWeight: '600', letterSpacing: 1 },
-  payHint: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.infoLight, padding: spacing.sm, borderRadius: radius.sm, marginTop: spacing.sm },
-  payHintText: { flex: 1, fontSize: font.xs, color: colors.info },
-  // Sub
-  subCard: { backgroundColor: colors.bg, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, borderLeftWidth: 3, borderLeftColor: colors.primary },
-  subHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  subNo: { fontSize: font.sm, fontFamily: font.mono, fontWeight: '600', color: colors.primary },
-  subStatus: { fontSize: font.xs, color: colors.textSecondary },
-  subInfo: { fontSize: font.xs, color: colors.textSecondary },
-  // Pkg
-  pkgRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
-  pkgGoods: { fontSize: font.sm, color: colors.text, fontWeight: '500' },
-  pkgTracking: { fontSize: font.xs, color: colors.textSecondary, marginTop: 2 },
-  pkgWeight: { fontSize: font.sm, color: colors.primary, fontWeight: '600' },
-  empty: { fontSize: font.sm, color: colors.textTertiary, textAlign: 'center', paddingVertical: spacing.md },
 });
