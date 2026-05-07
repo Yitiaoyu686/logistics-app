@@ -349,6 +349,19 @@ export default function TasksScreen() {
             borderColor: colors.taskInbound,
           });
         }
+        // ── 运输进度 preview（顶部横向滑动区，不是待办）
+        const allJobsRes = await jobApi.list();
+        for (const j of (allJobsRes.data || []).filter((j: any) => !['COMPLETED', 'CANCELLED'].includes(j.job_status)).slice(0, 5)) {
+          const nodeLabel = j.current_node || j.job_status;
+          items.push({
+            id: `job-${j.id}`, type: 'preview', icon: '🚢',
+            title: '运输进度', subtitle: `${j.job_no} · ${j.route_code || ''}`,
+            detail: `${j.carrier_name || '-'} · ${j.container_no || '-'}\n当前: ${nodeLabel}`,
+            status: j.etd ? `ETD ${j.etd.substring(5)}` : '', statusColor: colors.info,
+            actions: [],
+            borderColor: colors.taskPreview,
+          });
+        }
       }
 
       setTasks(items);
