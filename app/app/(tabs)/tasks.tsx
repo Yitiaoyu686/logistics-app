@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Pressable, RefreshControl, SafeAreaView } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Pressable, RefreshControl, SafeAreaView, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -9,7 +9,7 @@ import { jobApi, orderApi, warehouseApi, deliveryApi, customerApi, salesApi } fr
 import { TransferActionDialog, TransferActionMode, TransferTargetItem } from '../../components/TransferActionDialog';
 import { UnmatchedMatchDialog, UnmatchedTargetItem } from '../../components/UnmatchedMatchDialog';
 
-type ActionIntent = 'transfer-dispatch' | 'transfer-arrive' | 'transfer-receive' | 'unmatched-match';
+const CARD_WIDTH = Dimensions.get('window').width * 0.82;
 
 interface TaskItem {
   id: string;
@@ -351,7 +351,11 @@ export default function TasksScreen() {
         }
         // ── 运输进度 preview（顶部横向滑动区，不是待办）
         const allJobsRes = await jobApi.list();
-        for (const j of (allJobsRes.data || []).filter((j: any) => !['COMPLETED', 'CANCELLED'].includes(j.job_status)).slice(0, 5)) {
+        // 销售只看未发运的批次（装箱中/出口报关），已发运的不需要关注
+        const pendingJobs = (allJobsRes.data || []).filter((j: any) =>
+          ['LOADING', 'CUSTOMS_EXPORT'].includes(j.job_status)
+        ).slice(0, 8);
+        for (const j of pendingJobs) {
           const isAir = j.business_line === 'AIR';
           const statusLabelMap: Record<string, string> = {
             LOADING: isAir ? '集货中' : '装箱中',
@@ -447,7 +451,7 @@ export default function TasksScreen() {
             <Text style={styles.previewTitle}>{previewLabel} ({previewTasks.length})</Text>
           </View>
           {role === 'SALES' ? (
-            <View style={styles.previewListWrap}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.previewScroll}>
               {previewTasks.map((task) => {
                 const parts = task.detail.split('|');
                 const [jobNo, carrier, containerNo, containerType, pieces, weight, etd, eta, serviceType, bizLine] = parts;
@@ -490,7 +494,7 @@ export default function TasksScreen() {
                     <View style={styles.previewBigMeta}>
                       <Text style={styles.previewBigMetaText}>{carrier}</Text>
                       <Text style={styles.previewBigMetaDot}>·</Text>
-                      <Text style={styles.previewBigMetaText}>{isAir ? containerNo : `${containerNo} ${containerType}`}</Text>
+                      <Text style={styles.previewBigMetaText} numberOfLines={1}>{isAir ? containerNo : `${containerNo} ${containerType}`}</Text>
                       <Text style={styles.previewBigMetaDot}>·</Text>
                       <Text style={styles.previewBigMetaText}>{pieces}件 {weight}kg</Text>
                     </View>
@@ -498,7 +502,7 @@ export default function TasksScreen() {
                   </Pressable>
                 );
               })}
-            </View>
+            </ScrollView>
           ) : (
             // 仓库：原来的小横向卡片
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.previewScroll}>
@@ -670,14 +674,14 @@ const styles = StyleSheet.create({
   previewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.lg, marginBottom: spacing.sm },
   previewTitle: { fontSize: font.sm, fontWeight: '600', color: colors.text },
   // 仓库小卡片（横向滑动）
-  previewScroll: { paddingHorizontal: spacing.md, gap: spacing.sm },
+  previewScroll: { paddingHorizontal: spacing.md, paddingRight: spacing.xl, gap: spacing.sm },
   previewCard: { width: 180, backgroundColor: colors.primaryLight, borderRadius: radius.md, padding: spacing.md, borderLeftWidth: 3, borderLeftColor: colors.taskPreview },
   previewCardTitle: { fontSize: font.sm, fontWeight: '600', color: colors.text, fontFamily: font.mono, marginBottom: 4 },
   previewCardDetail: { fontSize: font.xs, color: colors.textSecondary, lineHeight: 16, marginBottom: 6 },
   previewCardEta: { fontSize: font.xs, fontWeight: '600' },
-  // 销售大卡片（竖向全宽）
+  // 销售大卡片（横向滑动，85% 屏宽）
   previewListWrap: { paddingHorizontal: spacing.md, gap: spacing.sm },
-  previewBigCard: { backgroundColor: colors.bg, borderRadius: radius.lg, padding: spacing.md, borderWidth: 1, borderColor: colors.borderLight, borderLeftWidth: 3, borderLeftColor: colors.taskPreview },
+  previewBigCard: { width: CARD_WIDTH, backgroundColor: colors.bg, borderRadius: radius.lg, padding: spacing.md, borderWidth: 1, borderColor: colors.borderLight, borderLeftWidth: 3, borderLeftColor: colors.taskPreview },
   previewBigTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
   previewRouteWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 },
   previewRouteIcon: { fontSize: 20 },
