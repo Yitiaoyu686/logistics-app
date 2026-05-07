@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Pressable, RefreshControl, SafeAreaView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { getRoleLabel, getRoleColor } from '../../lib/auth';
@@ -66,6 +66,11 @@ export default function TasksScreen() {
     });
     return () => { if (timer) clearInterval(timer); };
   }, []);
+
+  // 从详情页返回时自动刷新
+  useFocusEffect(useCallback(() => {
+    if (role) loadTasks(role);
+  }, [role]));
 
   const loadTasks = async (userRole: string) => {
     try {
