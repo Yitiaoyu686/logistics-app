@@ -323,7 +323,7 @@ export default function TasksScreen() {
             title: '客户待跟进', subtitle: `${c.name || c.customerName} · ${c.shortCode || ''}`,
             detail: `${c.country || '-'} · ${c.contact?.phone || c.contactPhone || '-'}`,
             status: c.totalOrders === 0 ? '未下单' : `${c.daysSinceOrder || 0}天未复购`, statusColor: colors.danger,
-            actions: [{ label: '去跟进', color: colors.primary, route: '/task/customer', params: { openId: c.id } }],
+            actions: [{ label: '去跟进', color: colors.primary, route: '/task/customer-detail', params: { id: c.id } }],
             borderColor: colors.taskInbound,
           });
         }
@@ -335,7 +335,7 @@ export default function TasksScreen() {
             title: '订单待入库', subtitle: `${o.order_no} · ${o.customer_name}`,
             detail: `路线 ${o.route_code || '-'} · ${o.total_declared_pieces || 0}件 ${Number(o.total_declared_weight_kg || 0).toFixed(1)}kg`,
             status: '待入库', statusColor: colors.warning,
-            actions: [{ label: '查看详情', color: colors.primary, route: '/task/order', params: { openId: o.id } }],
+            actions: [{ label: '查看详情', color: colors.primary, route: '/task/order-detail', params: { id: o.id } }],
             borderColor: colors.taskInbound,
           });
         }
@@ -347,7 +347,7 @@ export default function TasksScreen() {
             title: '订单未收款', subtitle: `${o.order_no} · ${o.customer_name}`,
             detail: `应收 ¥${amt.toFixed(2)} · ${o.payment_status === 'PARTIAL' ? '部分已付' : '未付款'}`,
             status: o.payment_status === 'PARTIAL' ? '部分已付' : '未付款', statusColor: colors.danger,
-            actions: [{ label: '催收', color: colors.danger, route: '/task/order', params: { openId: o.id } }],
+            actions: [{ label: '催收', color: colors.danger, route: '/task/order-detail', params: { id: o.id } }],
             borderColor: colors.taskOrphan,
           });
         }
@@ -363,7 +363,7 @@ export default function TasksScreen() {
             title: '新客户首单跟进', subtitle: `${c.customerName || c.name} · ${c.customerCode || c.shortCode || ''}`,
             detail: `${c.country || '-'} · ${c.contactPhone || c.contact?.phone || '-'}`,
             status: '本月新增', statusColor: colors.success,
-            actions: [{ label: '去处理', color: colors.success, route: '/task/customer', params: { openId: c.id } }],
+            actions: [{ label: '去处理', color: colors.success, route: '/task/customer-detail', params: { id: c.id } }],
             borderColor: colors.taskInbound,
           });
         }
