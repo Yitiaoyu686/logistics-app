@@ -601,71 +601,83 @@ export default function TasksScreen() {
           </View>
         ) : (
           filteredTasks.map((task) => {
+            const primaryAction = task.actions[0] || null;
+            const secondaryActions = task.actions.slice(1);
+
+            const handleAction = (action: typeof primaryAction) => {
+              if (!action) return;
+              if (action.intent === 'transfer-dispatch' && task.rawTransfer) {
+                setTransferTarget(task.rawTransfer); setTransferMode('dispatch'); return;
+              }
+              if (action.intent === 'transfer-arrive' && task.rawTransfer) {
+                setTransferTarget(task.rawTransfer); setTransferMode('arrive'); return;
+              }
+              if (action.intent === 'transfer-receive' && task.rawTransfer) {
+                setTransferTarget(task.rawTransfer); setTransferMode('receive'); return;
+              }
+              if (action.intent === 'unmatched-match' && task.rawUnmatched) {
+                setUnmatchedTarget(task.rawUnmatched); return;
+              }
+              if (action.route) {
+                router.push({ pathname: action.route as any, params: action.params || {} });
+              }
+            };
+
             const cardContent = (
               <View style={[styles.card, task.cardRoute && styles.cardClickable]}>
-                <View style={styles.cardHeader}>
-                  <View style={styles.cardTitleRow}>
-                    <View style={[styles.cardIconWrap, { backgroundColor: task.borderColor + '18' }]}>
-                      <Text style={styles.cardIcon}>{task.icon}</Text>
+                <View style={styles.cardBody}>
+                  {/* 左侧：信息区 */}
+                  <View style={styles.cardInfo}>
+                    <View style={styles.cardTitleRow}>
+                      <View style={[styles.cardIconWrap, { backgroundColor: task.borderColor + '18' }]}>
+                        <Text style={styles.cardIcon}>{task.icon}</Text>
+                      </View>
+                      <Text style={styles.cardTitle}>{task.title}</Text>
+                      <Text style={[styles.cardStatus, { color: task.statusColor, backgroundColor: task.statusColor + '15' }]}>
+                        {task.status}
+                      </Text>
                     </View>
-                    <Text style={styles.cardTitle}>{task.title}</Text>
+                    <Text style={styles.cardSubtitle}>{task.subtitle}</Text>
+                    <Text style={styles.cardDetail}>{task.detail}</Text>
+                    {task.progress && (
+                      <View style={styles.progressRow}>
+                        <View style={styles.progressBar}>
+                          <View style={[styles.progressFill, { width: `${Math.min(100, task.progress.total > 0 ? (task.progress.current / task.progress.total) * 100 : 0)}%`, backgroundColor: task.borderColor }]} />
+                        </View>
+                        <Text style={[styles.progressText, { color: task.borderColor }]}>
+                          {task.progress.current > 0 ? `${task.progress.current}件` : '空箱'}
+                        </Text>
+                      </View>
+                    )}
                   </View>
-                  <Text style={[styles.cardStatus, { color: task.statusColor, backgroundColor: task.statusColor + '15' }]}>
-                    {task.status}
-                  </Text>
+
+                  {/* 右侧：主操作按钮，垂直居中 */}
+                  {primaryAction && (
+                    <Pressable
+                      style={[styles.cardActionBtn, {
+                        backgroundColor: primaryAction.color === colors.textSecondary
+                          ? colors.bg
+                          : primaryAction.color,
+                      }]}
+                      onPress={() => handleAction(primaryAction)}
+                    >
+                      <Text style={[styles.cardActionBtnText, {
+                        color: primaryAction.color === colors.textSecondary
+                          ? colors.textSecondary
+                          : '#fff',
+                      }]}>{primaryAction.label}</Text>
+                    </Pressable>
+                  )}
                 </View>
 
-                <Text style={styles.cardSubtitle}>{task.subtitle}</Text>
-                <Text style={styles.cardDetail}>{task.detail}</Text>
-
-                {task.progress && (
-                  <View style={styles.progressRow}>
-                    <View style={styles.progressBar}>
-                      <View style={[styles.progressFill, { width: `${Math.min(100, task.progress.total > 0 ? (task.progress.current / task.progress.total) * 100 : 0)}%`, backgroundColor: task.borderColor }]} />
-                    </View>
-                    <Text style={[styles.progressText, { color: task.borderColor }]}>
-                      {task.progress.current > 0 ? `${task.progress.current}件` : '空箱'}
-                    </Text>
-                  </View>
-                )}
-
-                {task.actions.length > 0 && (
-                  <View style={styles.cardActions}>
-                    {task.actions.map((action, i) => (
-                      <Pressable
-                        key={i}
-                        style={[styles.actionBtn, action.color === colors.primary && styles.actionBtnPrimary,
-                          action.color === colors.success && styles.actionBtnSuccess,
-                          action.color === colors.danger && styles.actionBtnDanger,
-                          action.color === colors.warning && styles.actionBtnWarning]}
-                        onPress={() => {
-                          if (action.intent === 'transfer-dispatch' && task.rawTransfer) {
-                            setTransferTarget(task.rawTransfer);
-                            setTransferMode('dispatch');
-                            return;
-                          }
-                          if (action.intent === 'transfer-arrive' && task.rawTransfer) {
-                            setTransferTarget(task.rawTransfer);
-                            setTransferMode('arrive');
-                            return;
-                          }
-                          if (action.intent === 'transfer-receive' && task.rawTransfer) {
-                            setTransferTarget(task.rawTransfer);
-                            setTransferMode('receive');
-                            return;
-                          }
-                          if (action.intent === 'unmatched-match' && task.rawUnmatched) {
-                            setUnmatchedTarget(task.rawUnmatched);
-                            return;
-                          }
-                          if (action.route) {
-                            router.push({ pathname: action.route as any, params: action.params || {} });
-                          }
-                        }}
-                      >
-                        <Text style={[styles.actionBtnText, {
-                          color: [colors.primary, colors.success, colors.danger, colors.warning].includes(action.color) ? '#fff' : action.color
-                        }]}>{action.label}</Text>
+                {/* 次要操作：底部小字链接 */}
+                {secondaryActions.length > 0 && (
+                  <View style={styles.cardSecondaryRow}>
+                    {secondaryActions.map((action, i) => (
+                      <Pressable key={i} onPress={() => handleAction(action)}>
+                        <Text style={[styles.cardSecondaryText, { color: action.color === colors.textSecondary ? colors.textSecondary : colors.primary }]}>
+                          {action.label}
+                        </Text>
                       </Pressable>
                     ))}
                   </View>
@@ -807,12 +819,12 @@ const styles = StyleSheet.create({
   list: { flex: 1 },
   listContent: { padding: spacing.sm, paddingHorizontal: spacing.md },
 
-  // ── Task Card
+  // ── Task Card（左信息 + 右操作）
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
+    paddingVertical: spacing.md,
     marginBottom: spacing.sm,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -820,32 +832,42 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
-  cardClickable: {
-    opacity: 0.95,
-  },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  cardIconWrap: { width: 22, height: 22, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
-  cardIcon: { fontSize: 12 },
+  cardClickable: { opacity: 0.95 },
+  cardBody: { flexDirection: 'row', alignItems: 'center' },
+  cardInfo: { flex: 1, marginRight: spacing.md },
+  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
+  cardIconWrap: { width: 24, height: 24, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  cardIcon: { fontSize: 13 },
   cardTitle: { fontSize: font.sm, fontWeight: '700', color: colors.text },
   cardStatus: { fontSize: 10, fontWeight: '600', paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.full, overflow: 'hidden' },
   cardSubtitle: { fontSize: font.xs, color: colors.text, fontWeight: '500', fontFamily: font.mono, marginBottom: 2 },
   cardDetail: { fontSize: font.xs, color: colors.textSecondary, lineHeight: 17 },
+  // 右侧主操作按钮
+  cardActionBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    minWidth: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardActionBtnText: { fontSize: font.xs, fontWeight: '700' },
+  // 次要操作行
+  cardSecondaryRow: {
+    flexDirection: 'row',
+    gap: spacing.lg,
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: 0.5,
+    borderTopColor: colors.borderLight,
+  },
+  cardSecondaryText: { fontSize: font.xs, fontWeight: '500' },
 
   // ── Progress Bar
   progressRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: spacing.sm },
-  progressBar: { flex: 1, height: 5, backgroundColor: colors.borderLight, borderRadius: 3, overflow: 'hidden' },
-  progressFill: { height: '100%', borderRadius: 3, backgroundColor: colors.primary },
+  progressBar: { flex: 1, height: 4, backgroundColor: colors.borderLight, borderRadius: 2, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 2, backgroundColor: colors.primary },
   progressText: { fontSize: font.xs, fontWeight: '600', width: 36, textAlign: 'right', color: colors.textSecondary },
-
-  // ── Action Buttons — 主操作深色，次操作灰色
-  cardActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 6, marginTop: spacing.sm },
-  actionBtn: { paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.md, backgroundColor: colors.bg },
-  actionBtnPrimary: { backgroundColor: colors.primary },
-  actionBtnSuccess: { backgroundColor: colors.primary },
-  actionBtnDanger: { backgroundColor: colors.danger },
-  actionBtnWarning: { backgroundColor: colors.primary },
-  actionBtnText: { fontSize: font.sm, fontWeight: '600' },
 
   // ── Empty State
   empty: { alignItems: 'center', paddingTop: 80 },
