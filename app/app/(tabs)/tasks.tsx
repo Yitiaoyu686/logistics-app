@@ -3,7 +3,7 @@ import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Pressable, Refres
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { colors, spacing, radius, font } from '../../lib/theme';
+import { colors, spacing, radius, font, shadow } from '../../lib/theme';
 import { getRoleLabel, getRoleColor } from '../../lib/auth';
 import { jobApi, orderApi, warehouseApi, deliveryApi, customerApi, salesApi } from '../../lib/api';
 import { TransferActionDialog, TransferActionMode, TransferTargetItem } from '../../components/TransferActionDialog';
@@ -25,6 +25,9 @@ interface TaskItem {
   progress?: { current: number; total: number };
   actions: { label: string; color: string; route?: string; params?: Record<string, any>; intent?: ActionIntent }[];
   borderColor: string;
+  // 整卡可点击跳转（销售角色用）
+  cardRoute?: string;
+  cardParams?: Record<string, any>;
   // 用于内联弹窗的原始数据
   rawTransfer?: TransferTargetItem;
   rawUnmatched?: UnmatchedTargetItem;
@@ -93,12 +96,17 @@ export default function TasksScreen() {
         // 待执行出库的JOB
         const jobs = await jobApi.list({ status: 'LOADING' });
         for (const j of (jobs.data || []).slice(0, 3)) {
+          // 用件数进度（total_pieces / 预估满载件数）；若无数据则显示重量
+          const loadedPieces = j.total_pieces || 0;
+          const loadedWeight = j.total_weight_kg || 0;
+          // 海运集装箱满载约 500 件，空运约 200 件
+          const estimatedMax = j.business_line === 'AIR' ? 200 : 500;
           items.push({
             id: `packing-${j.id}`, type: 'packing', icon: '🏗',
             title: '待添加订单', subtitle: `${j.job_no} · ${j.container_no || '未创建'}`,
             detail: `${j.route_code || ''} · ${j.container_type || ''} · ${j.service_type === 'EXPRESS' ? '特快' : '普快'}`,
             status: '装箱中', statusColor: colors.info,
-            progress: { current: j.total_weight_kg || 0, total: 26000 },
+            progress: { current: loadedPieces, total: estimatedMax },
             actions: [
               { label: '添加订单', color: colors.success, route: '/task/packing', params: { jobId: j.id, mode: 'add-order' } },
               ...(j.business_line === 'AIR'
@@ -194,13 +202,25 @@ export default function TasksScreen() {
         // 运营预告：即将发运的JOB
         const allJobs = await jobApi.list();
         for (const j of (allJobs.data || []).filter((j: any) => ['CUSTOMS_EXPORT', 'DEPARTED'].includes(j.job_status))) {
+          const isAir = j.business_line === 'AIR';
           const daysToEtd = j.etd ? Math.ceil((new Date(j.etd).getTime() - Date.now()) / 86400000) : null;
           items.push({
-            id: `preview-${j.id}`, type: 'preview', icon: '🗓',
-            title: '即将发运', subtitle: `${j.job_no} · ${j.route_code || ''}`,
-            detail: `${j.carrier_name || ''} · ${j.container_no || ''}\n当前: ${j.current_node || j.job_status}`,
+            id: `preview-${j.id}`, type: 'preview', icon: isAir ? '✈️' : '🚢',
+            title: '即将发运', subtitle: `${j.origin_port || '-'} → ${j.dest_port || '-'}`,
+            detail: [
+              j.job_no,
+              j.carrier_name || '-',
+              j.container_no || (isAir ? '集装号待分配' : '箱号待分配'),
+              j.container_type || '',
+              String(j.total_pieces || 0),
+              String(j.total_weight_kg || 0),
+              j.etd || '',
+              j.eta || '',
+              j.service_type || '',
+              j.business_line || 'SEA',
+            ].join('|'),
             status: daysToEtd !== null ? `ETD ${daysToEtd}天后` : '', statusColor: (daysToEtd || 99) <= 3 ? colors.danger : colors.info,
-            actions: [{ label: '查看详情', color: colors.textSecondary }],
+            actions: [],
             borderColor: colors.taskPreview,
           });
         }
@@ -284,13 +304,25 @@ export default function TasksScreen() {
         // 在途预告
         const inTransitJobs = await jobApi.list({ status: 'IN_TRANSIT' });
         for (const j of (inTransitJobs.data || []).slice(0, 3)) {
+          const isAir = j.business_line === 'AIR';
           const daysToEta = j.eta ? Math.ceil((new Date(j.eta).getTime() - Date.now()) / 86400000) : null;
           items.push({
-            id: `preview-${j.id}`, type: 'preview', icon: '🚢',
-            title: '即将到港', subtitle: `${j.job_no} · ${j.route_code || ''}`,
-            detail: `${j.carrier_name || ''} · ${j.container_no || ''}\n${j.total_pieces}件/${j.total_weight_kg}kg`,
+            id: `preview-${j.id}`, type: 'preview', icon: isAir ? '✈️' : '🚢',
+            title: '即将到港', subtitle: `${j.origin_port || '-'} → ${j.dest_port || '-'}`,
+            detail: [
+              j.job_no,
+              j.carrier_name || '-',
+              j.container_no || (isAir ? '集装号待分配' : '箱号待分配'),
+              j.container_type || '',
+              String(j.total_pieces || 0),
+              String(j.total_weight_kg || 0),
+              j.etd || '',
+              j.eta || '',
+              j.service_type || '',
+              j.business_line || 'SEA',
+            ].join('|'),
             status: daysToEta !== null ? `ETA ${daysToEta}天后` : '在途', statusColor: (daysToEta || 99) <= 5 ? colors.danger : colors.info,
-            actions: [{ label: '查看详情', color: colors.textSecondary }],
+            actions: [],
             borderColor: colors.taskPreview,
           });
         }
@@ -320,8 +352,10 @@ export default function TasksScreen() {
             detail: `应收 ¥${amt > 0 ? amt.toFixed(2) : '待确认'} · ${isArrived ? '已到达' : '已签收'} · ${o.payment_status === 'PARTIAL' ? '部分已付' : '未付款'}`,
             status: o.payment_status === 'PARTIAL' ? '部分已付' : '未付款',
             statusColor: colors.danger,
-            actions: [{ label: '去催收', color: colors.danger, route: '/task/order-detail', params: { id: o.id } }],
+            actions: [],
             borderColor: colors.taskOrphan,
+            cardRoute: '/task/order-detail',
+            cardParams: { id: o.id },
           });
         }
 
@@ -345,8 +379,10 @@ export default function TasksScreen() {
             detail: `${c.country || '-'} · ${c.contactPhone || c.contact?.phone || '-'}`,
             status: `已${daysSince}天`,
             statusColor: daysSince > 30 ? colors.danger : colors.warning,
-            actions: [{ label: '去跟进', color: colors.primary, route: '/task/customer-detail', params: { id: c.id } }],
+            actions: [],
             borderColor: colors.taskInbound,
+            cardRoute: '/task/customer-detail',
+            cardParams: { id: c.id },
           });
         }
         // ── 运输进度 preview（顶部横向滑动区，不是待办）
@@ -427,20 +463,46 @@ export default function TasksScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      {/* Header */}
+      {/* Header — 深色品牌区 */}
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <View>
+          <View style={styles.headerLeft}>
+            <Text style={styles.headerGreeting}>喵喵国际物流</Text>
             <Text style={styles.headerName}>{userName}</Text>
-            <View style={[styles.roleBadge, { backgroundColor: getRoleColor(role) + '20' }]}>
-              <Text style={[styles.roleText, { color: getRoleColor(role) }]}>{getRoleLabel(role)}</Text>
+            <View style={[styles.roleBadge, { backgroundColor: getRoleColor(role) + '30' }]}>
+              <Text style={[styles.roleText, { color: '#fff' }]}>{getRoleLabel(role)}</Text>
             </View>
           </View>
-          {role.includes('WAREHOUSE') && (
-            <View style={styles.printerBadge}>
-              <Text style={styles.printerText}>🟢 打印机</Text>
+          <View style={styles.headerRight}>
+            {role.includes('WAREHOUSE') && (
+              <View style={styles.printerBadge}>
+                <View style={styles.printerDot} />
+                <Text style={styles.printerText}>打印机</Text>
+              </View>
+            )}
+            <View style={styles.headerAvatar}>
+              <Text style={styles.headerAvatarText}>{userName ? userName[0] : '?'}</Text>
             </View>
-          )}
+          </View>
+        </View>
+        {/* 今日任务数量摘要 */}
+        <View style={styles.headerStats}>
+          <View style={styles.headerStatItem}>
+            <Text style={styles.headerStatNum}>{actionTasks.length}</Text>
+            <Text style={styles.headerStatLabel}>待办任务</Text>
+          </View>
+          <View style={styles.headerStatDivider} />
+          <View style={styles.headerStatItem}>
+            <Text style={styles.headerStatNum}>{previewTasks.length}</Text>
+            <Text style={styles.headerStatLabel}>{role === 'WAREHOUSE_US' ? '到港预告' : role === 'SALES' ? '运输批次' : '发运计划'}</Text>
+          </View>
+          <View style={styles.headerStatDivider} />
+          <View style={styles.headerStatItem}>
+            <Text style={[styles.headerStatNum, { color: '#FF6B35' }]}>
+              {actionTasks.filter(t => t.statusColor === colors.danger || t.statusColor === colors.warning).length}
+            </Text>
+            <Text style={styles.headerStatLabel}>需关注</Text>
+          </View>
         </View>
       </View>
 
@@ -450,71 +512,58 @@ export default function TasksScreen() {
           <View style={styles.previewHeader}>
             <Text style={styles.previewTitle}>{previewLabel} ({previewTasks.length})</Text>
           </View>
-          {role === 'SALES' ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.previewScroll}>
-              {previewTasks.map((task) => {
-                const parts = task.detail.split('|');
-                const [jobNo, carrier, containerNo, containerType, pieces, weight, etd, eta, serviceType, bizLine] = parts;
-                const isAir = bizLine === 'AIR';
-                const isExpress = serviceType === 'EXPRESS';
-                const etdShort = etd ? etd.substring(5).replace('-', '/') : '-';
-                const etaShort = eta ? eta.substring(5).replace('-', '/') : '-';
-                return (
-                  <Pressable key={task.id} style={styles.previewBigCard}>
-                    {/* 顶部：路线大字 + 状态 */}
-                    <View style={styles.previewBigTop}>
-                      <View style={styles.previewRouteWrap}>
-                        <Text style={styles.previewRouteIcon}>{task.icon}</Text>
-                        <Text style={styles.previewRouteText}>{task.subtitle}</Text>
-                        {isExpress && (
-                          <View style={styles.previewExpressBadge}>
-                            <Text style={styles.previewExpressText}>特快</Text>
-                          </View>
-                        )}
-                      </View>
-                      <View style={[styles.previewBigBadge, { backgroundColor: task.statusColor + '18' }]}>
-                        <Text style={[styles.previewBigBadgeText, { color: task.statusColor }]}>{task.status}</Text>
-                      </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.previewScroll}>
+            {previewTasks.map((task) => {
+              const parts = task.detail.split('|');
+              const [jobNo, carrier, containerNo, containerType, pieces, weight, etd, eta, serviceType, bizLine] = parts;
+              const isAir = bizLine === 'AIR';
+              const isExpress = serviceType === 'EXPRESS';
+              const etdShort = etd ? etd.substring(5).replace('-', '/') : '-';
+              const etaShort = eta ? eta.substring(5).replace('-', '/') : '-';
+              return (
+                <Pressable key={task.id} style={styles.previewBigCard}>
+                  {/* 顶部：路线大字 + 状态 */}
+                  <View style={styles.previewBigTop}>
+                    <View style={styles.previewRouteWrap}>
+                      <Text style={styles.previewRouteIcon}>{task.icon}</Text>
+                      <Text style={styles.previewRouteText}>{task.subtitle}</Text>
+                      {isExpress && (
+                        <View style={styles.previewExpressBadge}>
+                          <Text style={styles.previewExpressText}>特快</Text>
+                        </View>
+                      )}
                     </View>
-                    {/* ETD / ETA */}
-                    <View style={styles.previewDateRow}>
-                      <View style={styles.previewDateItem}>
-                        <Text style={styles.previewDateLabel}>ETD</Text>
-                        <Text style={styles.previewDateValue}>{etdShort}</Text>
-                      </View>
-                      <View style={styles.previewDateArrow}>
-                        <Text style={styles.previewDateArrowText}>→</Text>
-                      </View>
-                      <View style={styles.previewDateItem}>
-                        <Text style={styles.previewDateLabel}>ETA</Text>
-                        <Text style={styles.previewDateValue}>{etaShort}</Text>
-                      </View>
+                    <View style={[styles.previewBigBadge, { backgroundColor: task.statusColor + '18' }]}>
+                      <Text style={[styles.previewBigBadgeText, { color: task.statusColor }]}>{task.status}</Text>
                     </View>
-                    {/* 底部：承运商 / 箱号 / 件重 */}
-                    <View style={styles.previewBigMeta}>
-                      <Text style={styles.previewBigMetaText}>{carrier}</Text>
-                      <Text style={styles.previewBigMetaDot}>·</Text>
-                      <Text style={styles.previewBigMetaText} numberOfLines={1}>{isAir ? containerNo : `${containerNo} ${containerType}`}</Text>
-                      <Text style={styles.previewBigMetaDot}>·</Text>
-                      <Text style={styles.previewBigMetaText}>{pieces}件 {weight}kg</Text>
+                  </View>
+                  {/* ETD / ETA */}
+                  <View style={styles.previewDateRow}>
+                    <View style={styles.previewDateItem}>
+                      <Text style={styles.previewDateLabel}>ETD</Text>
+                      <Text style={styles.previewDateValue}>{etdShort}</Text>
                     </View>
-                    <Text style={styles.previewBigJobNo}>{jobNo}</Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          ) : (
-            // 仓库：原来的小横向卡片
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.previewScroll}>
-              {previewTasks.map((task) => (
-                <Pressable key={task.id} style={styles.previewCard}>
-                  <Text style={styles.previewCardTitle}>{task.subtitle}</Text>
-                  <Text style={styles.previewCardDetail} numberOfLines={2}>{task.detail}</Text>
-                  <Text style={[styles.previewCardEta, { color: task.statusColor }]}>{task.status}</Text>
+                    <View style={styles.previewDateArrow}>
+                      <Text style={styles.previewDateArrowText}>→</Text>
+                    </View>
+                    <View style={styles.previewDateItem}>
+                      <Text style={styles.previewDateLabel}>ETA</Text>
+                      <Text style={styles.previewDateValue}>{etaShort}</Text>
+                    </View>
+                  </View>
+                  {/* 底部：承运商 / 箱号 / 件重 */}
+                  <View style={styles.previewBigMeta}>
+                    <Text style={styles.previewBigMetaText}>{carrier}</Text>
+                    <Text style={styles.previewBigMetaDot}>·</Text>
+                    <Text style={styles.previewBigMetaText} numberOfLines={1}>{isAir ? containerNo : `${containerNo} ${containerType}`}</Text>
+                    <Text style={styles.previewBigMetaDot}>·</Text>
+                    <Text style={styles.previewBigMetaText}>{pieces}件 {weight}kg</Text>
+                  </View>
+                  <Text style={styles.previewBigJobNo}>{jobNo}</Text>
                 </Pressable>
-              ))}
-            </ScrollView>
-          )}
+              );
+            })}
+          </ScrollView>
         </View>
       )}
 
@@ -544,77 +593,95 @@ export default function TasksScreen() {
       >
         {filteredTasks.length === 0 ? (
           <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>✅</Text>
+            <View style={styles.emptyIconWrap}>
+              <Ionicons name="checkmark-circle-outline" size={52} color={colors.textTertiary} />
+            </View>
             <Text style={styles.emptyText}>暂无待办任务</Text>
+            <Text style={styles.emptySubText}>所有任务已处理完毕 🎉</Text>
           </View>
         ) : (
-          filteredTasks.map((task) => (
-            <View key={task.id} style={[styles.card, { borderLeftColor: task.borderColor }]}>
-              <View style={styles.cardHeader}>
-                <View style={styles.cardTitleRow}>
-                  <Text style={styles.cardIcon}>{task.icon}</Text>
-                  <Text style={styles.cardTitle}>{task.title}</Text>
-                </View>
-                <Text style={[styles.cardStatus, { color: task.statusColor, backgroundColor: task.statusColor + '15' }]}>
-                  {task.status}
-                </Text>
-              </View>
-
-              <Text style={styles.cardSubtitle}>{task.subtitle}</Text>
-              <Text style={styles.cardDetail}>{task.detail}</Text>
-
-              {task.progress && (
-                <View style={styles.progressRow}>
-                  <View style={styles.progressBar}>
-                    <View style={[styles.progressFill, { width: `${Math.min(100, (task.progress.current / task.progress.total) * 100)}%` }]} />
+          filteredTasks.map((task) => {
+            const cardContent = (
+              <View style={[styles.card, task.cardRoute && styles.cardClickable]}>
+                <View style={styles.cardHeader}>
+                  <View style={styles.cardTitleRow}>
+                    <View style={[styles.cardIconWrap, { backgroundColor: task.borderColor + '18' }]}>
+                      <Text style={styles.cardIcon}>{task.icon}</Text>
+                    </View>
+                    <Text style={styles.cardTitle}>{task.title}</Text>
                   </View>
-                  <Text style={styles.progressText}>{Math.round((task.progress.current / task.progress.total) * 100)}%</Text>
+                  <Text style={[styles.cardStatus, { color: task.statusColor, backgroundColor: task.statusColor + '15' }]}>
+                    {task.status}
+                  </Text>
                 </View>
-              )}
 
-              <View style={styles.cardActions}>
-                {task.actions.map((action, i) => (
-                  <Pressable
-                    key={i}
-                    style={[styles.actionBtn, action.color === colors.primary && styles.actionBtnPrimary,
-                      action.color === colors.success && styles.actionBtnSuccess,
-                      action.color === colors.danger && styles.actionBtnDanger,
-                      action.color === colors.warning && styles.actionBtnWarning]}
-                    onPress={() => {
-                      // 内联弹窗：调拨/无单
-                      if (action.intent === 'transfer-dispatch' && task.rawTransfer) {
-                        setTransferTarget(task.rawTransfer);
-                        setTransferMode('dispatch');
-                        return;
-                      }
-                      if (action.intent === 'transfer-arrive' && task.rawTransfer) {
-                        setTransferTarget(task.rawTransfer);
-                        setTransferMode('arrive');
-                        return;
-                      }
-                      if (action.intent === 'transfer-receive' && task.rawTransfer) {
-                        setTransferTarget(task.rawTransfer);
-                        setTransferMode('receive');
-                        return;
-                      }
-                      if (action.intent === 'unmatched-match' && task.rawUnmatched) {
-                        setUnmatchedTarget(task.rawUnmatched);
-                        return;
-                      }
-                      // 跳转路由
-                      if (action.route) {
-                        router.push({ pathname: action.route as any, params: action.params || {} });
-                      }
-                    }}
-                  >
-                    <Text style={[styles.actionBtnText, {
-                      color: [colors.primary, colors.success, colors.danger, colors.warning].includes(action.color) ? '#fff' : action.color
-                    }]}>{action.label}</Text>
-                  </Pressable>
-                ))}
+                <Text style={styles.cardSubtitle}>{task.subtitle}</Text>
+                <Text style={styles.cardDetail}>{task.detail}</Text>
+
+                {task.progress && (
+                  <View style={styles.progressRow}>
+                    <View style={styles.progressBar}>
+                      <View style={[styles.progressFill, { width: `${Math.min(100, task.progress.total > 0 ? (task.progress.current / task.progress.total) * 100 : 0)}%`, backgroundColor: task.borderColor }]} />
+                    </View>
+                    <Text style={[styles.progressText, { color: task.borderColor }]}>
+                      {task.progress.current > 0 ? `${task.progress.current}件` : '空箱'}
+                    </Text>
+                  </View>
+                )}
+
+                {task.actions.length > 0 && (
+                  <View style={styles.cardActions}>
+                    {task.actions.map((action, i) => (
+                      <Pressable
+                        key={i}
+                        style={[styles.actionBtn, action.color === colors.primary && styles.actionBtnPrimary,
+                          action.color === colors.success && styles.actionBtnSuccess,
+                          action.color === colors.danger && styles.actionBtnDanger,
+                          action.color === colors.warning && styles.actionBtnWarning]}
+                        onPress={() => {
+                          if (action.intent === 'transfer-dispatch' && task.rawTransfer) {
+                            setTransferTarget(task.rawTransfer);
+                            setTransferMode('dispatch');
+                            return;
+                          }
+                          if (action.intent === 'transfer-arrive' && task.rawTransfer) {
+                            setTransferTarget(task.rawTransfer);
+                            setTransferMode('arrive');
+                            return;
+                          }
+                          if (action.intent === 'transfer-receive' && task.rawTransfer) {
+                            setTransferTarget(task.rawTransfer);
+                            setTransferMode('receive');
+                            return;
+                          }
+                          if (action.intent === 'unmatched-match' && task.rawUnmatched) {
+                            setUnmatchedTarget(task.rawUnmatched);
+                            return;
+                          }
+                          if (action.route) {
+                            router.push({ pathname: action.route as any, params: action.params || {} });
+                          }
+                        }}
+                      >
+                        <Text style={[styles.actionBtnText, {
+                          color: [colors.primary, colors.success, colors.danger, colors.warning].includes(action.color) ? '#fff' : action.color
+                        }]}>{action.label}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
               </View>
-            </View>
-          ))
+            );
+
+            if (task.cardRoute) {
+              return (
+                <Pressable key={task.id} onPress={() => router.push({ pathname: task.cardRoute as any, params: task.cardParams || {} })}>
+                  {cardContent}
+                </Pressable>
+              );
+            }
+            return cardContent;
+          })
         )}
         <View style={{ height: 20 }} />
       </ScrollView>
@@ -657,31 +724,53 @@ function formatTime(dateStr?: string): string {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
-  header: { backgroundColor: colors.card, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.lg, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
-  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.md },
-  headerName: { fontSize: font.lg, fontWeight: '700', color: colors.text },
-  roleBadge: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.sm, marginTop: spacing.xs, alignSelf: 'flex-start' },
+
+  // ── Header 深色品牌区
+  header: {
+    backgroundColor: colors.headerStart,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+  },
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.lg },
+  headerLeft: { flex: 1 },
+  headerGreeting: { fontSize: font.xs, color: 'rgba(255,255,255,0.5)', letterSpacing: 1, marginBottom: 4 },
+  headerName: { fontSize: font.xl, fontWeight: '800', color: '#fff', marginBottom: 6 },
+  roleBadge: { paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.full, alignSelf: 'flex-start' },
   roleText: { fontSize: font.xs, fontWeight: '600' },
-  printerBadge: { backgroundColor: colors.successLight, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.full },
-  printerText: { fontSize: font.xs, color: colors.success, fontWeight: '500' },
-  // 快捷操作入口
-  quickActions: { flexDirection: 'row', backgroundColor: colors.card, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.sm, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
-  quickAction: { flex: 1, alignItems: 'center', paddingVertical: spacing.md, backgroundColor: colors.bg, borderRadius: radius.md, gap: 4 },
-  quickActionIcon: { fontSize: 24 },
-  quickActionLabel: { fontSize: font.xs, color: colors.text, fontWeight: '500' },
-  // Preview section
+  headerRight: { alignItems: 'flex-end', gap: spacing.sm },
+  printerBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: 'rgba(16,185,129,0.2)', paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.full,
+  },
+  printerDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.success },
+  printerText: { fontSize: font.xs, color: colors.success, fontWeight: '600' },
+  headerAvatar: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  headerAvatarText: { fontSize: font.md, fontWeight: '700', color: '#fff' },
+  // 今日统计
+  headerStats: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md,
+  },
+  headerStatItem: { flex: 1, alignItems: 'center' },
+  headerStatNum: { fontSize: font.xl, fontWeight: '800', color: '#fff' },
+  headerStatLabel: { fontSize: 10, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
+  headerStatDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.15)', marginVertical: 4 },
+
+  // ── Preview section
   previewSection: { backgroundColor: colors.card, paddingTop: spacing.md, paddingBottom: spacing.md, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
   previewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.lg, marginBottom: spacing.sm },
   previewTitle: { fontSize: font.sm, fontWeight: '600', color: colors.text },
-  // 仓库小卡片（横向滑动）
   previewScroll: { paddingHorizontal: spacing.md, paddingRight: spacing.xl, gap: spacing.sm },
-  previewCard: { width: 180, backgroundColor: colors.primaryLight, borderRadius: radius.md, padding: spacing.md, borderLeftWidth: 3, borderLeftColor: colors.taskPreview },
-  previewCardTitle: { fontSize: font.sm, fontWeight: '600', color: colors.text, fontFamily: font.mono, marginBottom: 4 },
-  previewCardDetail: { fontSize: font.xs, color: colors.textSecondary, lineHeight: 16, marginBottom: 6 },
-  previewCardEta: { fontSize: font.xs, fontWeight: '600' },
-  // 销售大卡片（横向滑动，85% 屏宽）
   previewListWrap: { paddingHorizontal: spacing.md, gap: spacing.sm },
-  previewBigCard: { width: CARD_WIDTH, backgroundColor: colors.bg, borderRadius: radius.lg, padding: spacing.md, borderWidth: 1, borderColor: colors.borderLight, borderLeftWidth: 3, borderLeftColor: colors.taskPreview },
+  previewBigCard: { width: CARD_WIDTH, backgroundColor: colors.bg, borderRadius: radius.lg, padding: spacing.md, borderWidth: 1, borderColor: colors.borderLight },
   previewBigTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
   previewRouteWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 },
   previewRouteIcon: { fontSize: 20 },
@@ -704,6 +793,8 @@ const styles = StyleSheet.create({
   statCard: { flex: 1, backgroundColor: colors.bg, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center' },
   statNum: { fontSize: font.xl, fontWeight: '700' },
   statLabel: { fontSize: font.xs, color: colors.textSecondary, marginTop: 2 },
+
+  // ── Filter Tabs
   tabBar: { backgroundColor: colors.card, maxHeight: 44, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
   tabBarContent: { paddingHorizontal: spacing.lg, alignItems: 'center' },
   tab: { paddingHorizontal: spacing.md, paddingVertical: spacing.md, marginRight: spacing.xs },
@@ -711,28 +802,60 @@ const styles = StyleSheet.create({
   tabText: { fontSize: font.sm, color: colors.textSecondary },
   tabTextActive: { color: colors.primary, fontWeight: '600' },
   tabBadge: { fontSize: font.xs, color: colors.primary },
+
+  // ── Task List
   list: { flex: 1 },
-  listContent: { padding: spacing.md },
-  card: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.md, borderLeftWidth: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 3, elevation: 1 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
-  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  cardIcon: { fontSize: 16 },
-  cardTitle: { fontSize: font.md, fontWeight: '600', color: colors.text },
-  cardStatus: { fontSize: font.xs, fontWeight: '500', paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.sm, overflow: 'hidden' },
-  cardSubtitle: { fontSize: font.sm, color: colors.text, fontWeight: '500', fontFamily: font.mono, marginBottom: 4 },
-  cardDetail: { fontSize: font.sm, color: colors.textSecondary, lineHeight: 20 },
-  progressRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.sm, gap: spacing.sm },
-  progressBar: { flex: 1, height: 6, backgroundColor: colors.borderLight, borderRadius: 3, overflow: 'hidden' },
-  progressFill: { height: '100%', backgroundColor: colors.primary, borderRadius: 3 },
-  progressText: { fontSize: font.xs, color: colors.primary, fontWeight: '600', width: 36, textAlign: 'right' },
-  cardActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.md },
-  actionBtn: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.sm, backgroundColor: colors.bg },
+  listContent: { padding: spacing.sm, paddingHorizontal: spacing.md },
+
+  // ── Task Card
+  card: {
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    marginBottom: spacing.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  cardClickable: {
+    opacity: 0.95,
+  },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  cardIconWrap: { width: 22, height: 22, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  cardIcon: { fontSize: 12 },
+  cardTitle: { fontSize: font.sm, fontWeight: '700', color: colors.text },
+  cardStatus: { fontSize: 10, fontWeight: '600', paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.full, overflow: 'hidden' },
+  cardSubtitle: { fontSize: font.xs, color: colors.text, fontWeight: '500', fontFamily: font.mono, marginBottom: 2 },
+  cardDetail: { fontSize: font.xs, color: colors.textSecondary, lineHeight: 17 },
+
+  // ── Progress Bar
+  progressRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: spacing.sm },
+  progressBar: { flex: 1, height: 5, backgroundColor: colors.borderLight, borderRadius: 3, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 3, backgroundColor: colors.primary },
+  progressText: { fontSize: font.xs, fontWeight: '600', width: 36, textAlign: 'right', color: colors.textSecondary },
+
+  // ── Action Buttons — 主操作深色，次操作灰色
+  cardActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 6, marginTop: spacing.sm },
+  actionBtn: { paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.md, backgroundColor: colors.bg },
   actionBtnPrimary: { backgroundColor: colors.primary },
-  actionBtnSuccess: { backgroundColor: colors.success },
+  actionBtnSuccess: { backgroundColor: colors.primary },
   actionBtnDanger: { backgroundColor: colors.danger },
-  actionBtnWarning: { backgroundColor: colors.warning },
-  actionBtnText: { fontSize: font.sm, fontWeight: '500' },
+  actionBtnWarning: { backgroundColor: colors.primary },
+  actionBtnText: { fontSize: font.sm, fontWeight: '600' },
+
+  // ── Empty State
   empty: { alignItems: 'center', paddingTop: 80 },
-  emptyIcon: { fontSize: 48, marginBottom: spacing.md },
-  emptyText: { fontSize: font.md, color: colors.textTertiary },
+  emptyIconWrap: { width: 80, height: 80, borderRadius: 40, backgroundColor: colors.borderLight, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.lg },
+  emptyText: { fontSize: font.md, color: colors.textSecondary, fontWeight: '600' },
+  emptySubText: { fontSize: font.sm, color: colors.textTertiary, marginTop: spacing.xs },
+
+  // legacy (unused but kept to avoid errors)
+  quickActions: { flexDirection: 'row' },
+  quickAction: { flex: 1 },
+  quickActionIcon: { fontSize: 24 },
+  quickActionLabel: { fontSize: font.xs },
 });
