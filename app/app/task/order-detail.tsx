@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity,
+  View, Text, StyleSheet, TouchableOpacity, Pressable,
   ActivityIndicator, ScrollView, Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -104,6 +104,14 @@ const TIMELINE_NODES = [
   { key: 'DELIVERED',      label: '已签收',   icon: 'checkmark-circle-outline' },
 ];
 
+type TabKey = 'overview' | 'info' | 'cargo' | 'fees';
+const TABS: { key: TabKey; label: string }[] = [
+  { key: 'overview', label: '概览' },
+  { key: 'info', label: '信息' },
+  { key: 'cargo', label: '货物' },
+  { key: 'fees', label: '费用' },
+];
+
 function getProgressIndex(status: string): number {
   const order = ['PENDING_INBOUND', 'INBOUND', 'PACKED', 'CUSTOMS_EXPORT', 'DEPARTED', 'IN_TRANSIT', 'ARRIVED', 'CUSTOMS_IMPORT', 'DELIVERING', 'DELIVERED'];
   return order.indexOf(status);
@@ -123,6 +131,7 @@ export default function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [detail, setDetail] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabKey>('overview');
 
   useEffect(() => {
     if (!id) return;
@@ -134,16 +143,185 @@ export default function OrderDetailScreen() {
     try {
       const res = await orderApi.get(id);
       setDetail(res.data);
-    } catch (err: any) {
-      Alert.alert('加载失败', err.message || '请重试');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '请重试';
+      Alert.alert('加载失败', msg);
     } finally {
       setLoading(false);
     }
   };
 
+  const renderOverview = (d: OrderDetail) => {
+    const currentIdx = getProgressIndex(d.order_status);
+    return (
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>物流轨迹</Text>
+        <View style={styles.timeline}>
+          {TIMELINE_NODES.map((node, idx) => {
+            const passed = idx <= currentIdx;
+            const isCurrent = idx === currentIdx;
+            return (
+              <View key={node.key} style={styles.timelineRow}>
+                <View style={styles.timelineLeft}>
+                  <View style={[styles.timelineDot, passed && styles.timelineDotActive, isCurrent && styles.timelineDotCurrent]}>
+                    <Ionicons name={node.icon as any} size={14} color={passed ? '#fff' : colors.textTertiary} />
+                  </View>
+                  {idx < TIMELINE_NODES.length - 1 && (
+                    <View style={[styles.timelineLine, passed && styles.timelineLineActive]} />
+                  )}
+                </View>
+                <View style={styles.timelineRight}>
+                  <Text style={[styles.timelineLabel, passed && { color: colors.text, fontWeight: '600' }]}>{node.label}</Text>
+                  {isCurrent && <Text style={styles.timelineNote}>当前节点</Text>}
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+    );
+  };
+
+  const renderInfo = (d: OrderDetail) => (
+    <>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>基本信息</Text>
+        <DetailRow label="客户" value={d.customer_name} />
+        <DetailRow label="客户编号" value={d.customer_code || '-'} />
+        <DetailRow label="下单时间" value={d.created_at?.slice(0, 16) || '-'} />
+        <DetailRow label="运输方式" value={d.business_line === 'SEA' ? '🚢 海运' : '✈️ 空运'} />
+        <DetailRow label="首选线路" value={d.route_code} />
+        <DetailRow label="服务类型" value={SERVICE_TYPE_LABEL[d.service_type || ''] || d.service_type || '-'} />
+        <DetailRow label="付款方式" value={PAYMENT_METHOD_LABEL[d.payment_method || ''] || d.payment_method || '-'} />
+        <DetailRow label="总件数" value={`${d.total_declared_pieces || 0} 件`} />
+        <DetailRow label="总重量" value={`${Number(d.total_declared_weight_kg || 0).toFixed(1)} kg`} />
+        {d.remark && <DetailRow label="备注" value={d.remark} />}
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>发货人</Text>
+        <DetailRow label="姓名" value={d.sender_name || '-'} />
+        <DetailRow label="电话" value={d.sender_phone || '-'} highlight />
+        <DetailRow label="地址" value={d.sender_address || '-'} />
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>收货人</Text>
+        <DetailRow label="姓名" value={d.consignee_name || '-'} />
+        <DetailRow label="电话" value={d.consignee_phone || '-'} highlight />
+        {d.consignee_email && <DetailRow label="邮箱" value={d.consignee_email} />}
+        <DetailRow label="国家 / 城市" value={[d.consignee_country, d.consignee_city].filter(Boolean).join(' · ') || '-'} />
+        <DetailRow label="地址" value={d.consignee_address || '-'} />
+      </View>
+    </>
+  );
+
+  const renderCargo = (d: OrderDetail) => (
+    <>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>子运单 ({d.subOrders?.length || 0})</Text>
+        {(d.subOrders || []).map((sub) => (
+          <View key={sub.id} style={styles.subCard}>
+            <View style={styles.subHeader}>
+              <Text style={styles.subNo}>{sub.sub_order_no}</Text>
+              <Text style={styles.subStatus}>{STATUS_META[sub.sub_status]?.label || sub.sub_status}</Text>
+            </View>
+            <Text style={styles.subInfo}>
+              {sub.pieces}件 · {sub.actual_weight_kg}kg{sub.container_no ? ` · 柜号 ${sub.container_no}` : ''}
+            </Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>包裹清单 ({d.packages?.length || 0})</Text>
+        {(d.packages || []).map((p) => (
+          <View key={p.id} style={styles.pkgRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.pkgGoods}>{p.goods_name}</Text>
+              <Text style={styles.pkgTracking}>{p.express_company} · {p.tracking_no}</Text>
+            </View>
+            <Text style={styles.pkgWeight}>{p.declared_weight_kg}kg</Text>
+          </View>
+        ))}
+      </View>
+    </>
+  );
+
+  const renderFees = (d: OrderDetail) => (
+    <>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>运费</Text>
+        <DetailRow label="预估运费" value={d.estimated_freight ? `¥ ${Number(d.estimated_freight).toFixed(2)}` : '-'} />
+        <DetailRow label="实际运费" value={d.actual_freight ? `¥ ${Number(d.actual_freight).toFixed(2)}` : '待入库称重后生成'} highlight={!!d.actual_freight} />
+        <DetailRow label="付款状态" value={d.payment_status === 'PAID' ? '✅ 已付款' : '⏳ 未付款'} />
+        {d.payment_status !== 'PAID' && Number(d.actual_freight) > 0 && (
+          <TouchableOpacity
+            style={styles.payBtn}
+            onPress={() => Alert.alert('登记收款', `订单 ${d.order_no}\n待收款：¥${Number(d.actual_freight).toFixed(2)}`, [
+              { text: '取消', style: 'cancel' },
+              { text: '上传凭证', onPress: () => Alert.alert('提示', '请在 Web 端登记收款并上传凭证') },
+              { text: '提醒客户', onPress: () => Alert.alert('发送成功', '已通过短信/微信提醒客户支付') },
+            ])}
+          >
+            <Ionicons name="card-outline" size={18} color="#fff" />
+            <Text style={styles.payBtnText}>登记收款 ¥{Number(d.actual_freight).toFixed(2)}</Text>
+          </TouchableOpacity>
+        )}
+        {d.payment_status !== 'PAID' && !d.actual_freight && (
+          <View style={styles.payHint}>
+            <Ionicons name="information-circle-outline" size={14} color={colors.info} />
+            <Text style={styles.payHintText}>入库称重完成后自动生成实际运费，即可支付</Text>
+          </View>
+        )}
+        {(d.fees || []).length > 0 && (
+          <>
+            <Text style={[styles.detailLabel, { marginTop: spacing.md, marginBottom: 4 }]}>其他费用</Text>
+            {d.fees.map((f: any, i: number) => (
+              <DetailRow key={i} label={f.fee_name || f.fee_item_code || '其他'} value={`¥ ${Number(f.amount || 0).toFixed(2)}`} />
+            ))}
+          </>
+        )}
+      </View>
+
+      {((d.relatedJobs?.length || 0) > 0 || (d.relatedDpns?.length || 0) > 0) && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>关联任务</Text>
+          {(d.relatedJobs || []).map((j) => (
+            <TouchableOpacity
+              key={j.id}
+              style={styles.relCard}
+              onPress={() => router.push({ pathname: '/task/packing', params: { jobId: j.id, mode: 'add-order' } })}
+            >
+              <Ionicons name="cube-outline" size={18} color={colors.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.relNo}>{j.job_no}</Text>
+                <Text style={styles.relSub}>JOB · {j.job_status} · {j.route_code || '-'} {j.container_no ? `· ${j.container_no}` : ''}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+            </TouchableOpacity>
+          ))}
+          {(d.relatedDpns || []).map((dpn) => (
+            <TouchableOpacity
+              key={dpn.id}
+              style={styles.relCard}
+              onPress={() => router.push({ pathname: '/task/dpn', params: { dpnId: dpn.id, dpnNo: dpn.dpn_no, dpnStatus: dpn.dpn_status, fromSite: dpn.from_site, toSite: dpn.to_site } })}
+            >
+              <Ionicons name="document-text-outline" size={18} color={colors.taskDispatch} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.relNo}>{dpn.dpn_no}</Text>
+                <Text style={styles.relSub}>DPN · {dpn.dpn_status} · {dpn.from_site || '-'} → {dpn.to_site || '-'}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+    </>
+  );
+
   return (
     <View style={styles.safe}>
-      {/* Nav */}
       <View style={styles.navBar}>
         <TouchableOpacity onPress={() => safeBack(router)} style={styles.navBtn}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
@@ -157,8 +335,8 @@ export default function OrderDetailScreen() {
       ) : !detail ? (
         <View style={styles.center}><Text style={styles.emptyText}>加载失败</Text></View>
       ) : (
-        <ScrollView contentContainerStyle={styles.content}>
-          {/* Hero */}
+        <>
+          {/* Hero - always visible */}
           <View style={styles.heroCard}>
             <Text style={styles.heroOrderNo}>{detail.order_no}</Text>
             <Text style={styles.heroEntry}>入仓号：{detail.warehouse_entry_no}</Text>
@@ -184,167 +362,27 @@ export default function OrderDetailScreen() {
             </View>
           </View>
 
-          {/* 物流时间线 */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📍 物流轨迹</Text>
-            <View style={styles.timeline}>
-              {TIMELINE_NODES.map((node, idx) => {
-                const currentIdx = getProgressIndex(detail.order_status);
-                const passed = idx <= currentIdx;
-                const isCurrent = idx === currentIdx;
-                return (
-                  <View key={node.key} style={styles.timelineRow}>
-                    <View style={styles.timelineLeft}>
-                      <View style={[styles.timelineDot, passed && styles.timelineDotActive, isCurrent && styles.timelineDotCurrent]}>
-                        <Ionicons name={node.icon as any} size={14} color={passed ? '#fff' : colors.textTertiary} />
-                      </View>
-                      {idx < TIMELINE_NODES.length - 1 && (
-                        <View style={[styles.timelineLine, passed && styles.timelineLineActive]} />
-                      )}
-                    </View>
-                    <View style={styles.timelineRight}>
-                      <Text style={[styles.timelineLabel, passed && { color: colors.text, fontWeight: '600' }]}>{node.label}</Text>
-                      {isCurrent && <Text style={styles.timelineNote}>当前节点</Text>}
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          </View>
-
-          {/* 基本信息 */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📋 基本信息</Text>
-            <DetailRow label="客户" value={detail.customer_name} />
-            <DetailRow label="客户编号" value={detail.customer_code || '-'} />
-            <DetailRow label="下单时间" value={detail.created_at?.slice(0, 16) || '-'} />
-            <DetailRow label="运输方式" value={detail.business_line === 'SEA' ? '🚢 海运' : '✈️ 空运'} />
-            <DetailRow label="首选线路" value={detail.route_code} />
-            <DetailRow label="服务类型" value={SERVICE_TYPE_LABEL[detail.service_type || ''] || detail.service_type || '-'} />
-            <DetailRow label="付款方式" value={PAYMENT_METHOD_LABEL[detail.payment_method || ''] || detail.payment_method || '-'} />
-            <DetailRow label="总件数" value={`${detail.total_declared_pieces || 0} 件`} />
-            <DetailRow label="总重量" value={`${Number(detail.total_declared_weight_kg || 0).toFixed(1)} kg`} />
-            {detail.remark && <DetailRow label="备注" value={detail.remark} />}
-          </View>
-
-          {/* 发货人 */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📤 发货人</Text>
-            <DetailRow label="姓名" value={detail.sender_name || '-'} />
-            <DetailRow label="电话" value={detail.sender_phone || '-'} highlight />
-            <DetailRow label="地址" value={detail.sender_address || '-'} />
-          </View>
-
-          {/* 收货人 */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📥 收货人</Text>
-            <DetailRow label="姓名" value={detail.consignee_name || '-'} />
-            <DetailRow label="电话" value={detail.consignee_phone || '-'} highlight />
-            {detail.consignee_email && <DetailRow label="邮箱" value={detail.consignee_email} />}
-            <DetailRow label="国家 / 城市" value={[detail.consignee_country, detail.consignee_city].filter(Boolean).join(' · ') || '-'} />
-            <DetailRow label="地址" value={detail.consignee_address || '-'} />
-          </View>
-
-          {/* 子运单 */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📦 子运单 ({detail.subOrders?.length || 0})</Text>
-            {(detail.subOrders || []).map((sub) => (
-              <View key={sub.id} style={styles.subCard}>
-                <View style={styles.subHeader}>
-                  <Text style={styles.subNo}>{sub.sub_order_no}</Text>
-                  <Text style={styles.subStatus}>{STATUS_META[sub.sub_status]?.label || sub.sub_status}</Text>
-                </View>
-                <Text style={styles.subInfo}>
-                  {sub.pieces}件 · {sub.actual_weight_kg}kg{sub.container_no ? ` · 柜号 ${sub.container_no}` : ''}
-                </Text>
-              </View>
-            ))}
-          </View>
-
-          {/* 包裹清单 */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📋 包裹清单 ({detail.packages?.length || 0})</Text>
-            {(detail.packages || []).map((p) => (
-              <View key={p.id} style={styles.pkgRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.pkgGoods}>{p.goods_name}</Text>
-                  <Text style={styles.pkgTracking}>{p.express_company} · {p.tracking_no}</Text>
-                </View>
-                <Text style={styles.pkgWeight}>{p.declared_weight_kg}kg</Text>
-              </View>
-            ))}
-          </View>
-
-          {/* 关联任务 */}
-          {((detail.relatedJobs?.length || 0) > 0 || (detail.relatedDpns?.length || 0) > 0) && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>🔗 关联任务</Text>
-              {(detail.relatedJobs || []).map((j) => (
-                <TouchableOpacity
-                  key={j.id}
-                  style={styles.relCard}
-                  onPress={() => router.push({ pathname: '/task/packing', params: { jobId: j.id, mode: 'add-order' } })}
-                >
-                  <Ionicons name="cube-outline" size={18} color={colors.primary} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.relNo}>{j.job_no}</Text>
-                    <Text style={styles.relSub}>JOB · {j.job_status} · {j.route_code || '-'} {j.container_no ? `· ${j.container_no}` : ''}</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
-                </TouchableOpacity>
-              ))}
-              {(detail.relatedDpns || []).map((d) => (
-                <TouchableOpacity
-                  key={d.id}
-                  style={styles.relCard}
-                  onPress={() => router.push({ pathname: '/task/dpn', params: { dpnId: d.id, dpnNo: d.dpn_no, dpnStatus: d.dpn_status, fromSite: d.from_site, toSite: d.to_site } })}
-                >
-                  <Ionicons name="document-text-outline" size={18} color={colors.taskDispatch} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.relNo}>{d.dpn_no}</Text>
-                    <Text style={styles.relSub}>DPN · {d.dpn_status} · {d.from_site || '-'} → {d.to_site || '-'}</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-
-          {/* 运费 */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>💰 运费</Text>
-            <DetailRow label="预估运费" value={detail.estimated_freight ? `¥ ${Number(detail.estimated_freight).toFixed(2)}` : '-'} />
-            <DetailRow label="实际运费" value={detail.actual_freight ? `¥ ${Number(detail.actual_freight).toFixed(2)}` : '待入库称重后生成'} highlight={!!detail.actual_freight} />
-            <DetailRow label="付款状态" value={detail.payment_status === 'PAID' ? '✅ 已付款' : '⏳ 未付款'} />
-            {detail.payment_status !== 'PAID' && Number(detail.actual_freight) > 0 && (
-              <TouchableOpacity
-                style={styles.payBtn}
-                onPress={() => Alert.alert('登记收款', `订单 ${detail.order_no}\n待收款：¥${Number(detail.actual_freight).toFixed(2)}`, [
-                  { text: '取消', style: 'cancel' },
-                  { text: '上传凭证', onPress: () => Alert.alert('提示', '请在 Web 端登记收款并上传凭证') },
-                  { text: '提醒客户', onPress: () => Alert.alert('发送成功', '已通过短信/微信提醒客户支付') },
-                ])}
+          {/* Tab bar */}
+          <View style={styles.tabRow}>
+            {TABS.map((tab) => (
+              <Pressable
+                key={tab.key}
+                style={[styles.tabBtn, activeTab === tab.key && styles.tabBtnActive]}
+                onPress={() => setActiveTab(tab.key)}
               >
-                <Ionicons name="card-outline" size={18} color="#fff" />
-                <Text style={styles.payBtnText}>登记收款 ¥{Number(detail.actual_freight).toFixed(2)}</Text>
-              </TouchableOpacity>
-            )}
-            {detail.payment_status !== 'PAID' && !detail.actual_freight && (
-              <View style={styles.payHint}>
-                <Ionicons name="information-circle-outline" size={14} color={colors.info} />
-                <Text style={styles.payHintText}>入库称重完成后自动生成实际运费，即可支付</Text>
-              </View>
-            )}
-            {(detail.fees || []).length > 0 && (
-              <>
-                <Text style={[styles.detailLabel, { marginTop: spacing.md, marginBottom: 4 }]}>其他费用</Text>
-                {detail.fees.map((f: any, i: number) => (
-                  <DetailRow key={i} label={f.fee_name || f.fee_item_code || '其他'} value={`¥ ${Number(f.amount || 0).toFixed(2)}`} />
-                ))}
-              </>
-            )}
+                <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}>{tab.label}</Text>
+              </Pressable>
+            ))}
           </View>
-        </ScrollView>
+
+          {/* Tab content */}
+          <ScrollView contentContainerStyle={styles.content}>
+            {activeTab === 'overview' && renderOverview(detail)}
+            {activeTab === 'info' && renderInfo(detail)}
+            {activeTab === 'cargo' && renderCargo(detail)}
+            {activeTab === 'fees' && renderFees(detail)}
+          </ScrollView>
+        </>
       )}
     </View>
   );
@@ -358,12 +396,20 @@ const styles = StyleSheet.create({
   navBtn: { padding: spacing.xs, width: 40 },
   navTitle: { flex: 1, textAlign: 'center', fontSize: font.lg, fontWeight: '600', color: colors.text },
   content: { padding: spacing.md, paddingBottom: 40 },
-  heroCard: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.md },
+
+  heroCard: { backgroundColor: colors.card, padding: spacing.lg, marginHorizontal: spacing.md, marginTop: spacing.md, borderRadius: radius.lg },
   heroOrderNo: { fontSize: font.lg, fontWeight: '700', color: colors.primary, fontFamily: font.mono },
   heroEntry: { fontSize: font.sm, color: colors.textSecondary, marginTop: 4 },
   heroTags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
   statusBadge: { paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.sm },
   statusText: { fontSize: font.xs, fontWeight: '600' },
+
+  tabRow: { flexDirection: 'row', backgroundColor: colors.card, borderRadius: radius.md, padding: 4, marginHorizontal: spacing.md, marginTop: spacing.md, gap: 4 },
+  tabBtn: { flex: 1, alignItems: 'center', paddingVertical: spacing.sm, borderRadius: radius.sm },
+  tabBtnActive: { backgroundColor: colors.primary },
+  tabText: { fontSize: font.xs, color: colors.textSecondary },
+  tabTextActive: { color: '#fff', fontWeight: '600' },
+
   section: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.md },
   sectionTitle: { fontSize: font.md, fontWeight: '600', color: colors.text, marginBottom: spacing.md },
   timeline: { paddingLeft: spacing.sm },

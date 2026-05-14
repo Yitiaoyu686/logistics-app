@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity,
+  View, Text, StyleSheet, TouchableOpacity, Pressable,
   ActivityIndicator, ScrollView, Alert, Linking,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -66,24 +66,13 @@ const ORDER_STATUS_LABEL: Record<string, string> = {
   DEPARTED: '已发车', IN_TRANSIT: '运输中', ARRIVED: '已到达', DELIVERED: '已签收',
 };
 
-interface CollapseSectionProps {
-  title: string;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}
-
-function CollapseSection({ title, defaultOpen = false, children }: CollapseSectionProps) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <View style={styles.collapse}>
-      <TouchableOpacity style={styles.collapseHeader} onPress={() => setOpen(!open)}>
-        <Text style={styles.collapseTitle}>{title}</Text>
-        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSecondary} />
-      </TouchableOpacity>
-      {open && <View style={styles.collapseBody}>{children}</View>}
-    </View>
-  );
-}
+type TabKey = 'overview' | 'info' | 'address' | 'orders';
+const TABS: { key: TabKey; label: string }[] = [
+  { key: 'overview', label: '概览' },
+  { key: 'info', label: '信息' },
+  { key: 'address', label: '地址' },
+  { key: 'orders', label: '订单' },
+];
 
 function DetailLine({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
@@ -101,6 +90,7 @@ export default function CustomerDetailScreen() {
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabKey>('overview');
 
   useEffect(() => {
     if (!id) return;
@@ -117,8 +107,9 @@ export default function CustomerDetailScreen() {
       setDetail(detailRes.data);
       const allOrders = orderRes.data || [];
       setOrders(allOrders.filter((o: any) => o.customer_id === id));
-    } catch (err: any) {
-      Alert.alert('加载失败', err.message || '请重试');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '请重试';
+      Alert.alert('加载失败', msg);
     } finally {
       setLoading(false);
     }
@@ -141,8 +132,9 @@ export default function CustomerDetailScreen() {
             await customerApi.release(detail.id);
             Alert.alert('已释放');
             safeBack(router);
-          } catch (err: any) {
-            Alert.alert('释放失败', err.message || '请重试');
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : '请重试';
+            Alert.alert('释放失败', msg);
           } finally {
             setActionLoading(false);
           }
@@ -151,9 +143,138 @@ export default function CustomerDetailScreen() {
     ]);
   };
 
+  const renderOverview = (d: CustomerDetail) => (
+    <View style={styles.entrySection}>
+      <Text style={styles.entryLabel}>入仓号</Text>
+      <View style={styles.entryCard}>
+        <Text style={styles.entryCode}>{d.customerCode}</Text>
+        <Text style={styles.entryHint}>客户包裹填写此入仓号可自动关联订单</Text>
+      </View>
+      <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+        {['广州总仓', '深圳分仓', 'LOS 到达仓'].map((wh, i) => (
+          <View key={i} style={styles.entryChip}>
+            <Text style={styles.entryChipLabel}>{wh}</Text>
+            <Text style={styles.entryChipValue}>{d.customerCode}-{['GZ', 'SZ', 'LOS'][i]}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+
+  const renderInfo = (d: CustomerDetail) => (
+    <>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>基本信息</Text>
+        <DetailLine label="客户编号" value={d.customerCode} />
+        <DetailLine label="客户名称" value={d.customerName} />
+        <DetailLine label="客户类型" value={TYPE_LABEL[d.customerType] || d.customerType} />
+        <DetailLine label="所在国家" value={d.country} />
+        <DetailLine label="行业" value={d.industry || '-'} />
+        <DetailLine label="状态" value={d.status === 'ACTIVE' ? '活跃' : d.status} />
+        <DetailLine label="池类型" value={d.poolType === 'PRIVATE' ? '我的客户' : '公海池'} />
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>联系人</Text>
+        <DetailLine label="联系人" value={d.contactName} />
+        <DetailLine label="电话" value={d.contactPhone} highlight />
+        <DetailLine label="邮箱" value={d.contactEmail || '-'} />
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>物流偏好</Text>
+        <DetailLine label="运输方式" value={d.preferredTransport || '未设置'} />
+        <DetailLine label="付款方式" value={d.preferredPayment || '未设置'} />
+      </View>
+
+      {d.remark && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>备注</Text>
+          <Text style={styles.remarkText}>{d.remark}</Text>
+        </View>
+      )}
+    </>
+  );
+
+  const renderAddress = (d: CustomerDetail) => (
+    <>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>发货人 ({d.senders?.length || 0})</Text>
+        {(d.senders || []).length === 0 ? (
+          <Text style={styles.empty}>暂无发货人信息</Text>
+        ) : (
+          d.senders.map((s) => (
+            <View key={s.id} style={styles.addrCard}>
+              <Text style={styles.addrName}>{s.sender_name || '-'}</Text>
+              <Text style={styles.addrPhone}>{s.sender_phone || '-'}</Text>
+              <Text style={styles.addrText}>{s.sender_address || '-'}</Text>
+            </View>
+          ))
+        )}
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>收货人 ({d.recipients?.length || 0})</Text>
+        {(d.recipients || []).length === 0 ? (
+          <Text style={styles.empty}>暂无收货人</Text>
+        ) : (
+          d.recipients.map((r) => (
+            <View key={r.id} style={styles.addrCard}>
+              <View style={styles.addrHeader}>
+                <Text style={styles.addrName}>{r.recipient_name}</Text>
+                {r.is_default === 1 && (
+                  <View style={styles.defaultBadge}><Text style={styles.defaultText}>默认</Text></View>
+                )}
+              </View>
+              <Text style={styles.addrPhone}>{r.recipient_phone}</Text>
+              <Text style={styles.addrText}>{r.country} · {r.city}</Text>
+              <Text style={styles.addrText}>{r.detail_address}</Text>
+            </View>
+          ))
+        )}
+      </View>
+    </>
+  );
+
+  const renderOrders = (d: CustomerDetail) => (
+    <>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>客户订单 ({orders.length})</Text>
+        {orders.length === 0 ? (
+          <Text style={styles.empty}>暂无订单</Text>
+        ) : (
+          orders.map((o) => (
+            <TouchableOpacity
+              key={o.id}
+              style={styles.orderCard}
+              onPress={() => router.push({ pathname: '/task/order-detail' as any, params: { id: o.id } })}
+            >
+              <View style={styles.orderHeader}>
+                <Text style={styles.orderNo}>{o.order_no}</Text>
+                <Text style={styles.orderStatus}>{ORDER_STATUS_LABEL[o.order_status] || o.order_status}</Text>
+              </View>
+              <Text style={styles.orderInfo}>
+                {o.total_declared_pieces}件 · {o.total_declared_weight_kg}kg · {o.created_at?.substring(0, 10)}
+              </Text>
+            </TouchableOpacity>
+          ))
+        )}
+      </View>
+
+      {d.poolType === 'PRIVATE' && (
+        <TouchableOpacity
+          style={[styles.releaseBtn, actionLoading && styles.btnDisabled]}
+          onPress={handleRelease}
+          disabled={actionLoading}
+        >
+          <Text style={styles.releaseBtnText}>释放回公海池</Text>
+        </TouchableOpacity>
+      )}
+    </>
+  );
+
   return (
     <View style={styles.safe}>
-      {/* Nav */}
       <View style={styles.navBar}>
         <TouchableOpacity onPress={() => safeBack(router)} style={styles.navBtn}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
@@ -167,8 +288,8 @@ export default function CustomerDetailScreen() {
       ) : !detail ? (
         <View style={styles.center}><Text style={styles.emptyText}>加载失败</Text></View>
       ) : (
-        <ScrollView contentContainerStyle={styles.content}>
-          {/* Hero */}
+        <>
+          {/* Hero - always visible */}
           <View style={styles.detailHero}>
             <View style={styles.detailAvatar}>
               <Text style={styles.detailAvatarText}>{(detail.customerName || '?')[0]}</Text>
@@ -187,7 +308,7 @@ export default function CustomerDetailScreen() {
             </View>
           </View>
 
-          {/* 快捷操作 */}
+          {/* Quick actions - always visible */}
           <View style={styles.quickRow}>
             <TouchableOpacity style={styles.quickBtn} onPress={() => handleCall(detail.contactPhone)}>
               <Ionicons name="call" size={20} color={colors.primary} />
@@ -207,116 +328,27 @@ export default function CustomerDetailScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* 入仓号 */}
-          <View style={styles.entrySection}>
-            <Text style={styles.entryLabel}>🏷️ 入仓号</Text>
-            <View style={styles.entryCard}>
-              <Text style={styles.entryCode}>{detail.customerCode}</Text>
-              <Text style={styles.entryHint}>客户包裹填写此入仓号可自动关联订单</Text>
-            </View>
-            <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
-              {['广州总仓', '深圳分仓', 'LOS 到达仓'].map((wh, i) => (
-                <View key={i} style={styles.entryChip}>
-                  <Text style={styles.entryChipLabel}>{wh}</Text>
-                  <Text style={styles.entryChipValue}>{detail.customerCode}-{['GZ', 'SZ', 'LOS'][i]}</Text>
-                </View>
-              ))}
-            </View>
+          {/* Tab bar */}
+          <View style={styles.tabRow}>
+            {TABS.map((tab) => (
+              <Pressable
+                key={tab.key}
+                style={[styles.tabBtn, activeTab === tab.key && styles.tabBtnActive]}
+                onPress={() => setActiveTab(tab.key)}
+              >
+                <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}>{tab.label}</Text>
+              </Pressable>
+            ))}
           </View>
 
-          <CollapseSection title="📋 基本信息" defaultOpen>
-            <DetailLine label="客户编号" value={detail.customerCode} />
-            <DetailLine label="客户名称" value={detail.customerName} />
-            <DetailLine label="客户类型" value={TYPE_LABEL[detail.customerType] || detail.customerType} />
-            <DetailLine label="所在国家" value={detail.country} />
-            <DetailLine label="行业" value={detail.industry || '-'} />
-            <DetailLine label="状态" value={detail.status === 'ACTIVE' ? '活跃' : detail.status} />
-            <DetailLine label="池类型" value={detail.poolType === 'PRIVATE' ? '我的客户' : '公海池'} />
-          </CollapseSection>
-
-          <CollapseSection title="👤 联系人" defaultOpen>
-            <DetailLine label="联系人" value={detail.contactName} />
-            <DetailLine label="电话" value={detail.contactPhone} highlight />
-            <DetailLine label="邮箱" value={detail.contactEmail || '-'} />
-          </CollapseSection>
-
-          <CollapseSection title={`📤 发货人 (${detail.senders?.length || 0})`}>
-            {(detail.senders || []).length === 0 ? (
-              <Text style={styles.empty}>暂无发货人信息</Text>
-            ) : (
-              detail.senders.map((s) => (
-                <View key={s.id} style={styles.addrCard}>
-                  <Text style={styles.addrName}>{s.sender_name || '-'}</Text>
-                  <Text style={styles.addrPhone}>📱 {s.sender_phone || '-'}</Text>
-                  <Text style={styles.addrText}>📍 {s.sender_address || '-'}</Text>
-                </View>
-              ))
-            )}
-          </CollapseSection>
-
-          <CollapseSection title={`📥 收货人 (${detail.recipients?.length || 0})`}>
-            {(detail.recipients || []).length === 0 ? (
-              <Text style={styles.empty}>暂无收货人</Text>
-            ) : (
-              detail.recipients.map((r) => (
-                <View key={r.id} style={styles.addrCard}>
-                  <View style={styles.addrHeader}>
-                    <Text style={styles.addrName}>{r.recipient_name}</Text>
-                    {r.is_default === 1 && (
-                      <View style={styles.defaultBadge}><Text style={styles.defaultText}>默认</Text></View>
-                    )}
-                  </View>
-                  <Text style={styles.addrPhone}>📱 {r.recipient_phone}</Text>
-                  <Text style={styles.addrText}>📍 {r.country} · {r.city}</Text>
-                  <Text style={styles.addrText}>{r.detail_address}</Text>
-                </View>
-              ))
-            )}
-          </CollapseSection>
-
-          <CollapseSection title="🚢 物流偏好">
-            <DetailLine label="运输方式" value={detail.preferredTransport || '未设置'} />
-            <DetailLine label="付款方式" value={detail.preferredPayment || '未设置'} />
-          </CollapseSection>
-
-          <CollapseSection title={`📦 客户订单 (${orders.length})`}>
-            {orders.length === 0 ? (
-              <Text style={styles.empty}>暂无订单</Text>
-            ) : (
-              orders.map((o) => (
-                <TouchableOpacity
-                  key={o.id}
-                  style={styles.orderCard}
-                  onPress={() => router.push({ pathname: '/task/order-detail' as any, params: { id: o.id } })}
-                >
-                  <View style={styles.orderHeader}>
-                    <Text style={styles.orderNo}>{o.order_no}</Text>
-                    <Text style={styles.orderStatus}>{ORDER_STATUS_LABEL[o.order_status] || o.order_status}</Text>
-                  </View>
-                  <Text style={styles.orderInfo}>
-                    {o.total_declared_pieces}件 · {o.total_declared_weight_kg}kg · {o.created_at?.substring(0, 10)}
-                  </Text>
-                </TouchableOpacity>
-              ))
-            )}
-          </CollapseSection>
-
-          {detail.remark && (
-            <CollapseSection title="📝 备注">
-              <Text style={styles.remarkText}>{detail.remark}</Text>
-            </CollapseSection>
-          )}
-
-          {detail.poolType === 'PRIVATE' && (
-            <TouchableOpacity
-              style={[styles.releaseBtn, actionLoading && styles.btnDisabled]}
-              onPress={handleRelease}
-              disabled={actionLoading}
-            >
-              <Text style={styles.releaseBtnText}>释放回公海池</Text>
-            </TouchableOpacity>
-          )}
-        </ScrollView>
+          {/* Tab content */}
+          <ScrollView contentContainerStyle={styles.content}>
+            {activeTab === 'overview' && renderOverview(detail)}
+            {activeTab === 'info' && renderInfo(detail)}
+            {activeTab === 'address' && renderAddress(detail)}
+            {activeTab === 'orders' && renderOrders(detail)}
+          </ScrollView>
+        </>
       )}
     </View>
   );
@@ -330,18 +362,27 @@ const styles = StyleSheet.create({
   navBtn: { padding: spacing.xs, width: 40 },
   navTitle: { flex: 1, textAlign: 'center', fontSize: font.lg, fontWeight: '600', color: colors.text },
   content: { padding: spacing.md, paddingBottom: 40 },
-  detailHero: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, alignItems: 'center', marginBottom: spacing.md },
-  detailAvatar: { width: 64, height: 64, borderRadius: radius.full, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
-  detailAvatarText: { fontSize: font.xxl, fontWeight: '700', color: colors.primary },
+
+  detailHero: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, alignItems: 'center', marginHorizontal: spacing.md, marginTop: spacing.md },
+  detailAvatar: { width: 56, height: 56, borderRadius: radius.full, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
+  detailAvatarText: { fontSize: font.xl, fontWeight: '700', color: colors.primary },
   detailName: { fontSize: font.lg, fontWeight: '700', color: colors.text },
   detailCode: { fontSize: font.sm, fontFamily: font.mono, color: colors.textSecondary, marginTop: 2 },
   detailTags: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   tagPill: { paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: radius.full, backgroundColor: colors.primaryLight },
   tagText: { fontSize: font.xs, color: colors.primary, fontWeight: '500' },
-  quickRow: { flexDirection: 'row', backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.md, gap: spacing.sm },
+
+  quickRow: { flexDirection: 'row', backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.md, marginHorizontal: spacing.md, marginTop: spacing.sm, gap: spacing.sm },
   quickBtn: { flex: 1, alignItems: 'center', gap: 4, padding: spacing.sm },
   quickText: { fontSize: font.xs, color: colors.text },
-  entrySection: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.md, borderLeftWidth: 3, borderLeftColor: colors.primary },
+
+  tabRow: { flexDirection: 'row', backgroundColor: colors.card, borderRadius: radius.md, padding: 4, marginHorizontal: spacing.md, marginTop: spacing.sm, gap: 4 },
+  tabBtn: { flex: 1, alignItems: 'center', paddingVertical: spacing.sm, borderRadius: radius.sm },
+  tabBtnActive: { backgroundColor: colors.primary },
+  tabText: { fontSize: font.xs, color: colors.textSecondary },
+  tabTextActive: { color: '#fff', fontWeight: '600' },
+
+  entrySection: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, borderLeftWidth: 3, borderLeftColor: colors.primary },
   entryLabel: { fontSize: font.md, fontWeight: '600', color: colors.text, marginBottom: spacing.sm },
   entryCard: { backgroundColor: colors.primaryLight, borderRadius: radius.md, padding: spacing.md },
   entryCode: { fontSize: font.xxl, fontWeight: '800', color: colors.primary, fontFamily: font.mono, letterSpacing: 2 },
@@ -349,13 +390,13 @@ const styles = StyleSheet.create({
   entryChip: { flex: 1, padding: spacing.sm, backgroundColor: colors.bg, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderLight },
   entryChipLabel: { fontSize: font.xs, color: colors.textSecondary },
   entryChipValue: { fontSize: font.xs, color: colors.primary, fontWeight: '700', fontFamily: font.mono, marginTop: 2 },
-  collapse: { backgroundColor: colors.card, borderRadius: radius.lg, marginBottom: spacing.md, overflow: 'hidden' },
-  collapseHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.lg },
-  collapseTitle: { fontSize: font.md, fontWeight: '600', color: colors.text },
-  collapseBody: { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
+
+  section: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.md },
+  sectionTitle: { fontSize: font.md, fontWeight: '600', color: colors.text, marginBottom: spacing.md },
   detailLine: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing.sm, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
   detailLabel: { fontSize: font.sm, color: colors.textSecondary },
   detailValue: { fontSize: font.sm, color: colors.text, fontWeight: '500' },
+  remarkText: { fontSize: font.sm, color: colors.textSecondary, lineHeight: 22 },
   empty: { fontSize: font.sm, color: colors.textTertiary, textAlign: 'center', paddingVertical: spacing.md },
   addrCard: { backgroundColor: colors.bg, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, borderLeftWidth: 3, borderLeftColor: colors.primary },
   addrHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: 4 },
@@ -369,7 +410,6 @@ const styles = StyleSheet.create({
   orderNo: { fontSize: font.sm, fontFamily: font.mono, fontWeight: '600', color: colors.primary },
   orderStatus: { fontSize: font.xs, color: colors.textSecondary },
   orderInfo: { fontSize: font.xs, color: colors.textSecondary },
-  remarkText: { fontSize: font.sm, color: colors.textSecondary, lineHeight: 22 },
   releaseBtn: { height: 48, backgroundColor: colors.warningLight, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.warning, marginTop: spacing.md },
   releaseBtnText: { color: colors.warning, fontSize: font.md, fontWeight: '600' },
   btnDisabled: { opacity: 0.6 },

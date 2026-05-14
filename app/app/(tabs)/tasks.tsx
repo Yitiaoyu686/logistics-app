@@ -6,10 +6,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing, radius, font, shadow } from '../../lib/theme';
 import { getRoleLabel } from '../../lib/auth';
 import { jobApi, orderApi, warehouseApi, deliveryApi, customerApi } from '../../lib/api';
-import { TransferActionDialog, TransferActionMode, TransferTargetItem } from '../../components/TransferActionDialog';
-import { UnmatchedMatchDialog, UnmatchedTargetItem } from '../../components/UnmatchedMatchDialog';
-
-type ActionIntent = 'transfer-dispatch' | 'transfer-arrive' | 'transfer-receive' | 'unmatched-match';
 
 interface TaskItem {
   id: string;
@@ -23,12 +19,10 @@ interface TaskItem {
   statusColor: string;
   time?: string;
   progress?: { current: number; total: number };
-  actions: { label: string; color: string; route?: string; params?: Record<string, any>; intent?: ActionIntent }[];
+  actions: { label: string; color: string; route?: string; params?: Record<string, any> }[];
   borderColor: string;
   cardRoute?: string;
   cardParams?: Record<string, any>;
-  rawTransfer?: TransferTargetItem;
-  rawUnmatched?: UnmatchedTargetItem;
 }
 
 export default function TasksScreen() {
@@ -40,9 +34,6 @@ export default function TasksScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [mainTab, setMainTab] = useState<'pending' | 'completed'>('pending');
   const [activeTab, setActiveTab] = useState('全部');
-  const [transferTarget, setTransferTarget] = useState<TransferTargetItem | null>(null);
-  const [transferMode, setTransferMode] = useState<TransferActionMode | null>(null);
-  const [unmatchedTarget, setUnmatchedTarget] = useState<UnmatchedTargetItem | null>(null);
 
   useEffect(() => {
     let timer: any = null;
@@ -107,23 +98,9 @@ export default function TasksScreen() {
     ? currentTasks
     : currentTasks.filter(t => (tabTypeMap[activeTab] || []).includes(t.type));
 
-  const handleAction = (task: TaskItem, action: TaskItem['actions'][0]) => {
-    if (!action) return;
-    if (action.intent === 'transfer-dispatch' && task.rawTransfer) {
-      setTransferTarget(task.rawTransfer); setTransferMode('dispatch'); return;
-    }
-    if (action.intent === 'transfer-arrive' && task.rawTransfer) {
-      setTransferTarget(task.rawTransfer); setTransferMode('arrive'); return;
-    }
-    if (action.intent === 'transfer-receive' && task.rawTransfer) {
-      setTransferTarget(task.rawTransfer); setTransferMode('receive'); return;
-    }
-    if (action.intent === 'unmatched-match' && task.rawUnmatched) {
-      setUnmatchedTarget(task.rawUnmatched); return;
-    }
-    if (action.route) {
-      router.push({ pathname: action.route as any, params: action.params || {} });
-    }
+  const handleAction = (_task: TaskItem, action: TaskItem['actions'][0]) => {
+    if (!action || !action.route) return;
+    router.push({ pathname: action.route as any, params: action.params || {} });
   };
 
   return (
@@ -273,19 +250,6 @@ export default function TasksScreen() {
         <View style={{ height: 20 }} />
       </ScrollView>
 
-      <TransferActionDialog
-        visible={!!transferTarget && !!transferMode}
-        target={transferTarget}
-        mode={transferMode}
-        onClose={() => { setTransferTarget(null); setTransferMode(null); }}
-        onSuccess={() => { setTransferTarget(null); setTransferMode(null); loadAllTasks(role); }}
-      />
-      <UnmatchedMatchDialog
-        visible={!!unmatchedTarget}
-        target={unmatchedTarget}
-        onClose={() => setUnmatchedTarget(null)}
-        onSuccess={() => { setUnmatchedTarget(null); loadAllTasks(role); }}
-      />
     </SafeAreaView>
   );
 }
@@ -336,9 +300,9 @@ async function loadWarehouseCnTasks(pending: TaskItem[], completed: TaskItem[]) 
     const statusMap: Record<string, string> = { PENDING: '待发运', IN_TRANSIT: '运输中', ARRIVED: '已到达' };
     const actions: TaskItem['actions'] = [];
     if (t.transfer_status === 'PENDING') {
-      actions.push({ label: '执行发车', color: colors.primary, intent: 'transfer-dispatch' });
+      actions.push({ label: '执行发车', color: colors.primary, route: '/task/transfer-dispatch', params: { id: t.id } });
     } else if (t.transfer_status === 'IN_TRANSIT') {
-      actions.push({ label: '确认到达', color: colors.primary, intent: 'transfer-arrive' });
+      actions.push({ label: '确认到达', color: colors.primary, route: '/task/transfer-arrive', params: { id: t.id } });
     } else if (t.transfer_status === 'ARRIVED') {
       actions.push({ label: '扫码入库', color: colors.success, route: '/task/transfer-inbound', params: { id: t.id } });
     }
@@ -351,7 +315,6 @@ async function loadWarehouseCnTasks(pending: TaskItem[], completed: TaskItem[]) 
       statusColor: t.transfer_status === 'PENDING' ? colors.warning : colors.info,
       actions,
       borderColor: colors.taskTransfer,
-      rawTransfer: { id: t.id, transfer_no: t.transfer_no, from_warehouse_name: t.from_warehouse_name || '-', to_warehouse_name: t.to_warehouse_name || '-', total_pieces: t.total_pieces || 0, total_weight_kg: t.total_weight_kg || 0 },
     });
   }
 
@@ -363,9 +326,8 @@ async function loadWarehouseCnTasks(pending: TaskItem[], completed: TaskItem[]) 
       detail: `${u.sender_name || '-'} · ${u.pieces}件 · ${u.gross_weight_kg}kg`,
       status: '待匹配', statusColor: colors.warning,
       time: fmtTime(u.created_at),
-      actions: [{ label: '匹配订单', color: colors.warning, intent: 'unmatched-match' }],
+      actions: [{ label: '匹配订单', color: colors.warning, route: '/task/unmatched-match', params: { id: u.id, trackingNo: u.tracking_no, expressCompany: u.express_company || '', senderName: u.sender_name || '', senderPhone: u.sender_phone || '', pieces: String(u.pieces || 0), weightKg: String(u.gross_weight_kg || 0), customerHint: u.customer_hint || '' } }],
       borderColor: colors.taskOrphan,
-      rawUnmatched: { id: u.id, tracking_no: u.tracking_no, express_company: u.express_company, sender_name: u.sender_name, sender_phone: u.sender_phone, pieces: u.pieces || 0, gross_weight_kg: u.gross_weight_kg || 0, customer_hint: u.customer_hint },
     });
   }
 
