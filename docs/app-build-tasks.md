@@ -12,10 +12,11 @@
 |------|------|------|
 | 阶段一：后端搭建 | ✅ 完成 | 34表数据库 + 7个路由文件 + JWT认证 + Seed数据 |
 | 阶段二：App骨架 | ✅ 完成 | Expo项目 + 5Tab导航 + 登录 + 任务流首页 |
-| 阶段三：P0页面 | ✅ 完成 | 19页中已完成 19 页（骨架5 + 第一批4 + 第二批4 + 第三批4 + 复用2） |
+| 阶段三：P0页面 | ✅ 完成 | 22页全部完成（骨架5 + 第一批4 + 第二批4 + 第三批4 + 复用2 + 操作页3） |
 | 阶段四：数据联通验证 | ✅ 完成 | 5场景全部通过，详见 docs/2026-04-14-阶段四数据联通验证.md |
 | 后续：Web API 兼容 + App 实时感 | ✅ 完成 | 补齐 13 个 Web 旧接口 + App 三页 15s 轮询，无需 WebSocket 即可实时反映 Web 操作 |
 | 2026-04-22：补齐仓管创建入口 | ✅ 完成 | 新建退运页（return-create.tsx）+ 退运处理页解除只读；创建线路评估后暂缓（仍在 Web 维护） |
+| 2026-05-14：弹窗→页面跳转 + 详情Tab化 | ✅ 完成 | 3个底部弹窗改为独立页面（发车/到达/匹配）；订单详情+客户详情改为4Tab布局 |
 
 ---
 
@@ -91,6 +92,7 @@ cd server && npm run dev    # 后端 → http://localhost:3001
 | lib/api.ts | API客户端（web用localhost，native用局域网IP） |
 | lib/auth.ts | 认证状态 + 角色工具函数 |
 | lib/theme.ts | 设计Token（颜色/间距/圆角/字体） |
+| lib/nav.ts | 导航工具（safeBack 安全返回） |
 
 ### 启动命令
 
@@ -106,13 +108,13 @@ cd app && npx expo start --web --port 4003    # Web预览 → http://localhost:4
 
 ---
 
-## 阶段三：P0 页面（🔵 进行中，19页）
+## 阶段三：P0 页面（✅ 完成，22页）
 
 ### 起运国仓管（4页）
 
 | # | 页面 | 文件路径 | 状态 | 说明 |
 |---|------|---------|------|------|
-| 1 | 任务流首页 | app/(tabs)/tasks.tsx | ✅ 已完成 | 任务卡片列表+运营预告+筛选Tab+快捷入口 |
+| 1 | 任务流首页 | app/(tabs)/tasks.tsx | ✅ 已完成 | 任务卡片列表+运营预告+筛选Tab+快捷入口；所有操作跳转独立页面(无弹窗) |
 | 2 | 扫码入库操作 | app/task/inbound.tsx | ✅ 已完成 | 扫码→称重量方→生成子运单→打印面单→上架 |
 | 3 | 库存列表+详情 | app/task/stock.tsx | ✅ 已完成 | 搜索/扫码+筛选+详情底抽+补打面单+改库位 |
 | 4 | 装箱/执行出库 | app/task/packing.tsx | ✅ 已完成 | 添加订单+绑定任务+执行出库(拖车/司机表单) |
@@ -132,8 +134,8 @@ cd app && npx expo start --web --port 4003    # Web预览 → http://localhost:4
 | # | 页面 | 文件路径 | 状态 | 说明 |
 |---|------|---------|------|------|
 | 10 | 待办首页 | app/(tabs)/tasks.tsx | ✅ 已完成 | 同文件，按角色分支+SALES快捷入口 |
-| 11 | 客户列表+详情 | app/task/customer.tsx | ✅ 已完成 | 搜索+列表+详情底抽(联系人/地址/快速操作) |
-| 12 | 订单列表+详情 | app/task/order.tsx | ✅ 已完成 | 筛选Tab+列表+详情底抽(7段物流时间线+子单+包裹+费用) |
+| 11 | 客户列表+详情 | app/task/customer.tsx + customer-detail.tsx | ✅ 已完成 | 搜索+列表+独立详情页(4Tab:概览/信息/地址/订单)+快捷操作(拨打/短信/下单/试算) |
+| 12 | 订单列表+详情 | app/task/order.tsx + order-detail.tsx | ✅ 已完成 | 筛选Tab+列表+独立详情页(4Tab:概览/信息/货物/费用) |
 | 13 | 运费试算 | app/task/quote.tsx | ✅ 已完成 | 路线选择+体积计费+演示报价+复制+分享 |
 
 ### 通用（5页）
@@ -146,6 +148,14 @@ cd app && npx expo start --web --port 4003    # Web预览 → http://localhost:4
 | 17 | 个人中心 | app/(tabs)/profile.tsx | ✅ 已完成 | — |
 | 18 | 库存查询(仓管US) | (复用#3) | ✅ 复用 | 复用 stock.tsx，多仓筛选 |
 | 19 | 订单查询(只读) | (复用#12) | ✅ 复用 | 复用 order.tsx |
+
+### 任务操作独立页（3页，2026-05-14新增）
+
+| # | 页面 | 文件路径 | 状态 | 说明 |
+|---|------|---------|------|------|
+| 20 | 执行发车 | app/task/transfer-dispatch.tsx | ✅ 已完成 | 调拨详情+物流商选择+司机/车牌表单→提交发车 |
+| 21 | 确认到达 | app/task/transfer-arrive.tsx | ✅ 已完成 | 调拨详情展示+备注→确认到达 |
+| 22 | 匹配订单 | app/task/unmatched-match.tsx | ✅ 已完成 | 无单包裹信息+搜索待入库订单+点击匹配/新建订单 |
 
 ### 开发优先级
 
@@ -164,7 +174,7 @@ cd app && npx expo start --web --port 4003    # Web预览 → http://localhost:4
   + 后端 /api/system/notifications 动态消息生成
 ```
 
-阶段三共 19 页全部完成。下一步：阶段四 数据联通验证。
+阶段三共 22 页全部完成（含 3 个任务操作独立页）。阶段四已完成。
 
 ---
 
@@ -223,10 +233,27 @@ cd app && npx expo start --web --port 4003    # Web预览 → http://localhost:4
 │   │   ├── (tabs)/scan.tsx         # 扫码占位
 │   │   ├── (tabs)/messages.tsx     # 消息
 │   │   ├── (tabs)/profile.tsx      # 个人中心
-│   │   └── task/                   # ⬜ 待开发：各任务操作页
+│   │   └── task/                   # 各任务操作页（22页）
+│   │       ├── inbound.tsx         # 扫码入库
+│   │       ├── stock.tsx           # 库存列表+详情
+│   │       ├── packing.tsx         # 装箱/出库
+│   │       ├── dest-inbound.tsx    # 到达国入库
+│   │       ├── dpn.tsx             # DPN管理
+│   │       ├── delivery.tsx        # 配送签收
+│   │       ├── pickup.tsx          # 自提管理
+│   │       ├── customer.tsx        # 客户列表
+│   │       ├── customer-detail.tsx # 客户详情(4Tab)
+│   │       ├── order.tsx           # 订单列表
+│   │       ├── order-detail.tsx    # 订单详情(4Tab)
+│   │       ├── order-create.tsx    # 创建订单
+│   │       ├── quote.tsx           # 运费试算
+│   │       ├── transfer-dispatch.tsx # 执行发车
+│   │       ├── transfer-arrive.tsx # 确认到达
+│   │       └── unmatched-match.tsx # 匹配订单
 │   ├── lib/api.ts                  # API客户端
 │   ├── lib/auth.ts                 # 认证
 │   ├── lib/theme.ts                # 设计Token
+│   ├── lib/nav.ts                  # 导航工具(safeBack)
 │   └── package.json
 │
 ├── client/                         # Web前端（已有）
