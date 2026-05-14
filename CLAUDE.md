@@ -2,21 +2,35 @@
 
 ## 项目概述
 
-跨境物流管理系统（TMS/ERP），当前阶段为**产品经理需求 Demo 原型**。Web 端 UI 已完成，所有数据为本地 Mock。下一步：梳理 App 端需求 → 统一设计数据库 → 搭建后端 API → 开发 App。
+跨境物流管理系统（TMS/ERP），**产品经理需求 Demo 原型**。Web 端 + App 端 UI 均已完成，后端 SQLite + Express API 已搭建，数据联通验证通过。
 
 ## 项目结构
 
 ```
 .
+├── server/          # 后端（Express + SQLite）
+│   └── src/
+│       ├── index.ts              # 入口
+│       ├── database/schema.ts    # 34表建表
+│       ├── database/seed.ts      # Mock数据
+│       ├── middleware/auth.ts    # JWT认证
+│       └── routes/               # 7个路由文件
+├── app/             # App 端（React Native + Expo 54 + expo-router）
+│   ├── app/
+│   │   ├── (auth)/login.tsx      # 登录
+│   │   ├── (tabs)/               # Tab导航(仓管5Tab/销售4Tab)
+│   │   └── task/                 # 22个任务操作页
+│   ├── components/               # 共享组件
+│   └── lib/                      # api/auth/theme/nav
 ├── client/          # Web 前端（React + TypeScript + Ant Design）
 │   └── src/
 │       ├── pages/   # 页面组件（按业务模块组织）
 │       ├── types/   # 类型定义
-│       ├── api/     # API 层（当前连接后端，待重建）
+│       ├── api/     # API 层
 │       ├── utils/   # 工具函数
 │       └── App.tsx  # 主入口、菜单配置、路由
 ├── miomio/          # 客户提供的原始业务文档
-├── docs/            # 项目文档
+├── docs/            # 项目文档（含任务清单、验证报告）
 ├── .kiro/
 │   ├── specs/       # 需求规格文档（按模块）
 │   └── steering/    # 项目引导配置
@@ -40,18 +54,24 @@
 ## 开发命令
 
 ```bash
-cd client
-npm install          # 安装依赖
-npm run dev          # 启动开发服务器（http://localhost:5173）
-npm run build        # 生产构建
+cd server && npm run dev              # 后端 → http://localhost:3001
+cd app && npx expo start --web --port 4003  # App Web预览 → http://localhost:4003
+cd client && npm run dev              # Web前端 → http://localhost:5173
 ```
 
 ## 当前状态
 
 - **Web 前端**: ✅ 完成，所有页面含 Mock 数据和完整交互
-- **后端 API**: ❌ 已删除（旧数据错乱），待重建
-- **数据库**: ❌ 待设计（等 App 需求梳理完后统一建库）
-- **App 端**: ❌ 待梳理需求
+- **后端 API**: ✅ 完成，34表 + 7路由 + JWT认证 + Seed数据
+- **App 端**: ✅ 完成，22页 + 3角色 + 数据联通验证通过
+- **UI 设计**: ✅ Apple HIG 风格，全部 Ionicons 图标（无 emoji）
+
+## App 设计规范
+
+- 图标库：`@expo/vector-icons/Ionicons`（无 emoji）
+- 图标容器：squircle 风格 borderRadius 14
+- 设计 Token：`app/lib/theme.ts`（colors/spacing/radius/font/shadow）
+- 角色分支：SALES(4Tab) / WAREHOUSE_CN(5Tab) / WAREHOUSE_US(5Tab)
 
 ## 需求文档
 

@@ -18,6 +18,7 @@
 | 2026-04-22：补齐仓管创建入口 | ✅ 完成 | 新建退运页（return-create.tsx）+ 退运处理页解除只读；创建线路评估后暂缓（仍在 Web 维护） |
 | 2026-05-14：弹窗→页面跳转 + 详情Tab化 | ✅ 完成 | 3个底部弹窗改为独立页面（发车/到达/匹配）；订单详情+客户详情改为4Tab布局 |
 | 2026-05-14：销售底部菜单重构 | ✅ 完成 | 销售从5Tab改为4Tab(任务/客户/工具/我的)；新增工具页(搜索+发运计划+快捷操作+销售数据)；已完成任务支持分类筛选 |
+| 2026-05-14：全局UI优化(Apple HIG) | ✅ 完成 | 28个文件emoji→Ionicons图标；卡片/图标容器squircle化(borderRadius 14)；间距/阴影/层级优化 |
 
 ---
 
@@ -79,7 +80,7 @@ cd server && npm run dev    # 后端 → http://localhost:3001
 | 根布局 | app/_layout.tsx | ✅ | 认证路由守卫 |
 | 入口重定向 | app/index.tsx | ✅ | → 登录页 |
 | 登录 | app/(auth)/login.tsx | ✅ | 用户名密码 + 3个快捷按钮 |
-| Tab导航 | app/(tabs)/_layout.tsx | ✅ | 仓管5Tab(任务/办理/📷扫码FAB/消息/我的)；销售4Tab(任务/客户/工具/我的) |
+| Tab导航 | app/(tabs)/_layout.tsx | ✅ | 仓管5Tab(任务/办理/扫码FAB/消息/我的)；销售4Tab(任务/客户/工具/我的) |
 | 任务流 | app/(tabs)/tasks.tsx | ✅ | 核心页面，按角色加载不同任务卡片，从后端API实时读取 |
 | 查询 | app/(tabs)/search.tsx | ✅ | 搜索栏 + 6个功能入口网格（占位） |
 | 扫码 | app/(tabs)/scan.tsx | ✅ | 相机占位 + 扫描框 + 手动输入 |
@@ -179,6 +180,56 @@ cd app && npx expo start --web --port 4003    # Web预览 → http://localhost:4
 
 ---
 
+## 全局UI优化：Apple HIG + Ionicons（✅ 已完成，2026-05-14）
+
+### 改动范围
+
+28个文件，覆盖全部角色（SALES / WAREHOUSE_CN / WAREHOUSE_US）。
+
+### 图标系统迁移
+
+所有 emoji 替换为 `@expo/vector-icons` 的 Ionicons：
+
+| 类别 | 变更 | 涉及文件数 |
+|------|------|-----------|
+| TaskItem.icon 数据字段 | emoji字符串 → Ionicons name 字符串 | 1（tasks.tsx） |
+| 图标渲染组件 | `<Text>{emoji}</Text>` → `<Ionicons name={...} />` | 6 |
+| 操作网格图标 | emoji → Ionicons + 彩色容器 | 2（search.tsx, scan.tsx） |
+| section 标题装饰 | 前缀 emoji 移除 | 15 |
+| 交互控件内 emoji | emoji → Ionicons 内联 | 4（delivery/quote/inbound/dest-inbound） |
+| toast/Alert 消息 | `✓`/`✅`/`⚠️` 等移除 | 8 |
+| 登录页 logo | `🐱` → `MM` 文字 | 1（login.tsx） |
+
+### 图标映射表（TaskItem.icon）
+
+| 原 emoji | Ionicons name | 用途 |
+|----------|---------------|------|
+| 📦 | cube-outline | 待入库 |
+| 🏗 | archive-outline | 待装箱 |
+| 📋 | swap-horizontal-outline | 调拨 |
+| ❓ | help-circle-outline | 无单包裹 |
+| ↩️ | return-down-back-outline | 退运 |
+| 📄 | document-text-outline | DPN |
+| 🚚 | car-outline | 配送 |
+| 🏪 | storefront-outline | 自提 |
+| 💰 | cash-outline | 待收款 |
+| 👤 | person-outline | 新客户 |
+| ✈️ | airplane-outline | 空运 |
+| 🚢 | boat-outline | 海运 |
+
+### Apple HIG 设计优化
+
+| 项目 | 变更 |
+|------|------|
+| 图标容器 | squircle 风格，borderRadius 14（非正圆） |
+| 卡片图标 | iconWrap 24→30px，borderRadius 6→8 |
+| 消息图标 | borderRadius → 12 |
+| 间距对齐 | paddingLeft 32→40 保证副标题与图标对齐 |
+| 阴影 | 引入 shadow token，统一卡片投影 |
+| 排版 | letterSpacing 0.1 增加标题可读性 |
+
+---
+
 ## 阶段四：数据联通验证（⬜ 未开始）
 
 | 场景 | 操作方 | 预期结果 |
@@ -223,7 +274,7 @@ cd app && npx expo start --web --port 4003    # Web预览 → http://localhost:4
 │   ├── logistics.db                # SQLite数据库
 │   └── package.json
 │
-├── app/                            # React Native App (阶段二 ✅ + 阶段三 🔵)
+├── app/                            # React Native App (阶段二 ✅ + 阶段三 ✅)
 │   ├── app/
 │   │   ├── _layout.tsx             # 根布局
 │   │   ├── index.tsx               # 入口重定向
