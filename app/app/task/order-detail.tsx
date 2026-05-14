@@ -78,10 +78,10 @@ interface OrderDetail {
 }
 
 const SERVICE_TYPE_LABEL: Record<string, string> = {
-  EXPRESS: '⚡ 特快', STANDARD: '📦 普快', ECONOMY: '💰 经济',
+  EXPRESS: '特快', STANDARD: '普快', ECONOMY: '经济',
 };
 const PAYMENT_METHOD_LABEL: Record<string, string> = {
-  PREPAID: '💳 预付', COD: '💰 到付', MONTHLY: '📅 月结',
+  PREPAID: '预付', COD: '到付', MONTHLY: '月结',
 };
 const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
   PENDING_INBOUND: { label: '待入库', color: colors.warning,       bg: colors.warningLight },
@@ -189,7 +189,7 @@ export default function OrderDetailScreen() {
         <DetailRow label="客户" value={d.customer_name} />
         <DetailRow label="客户编号" value={d.customer_code || '-'} />
         <DetailRow label="下单时间" value={d.created_at?.slice(0, 16) || '-'} />
-        <DetailRow label="运输方式" value={d.business_line === 'SEA' ? '🚢 海运' : '✈️ 空运'} />
+        <DetailRow label="运输方式" value={d.business_line === 'SEA' ? '海运' : '空运'} />
         <DetailRow label="首选线路" value={d.route_code} />
         <DetailRow label="服务类型" value={SERVICE_TYPE_LABEL[d.service_type || ''] || d.service_type || '-'} />
         <DetailRow label="付款方式" value={PAYMENT_METHOD_LABEL[d.payment_method || ''] || d.payment_method || '-'} />
@@ -254,7 +254,7 @@ export default function OrderDetailScreen() {
         <Text style={styles.sectionTitle}>运费</Text>
         <DetailRow label="预估运费" value={d.estimated_freight ? `¥ ${Number(d.estimated_freight).toFixed(2)}` : '-'} />
         <DetailRow label="实际运费" value={d.actual_freight ? `¥ ${Number(d.actual_freight).toFixed(2)}` : '待入库称重后生成'} highlight={!!d.actual_freight} />
-        <DetailRow label="付款状态" value={d.payment_status === 'PAID' ? '✅ 已付款' : '⏳ 未付款'} />
+        <DetailRow label="付款状态" value={d.payment_status === 'PAID' ? '已付款' : '未付款'} />
         {d.payment_status !== 'PAID' && Number(d.actual_freight) > 0 && (
           <TouchableOpacity
             style={styles.payBtn}
@@ -356,7 +356,7 @@ export default function OrderDetailScreen() {
               </View>
               <View style={[styles.statusBadge, { backgroundColor: colors.bg }]}>
                 <Text style={[styles.statusText, { color: colors.textSecondary }]}>
-                  {detail.business_line === 'SEA' ? '🚢 海运' : '✈️ 空运'}
+                  {detail.business_line === 'SEA' ? '海运' : '空运'}
                 </Text>
               </View>
             </View>

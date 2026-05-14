@@ -138,7 +138,7 @@ export default function DestInboundScreen() {
           : it,
       ),
     );
-    showToast('success', `✓ 已核对 ${hitNo}`, '默认完好入仓,可手动改');
+    showToast('success', `已核对 ${hitNo}`, '默认完好入仓,可手动改');
     setScanning(false);
   };
 
@@ -159,7 +159,7 @@ export default function DestInboundScreen() {
 
   const handleTakePhoto = () => {
     setPhotoCount((c) => c + 1);
-    Alert.alert('📷 拍照成功', `已保存第 ${photoCount + 1} 张照片`);
+    Alert.alert('拍照成功', `已保存第 ${photoCount + 1} 张照片`);
   };
 
   const handleConfirm = async () => {
@@ -236,7 +236,7 @@ export default function DestInboundScreen() {
               <View style={styles.jobHeader}>
                 <Text style={styles.jobNo}>{job.job_no}</Text>
                 <View style={styles.jobBadge}>
-                  <Text style={styles.jobBadgeText}>{job.business_line === 'SEA' ? '🚢 海运' : '✈️ 空运'}</Text>
+                  <Text style={styles.jobBadgeText}>{job.business_line === 'SEA' ? '海运' : '空运'}</Text>
                 </View>
               </View>
               <Text style={styles.jobRoute}>{job.origin_port} → {job.dest_port}</Text>
@@ -248,7 +248,7 @@ export default function DestInboundScreen() {
             </View>
           ) : (
             <View style={styles.noMatchCard}>
-              <Text style={styles.noMatchText}>⚠️ 未选择任务，请从任务流进入</Text>
+              <Text style={styles.noMatchText}>未选择任务，请从任务流进入</Text>
             </View>
           )}
 
@@ -356,7 +356,7 @@ export default function DestInboundScreen() {
 
           {/* 运单清单 */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📋 运单清单 ({items.length})</Text>
+            <Text style={styles.sectionTitle}>运单清单 ({items.length})</Text>
             {items.length === 0 ? (
               <Text style={styles.empty}>该任务暂无运单关联</Text>
             ) : (
@@ -451,7 +451,7 @@ export default function DestInboundScreen() {
 
           {/* 拍照 */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📸 拍照存证</Text>
+            <Text style={styles.sectionTitle}>拍照存证</Text>
             <View style={styles.photoRow}>
               <TouchableOpacity style={styles.photoBtn} onPress={handleTakePhoto}>
                 <Ionicons name="camera" size={28} color={colors.primary} />

@@ -56,8 +56,8 @@ interface CustomerDetail {
 }
 
 const SERVICE_OPTIONS: { value: ServiceType; label: string }[] = [
-  { value: 'EXPRESS', label: '⚡ 特快' },
-  { value: 'STANDARD', label: '📦 普快' },
+  { value: 'EXPRESS', label: '特快' },
+  { value: 'STANDARD', label: '普快' },
 ];
 
 const EXPORT_OPTIONS: { value: ExportMode; label: string }[] = [
@@ -66,8 +66,8 @@ const EXPORT_OPTIONS: { value: ExportMode; label: string }[] = [
 ];
 
 const PAYMENT_OPTIONS: { value: PaymentMethod; label: string }[] = [
-  { value: 'PREPAID', label: '💳 预付' },
-  { value: 'COD', label: '💰 到付' },
+  { value: 'PREPAID', label: '预付' },
+  { value: 'COD', label: '到付' },
 ];
 
 const EXPRESS_COMPANIES = ['顺丰', '韵达', '圆通', '中通', '申通', '京东', '邮政', '德邦'];
@@ -307,7 +307,7 @@ export default function OrderCreateScreen() {
   const renderStep1 = () => (
     <ScrollView contentContainerStyle={styles.scroll}>
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>👥 选择客户</Text>
+        <Text style={styles.sectionTitle}>选择客户</Text>
         <TouchableOpacity style={styles.customerSelector} onPress={() => setShowCustomerPicker(true)}>
           {customerId ? (
             <>
@@ -324,7 +324,7 @@ export default function OrderCreateScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>📋 服务信息</Text>
+        <Text style={styles.sectionTitle}>服务信息</Text>
 
         <Text style={styles.formLabel}>服务类型</Text>
         <View style={styles.optionRow}>
@@ -372,14 +372,14 @@ export default function OrderCreateScreen() {
     <ScrollView contentContainerStyle={styles.scroll}>
       <View style={styles.summaryBar}>
         <Text style={styles.summaryText}>
-          📦 共 {packages.length} 个包裹 · {totalPieces} 件 · {totalWeight.toFixed(1)} kg
+          共 {packages.length} 个包裹 · {totalPieces} 件 · {totalWeight.toFixed(1)} kg
         </Text>
       </View>
 
       {packages.map((pkg, idx) => (
         <View key={idx} style={styles.section}>
           <View style={styles.pkgHeader}>
-            <Text style={styles.sectionTitle}>📦 包裹 #{idx + 1}</Text>
+            <Text style={styles.sectionTitle}>包裹 #{idx + 1}</Text>
             {packages.length > 1 && (
               <TouchableOpacity onPress={() => removePackage(idx)}>
                 <Ionicons name="trash-outline" size={20} color={colors.danger} />
@@ -442,7 +442,7 @@ export default function OrderCreateScreen() {
         {/* 发货信息 */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>📤 发货信息</Text>
+            <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>发货信息</Text>
             {senderCount > 0 && (
               <TouchableOpacity onPress={() => setSenderPickerVisible(true)} style={styles.linkBtn}>
                 <Ionicons name="book-outline" size={14} color={colors.primary} />
@@ -461,7 +461,7 @@ export default function OrderCreateScreen() {
         {/* 收货信息 */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>📥 收货信息</Text>
+            <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>收货信息</Text>
             {recipientCount > 0 && (
               <TouchableOpacity onPress={() => setRecipientPickerVisible(true)} style={styles.linkBtn}>
                 <Ionicons name="book-outline" size={14} color={colors.primary} />
@@ -491,7 +491,7 @@ export default function OrderCreateScreen() {
   const renderStep4 = () => (
     <ScrollView contentContainerStyle={styles.scroll}>
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>📋 订单确认</Text>
+        <Text style={styles.sectionTitle}>订单确认</Text>
 
         <View style={styles.confirmRow}>
           <Text style={styles.confirmLabel}>客户</Text>

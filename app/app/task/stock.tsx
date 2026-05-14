@@ -188,8 +188,13 @@ export default function StockScreen() {
 
   const renderItem = ({ item }: { item: StockItem }) => {
     const meta = STATUS_META[item.stock_status] || STATUS_META.IN_STOCK;
+    const hasLocation = !!item.location_code;
     return (
-      <TouchableOpacity style={styles.card} onPress={() => handleOpenDetail(item)} activeOpacity={0.7}>
+      <TouchableOpacity
+        style={[styles.card, { borderLeftColor: meta.color }]}
+        onPress={() => handleOpenDetail(item)}
+        activeOpacity={0.7}
+      >
         <View style={styles.cardHeader}>
           <Text style={styles.subOrderNo}>{item.sub_order_no}</Text>
           <View style={[styles.statusBadge, { backgroundColor: meta.bg }]}>
@@ -201,12 +206,12 @@ export default function StockScreen() {
         </Text>
         <View style={styles.cardFooter}>
           <View style={styles.footerItem}>
-            <Ionicons name="cube-outline" size={14} color={colors.textSecondary} />
+            <Ionicons name="cube-outline" size={13} color={colors.textSecondary} />
             <Text style={styles.footerText}>{item.pieces}件 · {item.gross_weight_kg}kg</Text>
           </View>
-          <View style={styles.footerItem}>
-            <Ionicons name="location-outline" size={14} color={colors.primary} />
-            <Text style={[styles.footerText, { color: colors.primary, fontWeight: '600' }]}>
+          <View style={[styles.footerItem, !hasLocation && styles.footerItemAlert]}>
+            <Ionicons name="location-outline" size={13} color={hasLocation ? colors.success : colors.warning} />
+            <Text style={[styles.footerText, { color: hasLocation ? colors.success : colors.warning, fontWeight: '600' }]}>
               {item.location_code || '未上架'}
             </Text>
           </View>
@@ -292,7 +297,7 @@ export default function StockScreen() {
               style={[styles.chip, filterCountry === 'ALL' && styles.chipActive]}
               onPress={() => { setFilterCountry('ALL'); setFilterCity('ALL'); }}
             >
-              <Text style={[styles.chipText, filterCountry === 'ALL' && styles.chipTextActive]}>🌍 全部国家</Text>
+              <Text style={[styles.chipText, filterCountry === 'ALL' && styles.chipTextActive]}>全部国家</Text>
             </TouchableOpacity>
             {destinationOptions.countries.map((c) => (
               <TouchableOpacity
@@ -311,7 +316,7 @@ export default function StockScreen() {
                 style={[styles.chip, filterCity === 'ALL' && styles.chipActive]}
                 onPress={() => setFilterCity('ALL')}
               >
-                <Text style={[styles.chipText, filterCity === 'ALL' && styles.chipTextActive]}>🏙️ 全部城市</Text>
+                <Text style={[styles.chipText, filterCity === 'ALL' && styles.chipTextActive]}>全部城市</Text>
               </TouchableOpacity>
               {destinationOptions.cities.map((c) => (
                 <TouchableOpacity
@@ -330,7 +335,7 @@ export default function StockScreen() {
               style={[styles.chip, filterSite === 'ALL' && styles.chipActive]}
               onPress={() => setFilterSite('ALL')}
             >
-              <Text style={[styles.chipText, filterSite === 'ALL' && styles.chipTextActive]}>📍 全部站点</Text>
+              <Text style={[styles.chipText, filterSite === 'ALL' && styles.chipTextActive]}>全部站点</Text>
             </TouchableOpacity>
             {destinationOptions.sites.map((s) => (
               <TouchableOpacity
@@ -385,7 +390,7 @@ export default function StockScreen() {
                       {STATUS_META[selected.stock_status].label}
                     </Text>
                   </View>
-                  <Text style={styles.warehouseTag}>📦 {selected.warehouse_id === 'wh-gz' ? '广州总仓' : selected.warehouse_id === 'wh-sz' ? '深圳分仓' : selected.warehouse_id}</Text>
+                  <Text style={styles.warehouseTag}>{selected.warehouse_id === 'wh-gz' ? '广州总仓' : selected.warehouse_id === 'wh-sz' ? '深圳分仓' : selected.warehouse_id}</Text>
                 </View>
 
                 {/* Info rows */}
@@ -401,7 +406,7 @@ export default function StockScreen() {
 
                 {/* Location editor */}
                 <View style={styles.editSection}>
-                  <Text style={styles.editLabel}>📍 库位号</Text>
+                  <Text style={styles.editLabel}>库位号</Text>
                   <View style={styles.editRow}>
                     <TextInput
                       style={styles.editInput}
@@ -463,7 +468,7 @@ export default function StockScreen() {
         <View style={styles.modalMask}>
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>↩️ 申请退运</Text>
+              <Text style={styles.modalTitle}>申请退运</Text>
               <TouchableOpacity onPress={() => setReturnOpen(false)}>
                 <Ionicons name="close" size={24} color={colors.textSecondary} />
               </TouchableOpacity>
@@ -630,9 +635,9 @@ const styles = StyleSheet.create({
   scanBtn: { width: 40, height: 40, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card },
   // Stats
   statsRow: { flexDirection: 'row', backgroundColor: colors.card, paddingHorizontal: spacing.md, paddingVertical: spacing.md, gap: spacing.sm, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
-  statBox: { flex: 1, alignItems: 'center', paddingVertical: spacing.sm, backgroundColor: colors.bg, borderRadius: radius.md },
-  statValue: { fontSize: font.xl, fontWeight: '700', color: colors.text },
-  statLabel: { fontSize: font.xs, color: colors.textSecondary, marginTop: 2 },
+  statBox: { flex: 1, alignItems: 'center', paddingVertical: 10, backgroundColor: colors.bg, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderLight },
+  statValue: { fontSize: font.xl, fontWeight: '800', color: colors.text },
+  statLabel: { fontSize: 10, color: colors.textTertiary, marginTop: 2, fontWeight: '500' },
   // Filter
   filterRow: { paddingVertical: spacing.md, backgroundColor: colors.card, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
   chip: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
@@ -641,14 +646,15 @@ const styles = StyleSheet.create({
   chipTextActive: { color: '#fff', fontWeight: '600' },
   // List
   listContent: { padding: spacing.md, gap: spacing.md },
-  card: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.md, borderLeftWidth: 3, borderLeftColor: colors.primary },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.xs },
-  subOrderNo: { fontSize: font.sm, fontFamily: font.mono, fontWeight: '700', color: colors.primary, flex: 1 },
+  card: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.sm, borderLeftWidth: 3, borderLeftColor: colors.primary, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  subOrderNo: { fontSize: font.sm, fontFamily: font.mono, fontWeight: '700', color: colors.text, flex: 1 },
   statusBadge: { paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.sm },
   statusText: { fontSize: font.xs, fontWeight: '600' },
   customerLine: { fontSize: font.sm, color: colors.textSecondary, marginBottom: spacing.sm },
-  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
+  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: spacing.sm, borderTopWidth: 0.5, borderTopColor: colors.borderLight },
   footerItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  footerItemAlert: { backgroundColor: colors.warningLight, paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.sm },
   footerText: { fontSize: font.xs, color: colors.textSecondary },
   // Modal
   modalMask: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },

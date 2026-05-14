@@ -6,7 +6,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { colors, spacing, radius, font } from '../../lib/theme';
+import { colors, spacing, radius, font, shadow } from '../../lib/theme';
 import { getRoleLabel, getRoleColor, User } from '../../lib/auth';
 import { authApi } from '../../lib/api';
 
@@ -18,12 +18,17 @@ interface DemoAccount {
   desc: string;
 }
 
-// App 端按规格只覆盖 3 个角色（其他角色仅 Web 端可用）
 const DEMO_ACCOUNTS: DemoAccount[] = [
   { username: 'sales1',        password: '123456', realName: 'AkinGbolahan', role: 'SALES',        desc: '客户跟进 / 订单管理 / 运费试算' },
   { username: 'warehouse_cn1', password: '123456', realName: '李仓管',        role: 'WAREHOUSE_CN', desc: '扫码入库 / 称重量方 / 装箱发车' },
   { username: 'warehouse_us1', password: '123456', realName: '王仓管',        role: 'WAREHOUSE_US', desc: '任务入库 / DPN 管理 / 配送签收 / 自提' },
 ];
+
+const ROLE_ICON_MAP: Record<string, string> = {
+  SALES: 'briefcase-outline',
+  WAREHOUSE_CN: 'cube-outline',
+  WAREHOUSE_US: 'home-outline',
+};
 
 export default function ProfileScreen() {
   const [user, setUser] = useState<User | null>(null);
@@ -66,7 +71,6 @@ export default function ProfileScreen() {
       await AsyncStorage.setItem('token', res.data.token);
       await AsyncStorage.setItem('user', JSON.stringify(res.data.user));
       setSwitcherVisible(false);
-      // 刷新页面让所有 Tab 重新挂载
       if (Platform.OS === 'web') {
         window.location.href = '/(tabs)/tasks';
       } else {
@@ -81,91 +85,136 @@ export default function ProfileScreen() {
 
   if (!user) return <SafeAreaView style={styles.safe} />;
 
-  const menuItems = [
+  const roleColor = getRoleColor(user.role);
+
+  // 菜单分组
+  const accountMenus = [
     { icon: 'person-outline', label: '个人信息', color: colors.primary },
     ...(user.role.includes('WAREHOUSE_CN') ? [{ icon: 'print-outline', label: '打印机设置', color: colors.success }] : []),
     { icon: 'swap-horizontal-outline', label: '切换仓库', color: colors.info },
     { icon: 'lock-closed-outline', label: '修改密码', color: colors.warning },
+  ];
+  const settingMenus = [
     { icon: 'language-outline', label: '语言 / Language', color: colors.textSecondary },
     { icon: 'notifications-outline', label: '通知设置', color: colors.danger },
-    { icon: 'information-circle-outline', label: '关于', color: colors.textTertiary },
+    { icon: 'information-circle-outline', label: '关于喵喵物流', color: colors.textTertiary },
   ];
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={{ paddingBottom: spacing.xl }}>
-        {/* Profile Card */}
-        <View style={styles.profileCard}>
-          <View style={[styles.avatar, { backgroundColor: getRoleColor(user.role) + '20' }]}>
-            <Text style={[styles.avatarText, { color: getRoleColor(user.role) }]}>
-              {user.realName.charAt(0)}
-            </Text>
-          </View>
-          <View style={styles.profileInfo}>
-            <Text style={styles.profileName}>{user.realName}</Text>
-            <View style={[styles.roleBadge, { backgroundColor: getRoleColor(user.role) + '15' }]}>
-              <Text style={[styles.roleText, { color: getRoleColor(user.role) }]}>{getRoleLabel(user.role)}</Text>
+      <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+
+        {/* ── 顶部品牌 Header */}
+        <View style={styles.headerBg}>
+          <Text style={styles.headerBrand}>喵喵国际物流</Text>
+
+          {/* 头像卡片 */}
+          <View style={styles.avatarCard}>
+            <View style={[styles.avatarWrap, { backgroundColor: roleColor + '25', borderColor: roleColor + '50' }]}>
+              <Text style={[styles.avatarText, { color: roleColor }]}>
+                {user.realName.charAt(0)}
+              </Text>
             </View>
-            <Text style={styles.profileEmail}>{user.email || user.username}</Text>
-          </View>
-        </View>
-
-        {/* 切换角色（演示）— 突出显示 */}
-        <TouchableOpacity
-          style={styles.switchCard}
-          onPress={() => setSwitcherVisible(true)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.switchIconWrap}>
-            <Ionicons name="people-circle" size={28} color={colors.primary} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.switchTitle}>快速切换角色</Text>
-            <Text style={styles.switchDesc}>一键登录其他演示账号</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
-        </TouchableOpacity>
-
-        {/* Menu */}
-        <View style={styles.menu}>
-          {menuItems.map((item, i) => (
-            <TouchableOpacity key={i} style={styles.menuItem} activeOpacity={0.6}>
-              <View style={[styles.menuIconBg, { backgroundColor: item.color + '10' }]}>
-                <Ionicons name={item.icon as any} size={20} color={item.color} />
+            <View style={styles.avatarInfo}>
+              <Text style={styles.profileName}>{user.realName}</Text>
+              <View style={[styles.roleBadge, { backgroundColor: roleColor + '20' }]}>
+                <Ionicons name={ROLE_ICON_MAP[user.role] as any || 'person-outline'} size={11} color={roleColor} />
+                <Text style={[styles.roleText, { color: roleColor }]}>{getRoleLabel(user.role)}</Text>
               </View>
-              <Text style={styles.menuLabel}>{item.label}</Text>
-              <Ionicons name="chevron-forward" size={18} color={colors.disabled} />
-            </TouchableOpacity>
-          ))}
+              <Text style={styles.profileEmail}>{user.email || user.username + '@logistics.com'}</Text>
+            </View>
+          </View>
         </View>
 
-        {/* Logout */}
-        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
-          <Ionicons name="log-out-outline" size={20} color={colors.danger} />
-          <Text style={styles.logoutText}>退出登录</Text>
-        </TouchableOpacity>
+        {/* ── 切换角色（演示）*/}
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={styles.switchCard}
+            onPress={() => setSwitcherVisible(true)}
+            activeOpacity={0.75}
+          >
+            <View style={styles.switchIconWrap}>
+              <Ionicons name="people-circle" size={26} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.switchTitle}>快速切换角色</Text>
+              <Text style={styles.switchDesc}>一键登录其他演示账号</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+          </TouchableOpacity>
+        </View>
 
-        <Text style={styles.version}>版本 1.0.0</Text>
+        {/* ── 账户设置 */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>账户</Text>
+          <View style={styles.menuCard}>
+            {accountMenus.map((item, i) => (
+              <TouchableOpacity
+                key={i}
+                style={[styles.menuItem, i < accountMenus.length - 1 && styles.menuItemBorder]}
+                activeOpacity={0.6}
+              >
+                <View style={[styles.menuIconBg, { backgroundColor: item.color + '15' }]}>
+                  <Ionicons name={item.icon as any} size={18} color={item.color} />
+                </View>
+                <Text style={styles.menuLabel}>{item.label}</Text>
+                <Ionicons name="chevron-forward" size={16} color={colors.disabled} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* ── 系统设置 */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>设置</Text>
+          <View style={styles.menuCard}>
+            {settingMenus.map((item, i) => (
+              <TouchableOpacity
+                key={i}
+                style={[styles.menuItem, i < settingMenus.length - 1 && styles.menuItemBorder]}
+                activeOpacity={0.6}
+              >
+                <View style={[styles.menuIconBg, { backgroundColor: item.color + '15' }]}>
+                  <Ionicons name={item.icon as any} size={18} color={item.color} />
+                </View>
+                <Text style={styles.menuLabel}>{item.label}</Text>
+                <Ionicons name="chevron-forward" size={16} color={colors.disabled} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* ── 退出登录 */}
+        <View style={[styles.section, { marginTop: spacing.sm }]}>
+          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.75}>
+            <Ionicons name="log-out-outline" size={20} color={colors.danger} />
+            <Text style={styles.logoutText}>退出登录</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.version}>喵喵国际物流 v1.0.0</Text>
       </ScrollView>
 
-      {/* 切换角色 Modal */}
+      {/* ── 切换角色 Modal */}
       <Modal visible={switcherVisible} transparent animationType="slide" onRequestClose={() => setSwitcherVisible(false)}>
         <View style={styles.modalMask}>
           <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>选择演示账号</Text>
-              <TouchableOpacity onPress={() => setSwitcherVisible(false)}>
-                <Ionicons name="close" size={24} color={colors.textSecondary} />
+              <TouchableOpacity onPress={() => setSwitcherVisible(false)} style={styles.modalClose}>
+                <Ionicons name="close" size={20} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
             <Text style={styles.modalHint}>
               当前身份：{getRoleLabel(user.role)}（{user.username}）
               {'\n'}App 端覆盖 3 个角色，其他角色请在 Web 端使用
             </Text>
-            <ScrollView style={{ maxHeight: 540 }}>
+            <ScrollView style={{ maxHeight: 480 }} showsVerticalScrollIndicator={false}>
               {DEMO_ACCOUNTS.map((acc) => {
                 const isCurrent = acc.username === user.username;
                 const isLoading = switching === acc.username;
+                const accRoleColor = getRoleColor(acc.role);
                 return (
                   <TouchableOpacity
                     key={acc.username}
@@ -174,16 +223,16 @@ export default function ProfileScreen() {
                     disabled={isCurrent || !!switching}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.accountAvatar, { backgroundColor: getRoleColor(acc.role) + '20' }]}>
-                      <Text style={[styles.accountAvatarText, { color: getRoleColor(acc.role) }]}>
+                    <View style={[styles.accountAvatar, { backgroundColor: accRoleColor + '20' }]}>
+                      <Text style={[styles.accountAvatarText, { color: accRoleColor }]}>
                         {acc.realName.charAt(0)}
                       </Text>
                     </View>
                     <View style={{ flex: 1 }}>
                       <View style={styles.accountHeader}>
                         <Text style={styles.accountName}>{acc.realName}</Text>
-                        <View style={[styles.roleBadge, { backgroundColor: getRoleColor(acc.role) + '15' }]}>
-                          <Text style={[styles.roleText, { color: getRoleColor(acc.role) }]}>
+                        <View style={[styles.roleBadge, { backgroundColor: accRoleColor + '15' }]}>
+                          <Text style={[styles.roleText, { color: accRoleColor }]}>
                             {getRoleLabel(acc.role)}
                           </Text>
                         </View>
@@ -198,7 +247,7 @@ export default function ProfileScreen() {
                     ) : isLoading ? (
                       <ActivityIndicator color={colors.primary} />
                     ) : (
-                      <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+                      <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
                     )}
                   </TouchableOpacity>
                 );
@@ -213,49 +262,105 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
-  profileCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, margin: spacing.lg, marginTop: spacing.md, padding: spacing.xl, borderRadius: radius.xl, gap: spacing.lg },
-  avatar: { width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: font.xxl, fontWeight: '700' },
-  profileInfo: { flex: 1 },
-  profileName: { fontSize: font.lg, fontWeight: '700', color: colors.text },
-  roleBadge: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.sm, marginTop: spacing.xs, alignSelf: 'flex-start' },
-  roleText: { fontSize: font.xs, fontWeight: '600' },
-  profileEmail: { fontSize: font.sm, color: colors.textTertiary, marginTop: spacing.xs },
 
+  // ── Header
+  headerBg: {
+    backgroundColor: colors.headerStart,
+    paddingTop: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xxxl,
+  },
+  headerBrand: {
+    fontSize: font.xs,
+    color: 'rgba(255,255,255,0.5)',
+    letterSpacing: 1,
+    marginBottom: spacing.lg,
+  },
+  avatarCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+  },
+  avatarWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+  },
+  avatarText: { fontSize: font.xxxl, fontWeight: '800' },
+  avatarInfo: { flex: 1 },
+  profileName: { fontSize: font.xl, fontWeight: '800', color: '#fff', marginBottom: 6 },
+  roleBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: spacing.sm, paddingVertical: 3,
+    borderRadius: radius.full, alignSelf: 'flex-start', marginBottom: 6,
+  },
+  roleText: { fontSize: font.xs, fontWeight: '600' },
+  profileEmail: { fontSize: font.xs, color: 'rgba(255,255,255,0.55)' },
+
+  // ── Sections
+  section: { paddingHorizontal: spacing.lg, marginTop: spacing.lg },
+  sectionTitle: { fontSize: font.xs, color: colors.textTertiary, fontWeight: '600', letterSpacing: 0.5, marginBottom: spacing.sm, textTransform: 'uppercase' },
+
+  // ── Switch Card
   switchCard: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
-    backgroundColor: colors.card, marginHorizontal: spacing.lg, marginBottom: spacing.lg,
-    padding: spacing.lg, borderRadius: radius.xl,
-    borderWidth: 1.5, borderColor: colors.primary,
+    backgroundColor: colors.card, padding: spacing.lg, borderRadius: radius.xl,
+    borderWidth: 1.5, borderColor: colors.primary + '40',
+    ...shadow.sm,
   },
-  switchIconWrap: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
+  switchIconWrap: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center',
+  },
   switchTitle: { fontSize: font.md, fontWeight: '700', color: colors.text },
   switchDesc: { fontSize: font.xs, color: colors.textSecondary, marginTop: 2 },
 
-  menu: { backgroundColor: colors.card, marginHorizontal: spacing.lg, borderRadius: radius.xl, overflow: 'hidden' },
-  menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.lg, paddingHorizontal: spacing.lg, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight, gap: spacing.md },
-  menuIconBg: { width: 32, height: 32, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
-  menuLabel: { flex: 1, fontSize: font.md, color: colors.text },
+  // ── Menu Card
+  menuCard: { backgroundColor: colors.card, borderRadius: radius.xl, overflow: 'hidden', ...shadow.sm },
+  menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: spacing.lg, gap: spacing.md },
+  menuItemBorder: { borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
+  menuIconBg: { width: 34, height: 34, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  menuLabel: { flex: 1, fontSize: font.md, color: colors.text, fontWeight: '500' },
 
-  logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginHorizontal: spacing.lg, marginTop: spacing.xl, paddingVertical: spacing.lg, backgroundColor: colors.card, borderRadius: radius.xl, gap: spacing.sm, borderWidth: 1, borderColor: colors.danger + '30' },
-  logoutText: { fontSize: font.md, color: colors.danger, fontWeight: '600' },
-  version: { textAlign: 'center', fontSize: font.xs, color: colors.textTertiary, marginTop: spacing.lg },
+  // ── Logout
+  logoutBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: spacing.lg, backgroundColor: colors.dangerLight,
+    borderRadius: radius.xl, gap: spacing.sm,
+    borderWidth: 1, borderColor: colors.danger + '25',
+  },
+  logoutText: { fontSize: font.md, color: colors.danger, fontWeight: '700' },
+  version: { textAlign: 'center', fontSize: font.xs, color: colors.textTertiary, marginTop: spacing.xl },
 
-  // Modal
-  modalMask: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  modalSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.lg, maxHeight: '85%' },
+  // ── Modal
+  modalMask: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  modalSheet: {
+    backgroundColor: colors.bg, borderTopLeftRadius: radius.xxl,
+    borderTopRightRadius: radius.xxl, padding: spacing.lg, maxHeight: '85%',
+  },
+  modalHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginBottom: spacing.lg },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
   modalTitle: { fontSize: font.lg, fontWeight: '700', color: colors.text },
-  modalHint: { fontSize: font.xs, color: colors.textSecondary, marginBottom: spacing.md },
+  modalClose: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.borderLight, alignItems: 'center', justifyContent: 'center' },
+  modalHint: { fontSize: font.xs, color: colors.textSecondary, marginBottom: spacing.md, lineHeight: 18 },
 
-  accountCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, backgroundColor: colors.card, borderRadius: radius.lg, marginBottom: spacing.sm, borderWidth: 1, borderColor: 'transparent' },
+  accountCard: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    padding: spacing.md, backgroundColor: colors.card,
+    borderRadius: radius.lg, marginBottom: spacing.sm,
+    borderWidth: 1.5, borderColor: 'transparent',
+    ...shadow.sm,
+  },
   accountCardCurrent: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
-  accountAvatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  accountAvatarText: { fontSize: font.lg, fontWeight: '700' },
+  accountAvatar: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
+  accountAvatarText: { fontSize: font.lg, fontWeight: '800' },
   accountHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: 2 },
-  accountName: { fontSize: font.md, fontWeight: '600', color: colors.text },
+  accountName: { fontSize: font.md, fontWeight: '700', color: colors.text },
   accountDesc: { fontSize: font.xs, color: colors.textSecondary, marginBottom: 2 },
   accountUsername: { fontSize: font.xs, color: colors.textTertiary, fontFamily: font.mono },
-  currentBadge: { backgroundColor: colors.primary, paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.sm },
-  currentText: { fontSize: font.xs, color: '#fff', fontWeight: '600' },
+  currentBadge: { backgroundColor: colors.primary, paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.full },
+  currentText: { fontSize: font.xs, color: '#fff', fontWeight: '700' },
 });

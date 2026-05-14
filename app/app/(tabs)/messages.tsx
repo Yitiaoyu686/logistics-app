@@ -6,7 +6,7 @@ import {
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { colors, spacing, radius, font } from '../../lib/theme';
+import { colors, spacing, radius, font, shadow } from '../../lib/theme';
 import { notificationApi } from '../../lib/api';
 import OrderScreen from '../task/order';
 
@@ -131,14 +131,24 @@ export default function MessagesScreen() {
   const renderItem = ({ item }: { item: Notification }) => {
     const mainColor = COLOR_MAP[item.color] || colors.primary;
     const bg = BG_MAP[item.color] || colors.primaryLight;
+    // 用 Ionicons 替代 emoji 图标
+    const iconMap: Record<string, string> = {
+      ORDER_PENDING: 'document-text-outline',
+      JOB_ARRIVED: 'boat-outline',
+      JOB_DEPARTING: 'airplane-outline',
+      DPN_UPDATE: 'car-outline',
+      PICKUP_PENDING: 'storefront-outline',
+      UNMATCHED_PACKAGE: 'help-circle-outline',
+    };
+    const iconName = (iconMap[item.type] || 'notifications-outline') as any;
     return (
       <TouchableOpacity
-        style={[styles.msgCard, !item.read && { borderLeftWidth: 3, borderLeftColor: mainColor }]}
+        style={[styles.msgCard, !item.read && styles.msgCardUnread]}
         onPress={() => handleOpen(item)}
         activeOpacity={0.7}
       >
         <View style={[styles.msgIcon, { backgroundColor: bg }]}>
-          <Text style={styles.msgIconText}>{item.icon}</Text>
+          <Ionicons name={iconName} size={22} color={mainColor} />
         </View>
         <View style={{ flex: 1 }}>
           <View style={styles.msgHeader}>
@@ -150,7 +160,7 @@ export default function MessagesScreen() {
           </View>
           <Text style={styles.msgBody} numberOfLines={2}>{item.content}</Text>
         </View>
-        <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+        {item.routePath && <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />}
       </TouchableOpacity>
     );
   };
@@ -170,9 +180,14 @@ export default function MessagesScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
-        <Text style={styles.title}>消息{unreadCount > 0 ? <Text style={styles.unreadBadge}> {unreadCount}</Text> : null}</Text>
+        <View>
+          <Text style={styles.title}>
+            消息{unreadCount > 0 ? <Text style={styles.unreadBadge}> {unreadCount}</Text> : null}
+          </Text>
+          <Text style={styles.headerSub}>喵喵国际物流通知中心</Text>
+        </View>
         {unreadCount > 0 && (
-          <TouchableOpacity onPress={markAllRead}>
+          <TouchableOpacity onPress={markAllRead} style={styles.allReadBtn}>
             <Text style={styles.allRead}>全部已读</Text>
           </TouchableOpacity>
         )}
@@ -218,24 +233,44 @@ export default function MessagesScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: spacing.md },
-  emptyText: { fontSize: font.sm, color: colors.textTertiary },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
-  title: { fontSize: font.xl, fontWeight: '700', color: colors.text },
-  unreadBadge: { fontSize: font.sm, color: colors.danger, fontWeight: '600' },
-  allRead: { fontSize: font.sm, color: colors.primary },
-  tabRow: { flexDirection: 'row', paddingHorizontal: spacing.md, paddingBottom: spacing.sm, gap: spacing.sm, backgroundColor: colors.card, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
-  tab: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2, borderRadius: radius.full, backgroundColor: colors.bg },
+  emptyText: { fontSize: font.sm, color: colors.textTertiary, marginTop: spacing.sm },
+
+  header: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.md,
+    backgroundColor: colors.card, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight,
+  },
+  title: { fontSize: font.xl, fontWeight: '800', color: colors.text },
+  headerSub: { fontSize: font.xs, color: colors.textTertiary, marginTop: 2 },
+  unreadBadge: { fontSize: font.sm, color: colors.danger, fontWeight: '700' },
+  allReadBtn: { backgroundColor: colors.primaryLight, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.full },
+  allRead: { fontSize: font.sm, color: colors.primary, fontWeight: '600' },
+
+  tabRow: {
+    flexDirection: 'row', paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm, gap: spacing.sm,
+    backgroundColor: colors.card, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight,
+  },
+  tab: { paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.full, backgroundColor: colors.bg },
   tabActive: { backgroundColor: colors.primary },
-  tabText: { fontSize: font.xs, color: colors.textSecondary },
-  tabTextActive: { color: '#fff', fontWeight: '600' },
+  tabText: { fontSize: font.xs, color: colors.textSecondary, fontWeight: '500' },
+  tabTextActive: { color: '#fff', fontWeight: '700' },
+
   listContent: { padding: spacing.md },
-  msgCard: { flexDirection: 'row', backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.sm, alignItems: 'center', gap: spacing.md },
-  msgIcon: { width: 44, height: 44, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
-  msgIconText: { fontSize: 20 },
+  msgCard: {
+    flexDirection: 'row', backgroundColor: colors.card,
+    borderRadius: radius.lg, padding: spacing.lg,
+    marginBottom: 10, alignItems: 'center', gap: spacing.md,
+    ...shadow.sm,
+  },
+  msgCardUnread: {
+    borderLeftWidth: 3, borderLeftColor: colors.primary,
+  },
+  msgIcon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   msgHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   msgTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flex: 1 },
   dot: { width: 8, height: 8, borderRadius: 4 },
-  msgTitle: { fontSize: font.md, fontWeight: '600', color: colors.text, flex: 1 },
+  msgTitle: { fontSize: font.md, fontWeight: '600', color: colors.text, flex: 1, letterSpacing: 0.1 },
   msgTime: { fontSize: font.xs, color: colors.textTertiary },
   msgBody: { fontSize: font.sm, color: colors.textSecondary, lineHeight: 20 },
 });

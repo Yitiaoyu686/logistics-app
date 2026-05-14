@@ -91,13 +91,13 @@ export default function DpnCreateScreen() {
 
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>🛫 站点信息</Text>
+            <Text style={styles.sectionTitle}>站点信息</Text>
             <Field label="起运站点 *" value={fromSite} onChange={setFromSite} placeholder="如：拉各斯起运站" />
             <Field label="目的站点 *" value={toSite} onChange={setToSite} placeholder="如：拉各斯市中心" />
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📦 派送方式</Text>
+            <Text style={styles.sectionTitle}>派送方式</Text>
             <View style={{ flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' }}>
               {METHODS.map((m) => (
                 <TouchableOpacity
@@ -130,7 +130,7 @@ export default function DpnCreateScreen() {
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>🗓 时间</Text>
+            <Text style={styles.sectionTitle}>时间</Text>
             <Field label="预计送达" value={eta} onChange={setEta} placeholder="YYYY-MM-DD" />
           </View>
 

@@ -108,7 +108,7 @@ function SalesToolsPage({ manualVisible, setManualVisible, manualCode, setManual
         const daysToEta = j.eta ? Math.ceil((new Date(j.eta).getTime() - Date.now()) / 86400000) : null;
         const isDeparted = ['DEPARTED', 'IN_TRANSIT'].includes(j.job_status);
         jobs.push({
-          id: j.id, icon: isAir ? '✈️' : '🚢',
+          id: j.id, icon: isAir ? 'airplane-outline' : 'boat-outline',
           route: `${j.origin_port || '-'} → ${j.dest_port || '-'}`,
           status: isDeparted
             ? (daysToEta !== null ? `ETA ${daysToEta}天后` : '在途')
@@ -204,7 +204,10 @@ function SalesToolsPage({ manualVisible, setManualVisible, manualCode, setManual
         {previewJobs.length > 0 && (
           <View style={ts.section}>
             <Pressable style={ts.sectionHeaderRow} onPress={() => setPreviewExpanded(!previewExpanded)}>
-              <Text style={ts.sectionTitle}>📅 发运计划 ({previewJobs.length})</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Ionicons name="calendar-outline" size={16} color={colors.primary} />
+                <Text style={ts.sectionTitle}>发运计划 ({previewJobs.length})</Text>
+              </View>
               <Ionicons name={previewExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSecondary} />
             </Pressable>
             {previewExpanded && (
@@ -213,7 +216,7 @@ function SalesToolsPage({ manualVisible, setManualVisible, manualCode, setManual
                   <View key={job.id} style={ts.previewCard}>
                     <View style={ts.previewTop}>
                       <View style={ts.previewRouteWrap}>
-                        <Text style={ts.previewRouteIcon}>{job.icon}</Text>
+                        <Ionicons name={job.icon as any} size={20} color={colors.primary} />
                         <Text style={ts.previewRouteText}>{job.route}</Text>
                         {job.isExpress && (
                           <View style={ts.expressBadge}>
@@ -259,15 +262,15 @@ function SalesToolsPage({ manualVisible, setManualVisible, manualCode, setManual
           </View>
           <View style={ts.quickGrid}>
             {[
-              { emoji: '📝', name: '新建订单', desc: '4 步快速创建', bg: colors.primaryLight, onPress: () => router.push('/task/order-create' as any) },
-              { emoji: '➕', name: '新建客户', desc: '录入新客户', bg: colors.successLight, onPress: () => router.push('/task/customer-create' as any) },
-              { emoji: '💰', name: '运费试算', desc: '即时报价分享', bg: colors.warningLight, onPress: () => router.push('/task/quote' as any) },
-              { emoji: '📋', name: '订单查询', desc: '查询所有订单', bg: colors.infoLight, onPress: () => router.push('/task/order' as any) },
-              { emoji: '🔍', name: '扫码查单', desc: '输入单号查询', bg: `${colors.textSecondary}15`, onPress: () => setManualVisible(true) },
+              { icon: 'create-outline', name: '新建订单', desc: '4 步快速创建', color: colors.primary, bg: colors.primaryLight, onPress: () => router.push('/task/order-create' as any) },
+              { icon: 'person-add-outline', name: '新建客户', desc: '录入新客户', color: colors.success, bg: colors.successLight, onPress: () => router.push('/task/customer-create' as any) },
+              { icon: 'calculator-outline', name: '运费试算', desc: '即时报价分享', color: colors.warning, bg: colors.warningLight, onPress: () => router.push('/task/quote' as any) },
+              { icon: 'document-text-outline', name: '订单查询', desc: '查询所有订单', color: colors.info, bg: colors.infoLight, onPress: () => router.push('/task/order' as any) },
+              { icon: 'barcode-outline', name: '扫码查单', desc: '输入单号查询', color: colors.textSecondary, bg: `${colors.textSecondary}12`, onPress: () => setManualVisible(true) },
             ].map((item) => (
               <TouchableOpacity key={item.name} style={ts.quickCard} onPress={item.onPress}>
                 <View style={[ts.quickIcon, { backgroundColor: item.bg }]}>
-                  <Text style={{ fontSize: 24 }}>{item.emoji}</Text>
+                  <Ionicons name={item.icon as any} size={24} color={item.color} />
                 </View>
                 <Text style={ts.quickName}>{item.name}</Text>
                 <Text style={ts.quickDesc}>{item.desc}</Text>
@@ -365,8 +368,7 @@ const ts = StyleSheet.create({
   },
   previewTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
   previewRouteWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 },
-  previewRouteIcon: { fontSize: 18 },
-  previewRouteText: { fontSize: font.xl, fontWeight: '800', color: colors.text, letterSpacing: 0.5 },
+  previewRouteText: { fontSize: font.xl, fontWeight: '700', color: colors.text, letterSpacing: 0.3 },
   expressBadge: { backgroundColor: colors.warningLight, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.sm },
   expressText: { fontSize: font.xs, color: colors.warning, fontWeight: '700' },
   previewStatusBadge: { paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.sm },
@@ -390,7 +392,7 @@ const ts = StyleSheet.create({
     padding: spacing.md, alignItems: 'center', ...shadow.sm,
   },
   quickIcon: {
-    width: 48, height: 48, borderRadius: radius.full,
+    width: 48, height: 48, borderRadius: 14,
     alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm,
   },
   quickName: { fontSize: font.sm, fontWeight: '600', color: colors.text, marginBottom: 2 },

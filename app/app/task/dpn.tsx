@@ -150,7 +150,7 @@ export default function DpnScreen() {
     setReceiveScanning(true);
     try {
       await deliveryApi.scanReceiveDpn(params.dpnId as string, { code, method: 'SCAN' });
-      showToast('success', `✓ 已入库 ${code}`);
+      showToast('success', `已入库 ${code}`);
       loadReceiveItems();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '扫码失败';
@@ -379,7 +379,7 @@ export default function DpnScreen() {
           {mode === 'bind' && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>🔗 选择要绑定的运单</Text>
+                <Text style={styles.sectionTitle}>选择要绑定的运单</Text>
                 {selectedCount > 0 && (
                   <Text style={styles.selectedCount}>已选 {selectedCount}</Text>
                 )}
@@ -411,7 +411,7 @@ export default function DpnScreen() {
           {/* Dispatch Mode */}
           {mode === 'dispatch' && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>🚚 执行发车</Text>
+              <Text style={styles.sectionTitle}>执行发车</Text>
               <View style={styles.formItem}>
                 <Text style={styles.formLabel}>物流 / 承运公司 *</Text>
                 <TouchableOpacity style={styles.selectField} onPress={() => setSupplierPickerOpen(true)}>
@@ -448,7 +448,7 @@ export default function DpnScreen() {
           {/* Arrive Mode */}
           {mode === 'arrive' && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>🚩 确认到达</Text>
+              <Text style={styles.sectionTitle}>确认到达</Text>
               <Text style={styles.hint}>司机已抵达目的站点，确认后进入待入库</Text>
               <View style={styles.arriveCard}>
                 <Ionicons name="location" size={32} color={colors.success} />
@@ -472,7 +472,7 @@ export default function DpnScreen() {
           {mode === 'receive' && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>📦 扫码入库</Text>
+                <Text style={styles.sectionTitle}>扫码入库</Text>
                 <Text style={styles.selectedCount}>
                   {receiveItems.filter((i) => i.inbound_status === 'RECEIVED').length}/{receiveItems.length}
                 </Text>

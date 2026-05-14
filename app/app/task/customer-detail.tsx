@@ -56,9 +56,9 @@ interface CustomerOrder {
 }
 
 const TYPE_LABEL: Record<string, string> = {
-  COMPANY_CN: '🏭 国内企业',
-  COMPANY_OS: '🏢 海外企业',
-  PERSONAL: '👤 个人客户',
+  COMPANY_CN: '国内企业',
+  COMPANY_OS: '海外企业',
+  PERSONAL: '个人客户',
 };
 
 const ORDER_STATUS_LABEL: Record<string, string> = {
@@ -302,7 +302,7 @@ export default function CustomerDetailScreen() {
               </View>
               <View style={[styles.tagPill, { backgroundColor: colors.successLight }]}>
                 <Text style={[styles.tagText, { color: colors.success }]}>
-                  {detail.status === 'ACTIVE' ? '✓ 活跃' : detail.status}
+                  {detail.status === 'ACTIVE' ? '活跃' : detail.status}
                 </Text>
               </View>
             </View>

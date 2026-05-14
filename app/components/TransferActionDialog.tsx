@@ -130,9 +130,9 @@ export function TransferActionDialog({ visible, target, mode, onClose, onSuccess
           <View style={styles.sheet}>
             <View style={styles.header}>
               <Text style={styles.title}>
-                {mode === 'dispatch' && '🚚 执行发车'}
-                {mode === 'arrive' && '🚩 确认到达'}
-                {mode === 'receive' && '📦 确认入库'}
+                {mode === 'dispatch' && '执行发车'}
+                {mode === 'arrive' && '确认到达'}
+                {mode === 'receive' && '确认入库'}
               </Text>
               <TouchableOpacity onPress={handleClose}>
                 <Ionicons name="close" size={24} color={colors.textSecondary} />

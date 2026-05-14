@@ -130,7 +130,7 @@ export default function TransferInboundScreen() {
         showToast('warn', '未匹配', `${keyword} 不在本调拨单或已入库`);
       } else {
         if (hits[0]) setHighlightedId(hits[0]);
-        showToast('success', `✓ 已入库 ${updated} 件`, keyword);
+        showToast('success', `已入库 ${updated} 件`, keyword);
         await load();
       }
     } catch (err: unknown) {
@@ -164,7 +164,7 @@ export default function TransferInboundScreen() {
         method: 'MANUAL',
       });
       setHighlightedId(item.id);
-      showToast('success', `✓ 手动入库 ${item.sub_order_no}`);
+      showToast('success', `手动入库 ${item.sub_order_no}`);
       await load();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '请重试';
@@ -345,7 +345,7 @@ export default function TransferInboundScreen() {
         <View style={styles.itemFooter}>
           <Text style={styles.itemMeta}>{item.pieces}件 · {item.weight_kg}kg</Text>
           {isReceived && item.inbound_method && (
-            <Text style={styles.itemMethodTag}>{item.inbound_method === 'SCAN' ? '🔍 扫码' : '✏️ 手动'}</Text>
+            <Text style={styles.itemMethodTag}>{item.inbound_method === 'SCAN' ? '扫码' : '手动'}</Text>
           )}
         </View>
       </TouchableOpacity>
@@ -502,7 +502,7 @@ export default function TransferInboundScreen() {
             <View style={styles.modalMask}>
               <View style={styles.modalSheet}>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>✏️ 手动添加运单</Text>
+                  <Text style={styles.modalTitle}>手动添加运单</Text>
                   <TouchableOpacity onPress={() => setManualVisible(false)}>
                     <Ionicons name="close" size={24} color={colors.textSecondary} />
                   </TouchableOpacity>

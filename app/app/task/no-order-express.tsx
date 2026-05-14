@@ -218,7 +218,7 @@ export default function NoOrderExpressScreen() {
         发件人：{item.sender_name || '-'} {item.sender_phone || ''}
       </Text>
       {item.customer_hint && (
-        <Text style={styles.hintLine}>💡 客户提示：{item.customer_hint}</Text>
+        <Text style={styles.hintLine}>客户提示：{item.customer_hint}</Text>
       )}
       {item.status === 'PENDING' && (
         <View style={styles.cardActions}>
@@ -297,7 +297,7 @@ export default function NoOrderExpressScreen() {
           <View style={styles.modalMask}>
             <View style={styles.modalSheet}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>📦 登记无单快递</Text>
+                <Text style={styles.modalTitle}>登记无单快递</Text>
                 <TouchableOpacity onPress={() => setCreateVisible(false)}>
                   <Ionicons name="close" size={24} color={colors.textSecondary} />
                 </TouchableOpacity>
@@ -357,7 +357,7 @@ export default function NoOrderExpressScreen() {
         <View style={styles.modalMask}>
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>🔗 匹配到客户</Text>
+              <Text style={styles.modalTitle}>匹配到客户</Text>
               <TouchableOpacity onPress={() => setMatchTarget(null)}>
                 <Ionicons name="close" size={24} color={colors.textSecondary} />
               </TouchableOpacity>
@@ -370,7 +370,7 @@ export default function NoOrderExpressScreen() {
                   <Text style={styles.infoLine}>{matchTarget.express_company || '-'} · {matchTarget.pieces}件 · {matchTarget.gross_weight_kg}kg</Text>
                   <Text style={styles.infoLine}>发件人：{matchTarget.sender_name || '-'}</Text>
                   {matchTarget.customer_hint && (
-                    <Text style={styles.hintInModal}>💡 {matchTarget.customer_hint}</Text>
+                    <Text style={styles.hintInModal}>{matchTarget.customer_hint}</Text>
                   )}
                 </View>
 

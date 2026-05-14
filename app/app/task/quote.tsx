@@ -142,7 +142,7 @@ export default function QuoteScreen() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           {/* 路线选择 */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>🧭 选择路线</Text>
+            <Text style={styles.sectionTitle}>选择路线</Text>
             <View style={styles.routeGrid}>
               {routes.map((r) => {
                 const active = r.id === routeId;
@@ -152,9 +152,11 @@ export default function QuoteScreen() {
                     style={[styles.routeCard, active && styles.routeCardActive]}
                     onPress={() => { setRouteId(r.id); setCalculated(null); }}
                   >
-                    <Text style={[styles.routeIcon, active && { color: '#fff' }]}>
-                      {r.transport_type === 'SEA' ? '🚢' : '✈️'}
-                    </Text>
+                    <Ionicons
+                      name={r.transport_type === 'SEA' ? 'boat-outline' : 'airplane-outline'}
+                      size={18}
+                      color={active ? '#fff' : colors.primary}
+                    />
                     <Text style={[styles.routeCity, active && { color: '#fff' }]}>
                       {r.origin_city}→{r.dest_city}
                     </Text>
@@ -167,7 +169,7 @@ export default function QuoteScreen() {
 
           {/* 货物信息 */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📦 货物信息</Text>
+            <Text style={styles.sectionTitle}>货物信息</Text>
             <View style={styles.formRow}>
               <FormField label="件数" value={pieces} onChangeText={setPieces} unit="件" />
               <FormField label="实际重量 *" value={weight} onChangeText={setWeight} unit="kg" />
@@ -183,13 +185,13 @@ export default function QuoteScreen() {
                 style={[styles.cargoBtn, cargoType === 'GENERAL' && styles.cargoBtnActive]}
                 onPress={() => { setCargoType('GENERAL'); setCalculated(null); }}
               >
-                <Text style={[styles.cargoText, cargoType === 'GENERAL' && styles.cargoTextActive]}>📦 普货</Text>
+                <Text style={[styles.cargoText, cargoType === 'GENERAL' && styles.cargoTextActive]}>普货</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.cargoBtn, cargoType === 'SENSITIVE' && styles.cargoBtnActive]}
                 onPress={() => { setCargoType('SENSITIVE'); setCalculated(null); }}
               >
-                <Text style={[styles.cargoText, cargoType === 'SENSITIVE' && styles.cargoTextActive]}>⚠️ 敏感</Text>
+                <Text style={[styles.cargoText, cargoType === 'SENSITIVE' && styles.cargoTextActive]}>敏感</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -204,7 +206,7 @@ export default function QuoteScreen() {
           {calculated && (
             <View style={styles.resultCard}>
               <View style={styles.resultHeader}>
-                <Text style={styles.resultTitle}>💰 报价结果</Text>
+                <Text style={styles.resultTitle}>报价结果</Text>
                 <Text style={styles.resultRoute}>
                   {selectedRoute?.origin_city} → {selectedRoute?.dest_city}
                 </Text>
@@ -301,11 +303,17 @@ const styles = StyleSheet.create({
   cargoText: { fontSize: font.sm, color: colors.textSecondary },
   cargoTextActive: { color: colors.primary, fontWeight: '600' },
   routeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  routeCard: { width: '48%', padding: spacing.md, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.card, alignItems: 'center' },
+  routeCard: {
+    width: '48%', padding: spacing.md, borderRadius: radius.lg,
+    borderWidth: 1.5, borderColor: colors.border,
+    backgroundColor: colors.card, alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+  },
   routeCardActive: { borderColor: colors.primary, backgroundColor: colors.primary },
-  routeIcon: { fontSize: 24, marginBottom: 4 },
-  routeCity: { fontSize: font.sm, color: colors.text, fontWeight: '600' },
-  routeDays: { fontSize: font.xs, color: colors.textSecondary, marginTop: 2 },
+  routeIcon: { fontSize: 26, marginBottom: 6 },
+  routeCity: { fontSize: font.md, color: colors.text, fontWeight: '800', letterSpacing: 0.3 },
+  routeDays: { fontSize: font.xs, color: colors.textTertiary, marginTop: 3 },
 
   formRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   formItem: { flex: 1 },

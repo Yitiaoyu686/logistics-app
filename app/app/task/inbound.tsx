@@ -11,12 +11,12 @@ import { safeBack } from '../../lib/nav';
 
 type PackageCondition = 'GOOD' | 'DAMAGED' | 'WET' | 'OPENED' | 'INCOMPLETE';
 
-const CONDITIONS: { value: PackageCondition; label: string; emoji: string; color: string }[] = [
-  { value: 'GOOD', label: '正常', emoji: '✅', color: colors.success },
-  { value: 'DAMAGED', label: '破损', emoji: '⚠️', color: colors.danger },
-  { value: 'WET', label: '受潮', emoji: '💧', color: colors.info },
-  { value: 'OPENED', label: '拆封', emoji: '📦', color: colors.warning },
-  { value: 'INCOMPLETE', label: '少件', emoji: '❌', color: colors.danger },
+const CONDITIONS: { value: PackageCondition; label: string; icon: string; color: string }[] = [
+  { value: 'GOOD', label: '正常', icon: 'checkmark-circle-outline', color: colors.success },
+  { value: 'DAMAGED', label: '破损', icon: 'alert-circle-outline', color: colors.danger },
+  { value: 'WET', label: '受潮', icon: 'water-outline', color: colors.info },
+  { value: 'OPENED', label: '拆封', icon: 'cube-outline', color: colors.warning },
+  { value: 'INCOMPLETE', label: '少件', icon: 'remove-circle-outline', color: colors.danger },
 ];
 
 type InboundMode = 'EXPRESS' | 'TRANSFER' | 'RETURN';
@@ -215,7 +215,7 @@ export default function InboundScreen() {
     if (Platform.OS === 'web' && fileInputRef.current) {
       fileInputRef.current.click();
     } else {
-      Alert.alert('📷 拍照', '原生拍照能力将在打包后启用（expo-image-picker）', [
+      Alert.alert('拍照', '原生拍照能力将在打包后启用（expo-image-picker）', [
         {
           text: '添加占位',
           onPress: () =>
@@ -339,7 +339,7 @@ export default function InboundScreen() {
           {/* 匹配信息卡 */}
           {order ? (
             <View style={styles.matchCard}>
-              <Text style={styles.matchTitle}>✅ 匹配成功</Text>
+              <Text style={styles.matchTitle}>匹配成功</Text>
               <View style={styles.matchGrid}>
                 <View style={styles.matchItem}>
                   <Text style={styles.matchLabel}>运单号</Text>
@@ -369,13 +369,13 @@ export default function InboundScreen() {
             </View>
           ) : (
             <View style={styles.noMatchCard}>
-              <Text style={styles.noMatchText}>⚠️ 无订单信息，请从任务流选择一个待入库任务</Text>
+              <Text style={styles.noMatchText}>无订单信息，请从任务流选择一个待入库任务</Text>
             </View>
           )}
 
           {/* 称重量方 */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>⚖️ 称重量方 <Text style={styles.required}>*</Text></Text>
+            <Text style={styles.sectionTitle}>称重量方 <Text style={styles.required}>*</Text></Text>
 
             <View style={styles.formRow}>
               <FormField label="实际件数" value={pieces} onChangeText={setPieces} keyboardType="numeric" />
@@ -406,7 +406,7 @@ export default function InboundScreen() {
 
           {/* 货物类别 */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>🏷️ 货物类别</Text>
+            <Text style={styles.sectionTitle}>货物类别</Text>
             <TouchableOpacity
               style={styles.selectField}
               onPress={() => setCategoryPickerOpen(true)}
@@ -421,7 +421,7 @@ export default function InboundScreen() {
           {/* 费用明细 */}
           <View style={styles.section}>
             <View style={styles.feeHeader}>
-              <Text style={styles.sectionTitle}>💰 费用明细</Text>
+              <Text style={styles.sectionTitle}>费用明细</Text>
               <TouchableOpacity style={styles.addFeeBtn} onPress={openAddFee}>
                 <Ionicons name="add-circle" size={18} color={colors.primary} />
                 <Text style={styles.addFeeText}>添加费用</Text>
@@ -472,7 +472,7 @@ export default function InboundScreen() {
 
           {/* 包裹状况 */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📦 包裹状况</Text>
+            <Text style={styles.sectionTitle}>包裹状况</Text>
             <View style={styles.conditionRow}>
               {CONDITIONS.map((c) => (
                 <TouchableOpacity
@@ -483,16 +483,19 @@ export default function InboundScreen() {
                   ]}
                   onPress={() => setCondition(c.value)}
                 >
-                  <Text style={[styles.conditionText, condition === c.value && { color: c.color, fontWeight: '600' }]}>
-                    {c.emoji} {c.label}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Ionicons name={c.icon as any} size={16} color={condition === c.value ? c.color : colors.textSecondary} />
+                    <Text style={[styles.conditionText, condition === c.value && { color: c.color, fontWeight: '600' }]}>
+                      {c.label}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               ))}
             </View>
 
             {isAbnormal && (
               <View style={styles.photoHint}>
-                <Text style={styles.photoHintText}>⚠️ 异常包裹必须拍照记录</Text>
+                <Text style={styles.photoHintText}>异常包裹必须拍照记录</Text>
               </View>
             )}
           </View>
@@ -504,7 +507,7 @@ export default function InboundScreen() {
               onPress={() => setThirdPartyOpen((v) => !v)}
             >
               <Text style={styles.sectionTitle}>
-                📬 三方快递补录 <Text style={styles.photoHintInline}>（可选）</Text>
+                三方快递补录 <Text style={styles.photoHintInline}>（可选）</Text>
               </Text>
               <Ionicons name={thirdPartyOpen ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textTertiary} />
             </TouchableOpacity>
@@ -570,7 +573,7 @@ export default function InboundScreen() {
           <View style={styles.section}>
             <View style={styles.feeHeader}>
               <Text style={styles.sectionTitle}>
-                📷 入库照片 <Text style={styles.photoHintInline}>（快递面单/外观/破损）</Text>
+                入库照片 <Text style={styles.photoHintInline}>（快递面单/外观/破损）</Text>
               </Text>
               <Text style={styles.photoCount}>{photos.length} 张</Text>
             </View>
@@ -595,7 +598,7 @@ export default function InboundScreen() {
 
           {/* 库位号 */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📍 库位号</Text>
+            <Text style={styles.sectionTitle}>库位号</Text>
             <View style={styles.locationRow}>
               <TextInput
                 style={styles.locationInput}

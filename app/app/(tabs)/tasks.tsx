@@ -191,8 +191,8 @@ export default function TasksScreen() {
               <View key={task.id} style={styles.card}>
                 {/* Row 1: icon + title + status ... action/time */}
                 <View style={styles.cardRow1}>
-                  <View style={[styles.cardIconWrap, { backgroundColor: task.borderColor + '18' }]}>
-                    <Text style={styles.cardIcon}>{task.icon}</Text>
+                  <View style={[styles.cardIconWrap, { backgroundColor: task.borderColor + '12' }]}>
+                    <Ionicons name={task.icon as any} size={16} color={task.borderColor} />
                   </View>
                   <Text style={styles.cardTitle} numberOfLines={1}>{task.title}</Text>
                   <View style={[styles.cardStatusBadge, { backgroundColor: task.statusColor + '15' }]}>
@@ -268,7 +268,7 @@ async function loadWarehouseCnTasks(pending: TaskItem[], completed: TaskItem[]) 
   // 待入库
   for (const o of (ordersRes.data || [])) {
     pending.push({
-      id: `inbound-${o.id}`, type: 'inbound', icon: '📦',
+      id: `inbound-${o.id}`, type: 'inbound', icon: 'cube-outline',
       title: '待入库', subtitle: o.order_no,
       detail: `${o.customer_name} · ${o.total_declared_pieces || 0}件 · ${o.route_code || ''}`,
       status: '待处理', statusColor: colors.warning,
@@ -283,7 +283,7 @@ async function loadWarehouseCnTasks(pending: TaskItem[], completed: TaskItem[]) 
     const loadedPieces = j.total_pieces || 0;
     const estimatedMax = j.business_line === 'AIR' ? 200 : 500;
     pending.push({
-      id: `packing-${j.id}`, type: 'packing', icon: '🏗',
+      id: `packing-${j.id}`, type: 'packing', icon: 'archive-outline',
       title: '待添加订单', subtitle: `${j.job_no} · ${j.container_no || '未创建'}`,
       detail: `${j.route_code || ''} · ${j.container_type || ''} · ${j.service_type === 'EXPRESS' ? '特快' : '普快'}`,
       status: '装箱中', statusColor: colors.info,
@@ -305,7 +305,7 @@ async function loadWarehouseCnTasks(pending: TaskItem[], completed: TaskItem[]) 
       actions.push({ label: '扫码入库', color: colors.success, route: '/task/transfer-inbound', params: { id: t.id } });
     }
     pending.push({
-      id: `transfer-${t.id}`, type: 'transfer', icon: '📋',
+      id: `transfer-${t.id}`, type: 'transfer', icon: 'swap-horizontal-outline',
       title: `调拨${statusMap[t.transfer_status] || t.transfer_status}`,
       subtitle: t.transfer_no,
       detail: `${t.from_warehouse_name || ''} → ${t.to_warehouse_name || ''} · ${t.total_pieces}件`,
@@ -319,7 +319,7 @@ async function loadWarehouseCnTasks(pending: TaskItem[], completed: TaskItem[]) 
   // 无单快递
   for (const u of (unmatchedRes.data || []).filter((u: any) => u.status === 'PENDING')) {
     pending.push({
-      id: `orphan-${u.id}`, type: 'orphan', icon: '❓',
+      id: `orphan-${u.id}`, type: 'orphan', icon: 'help-circle-outline',
       title: '无单快递', subtitle: `${u.tracking_no} · ${u.express_company}`,
       detail: `${u.sender_name || '-'} · ${u.pieces}件 · ${u.gross_weight_kg}kg`,
       status: '待匹配', statusColor: colors.warning,
@@ -333,7 +333,7 @@ async function loadWarehouseCnTasks(pending: TaskItem[], completed: TaskItem[]) 
   const returnCount = (returnsRes.data || []).length;
   if (returnCount > 0) {
     pending.push({
-      id: 'return-entry', type: 'transfer', icon: '↩️',
+      id: 'return-entry', type: 'transfer', icon: 'return-down-back-outline',
       title: '退回入库', subtitle: `待处理 ${returnCount} 条`,
       detail: '从到达国退回的运单/配送失败退回',
       status: '待处理', statusColor: colors.warning,
@@ -345,7 +345,7 @@ async function loadWarehouseCnTasks(pending: TaskItem[], completed: TaskItem[]) 
   // ── 已完成 ──
   for (const o of (completedOrdersRes.data || [])) {
     completed.push({
-      id: `done-inbound-${o.id}`, type: 'inbound', icon: '📦',
+      id: `done-inbound-${o.id}`, type: 'inbound', icon: 'cube-outline',
       title: '已入库', subtitle: o.order_no,
       detail: `${o.customer_name} · ${o.total_declared_pieces || 0}件 · ${o.route_code || ''}`,
       status: '已完成', statusColor: colors.success,
@@ -356,7 +356,7 @@ async function loadWarehouseCnTasks(pending: TaskItem[], completed: TaskItem[]) 
   }
   for (const j of (completedJobsRes.data || [])) {
     completed.push({
-      id: `done-packing-${j.id}`, type: 'packing', icon: '🏗',
+      id: `done-packing-${j.id}`, type: 'packing', icon: 'archive-outline',
       title: '已发运', subtitle: j.job_no,
       detail: `${j.route_code || ''} · ${j.total_pieces || 0}件 · ${j.total_weight_kg || 0}kg`,
       status: '已完成', statusColor: colors.success,
@@ -367,7 +367,7 @@ async function loadWarehouseCnTasks(pending: TaskItem[], completed: TaskItem[]) 
   }
   for (const t of (transfersRes.data || []).filter((t: any) => t.transfer_status === 'RECEIVED')) {
     completed.push({
-      id: `done-transfer-${t.id}`, type: 'transfer', icon: '📋',
+      id: `done-transfer-${t.id}`, type: 'transfer', icon: 'swap-horizontal-outline',
       title: '调拨完成', subtitle: t.transfer_no,
       detail: `${t.from_warehouse_name || ''} → ${t.to_warehouse_name || ''} · ${t.total_pieces}件`,
       status: '已完成', statusColor: colors.success,
@@ -378,7 +378,7 @@ async function loadWarehouseCnTasks(pending: TaskItem[], completed: TaskItem[]) 
   }
   for (const u of (unmatchedRes.data || []).filter((u: any) => u.status === 'MATCHED')) {
     completed.push({
-      id: `done-orphan-${u.id}`, type: 'orphan', icon: '❓',
+      id: `done-orphan-${u.id}`, type: 'orphan', icon: 'help-circle-outline',
       title: '已匹配', subtitle: `${u.tracking_no} · ${u.express_company}`,
       detail: `${u.sender_name || '-'} · ${u.pieces}件`,
       status: '已完成', statusColor: colors.success,
@@ -400,7 +400,7 @@ async function loadWarehouseUsTasks(pending: TaskItem[], completed: TaskItem[]) 
   // 待入库
   for (const j of (jobsRes.data || [])) {
     pending.push({
-      id: `inbound-${j.id}`, type: 'inbound', icon: '📦',
+      id: `inbound-${j.id}`, type: 'inbound', icon: 'cube-outline',
       title: '任务入库', subtitle: `${j.job_no} · ${j.business_line === 'SEA' ? '海运' : '空运'}`,
       detail: `${j.origin_port}→${j.dest_port} · ${j.total_pieces}件/${j.total_weight_kg}kg`,
       status: '待入库', statusColor: colors.warning,
@@ -415,7 +415,7 @@ async function loadWarehouseUsTasks(pending: TaskItem[], completed: TaskItem[]) 
   for (const d of (dpnsRes.data || []).filter((d: any) => !['SIGNED', 'CANCELLED'].includes(d.dpn_status))) {
     const dpnParams = { dpnId: d.id, dpnNo: d.dpn_no, dpnStatus: d.dpn_status, fromSite: d.from_site, toSite: d.to_site };
     pending.push({
-      id: `dpn-${d.id}`, type: 'dispatch', icon: '📄',
+      id: `dpn-${d.id}`, type: 'dispatch', icon: 'document-text-outline',
       title: `DPN${dpnStatusMap[d.dpn_status] || d.dpn_status}`,
       subtitle: d.dpn_no,
       detail: `${d.from_site || ''} → ${d.to_site || ''} · ${d.total_orders}单/${d.total_pieces}件`,
@@ -430,7 +430,7 @@ async function loadWarehouseUsTasks(pending: TaskItem[], completed: TaskItem[]) 
   // 配送
   for (const dt of (deliveriesRes.data || []).filter((d: any) => !['SIGNED', 'CANCELLED'].includes(d.task_status))) {
     pending.push({
-      id: `delivery-${dt.id}`, type: 'delivery', icon: '🚚',
+      id: `delivery-${dt.id}`, type: 'delivery', icon: 'car-outline',
       title: '待配送', subtitle: dt.task_no,
       detail: `${dt.recipient_name || ''} · ${dt.recipient_phone || ''}`,
       status: dt.task_status === 'IN_TRANSIT' ? '执行中' : '待接单',
@@ -444,7 +444,7 @@ async function loadWarehouseUsTasks(pending: TaskItem[], completed: TaskItem[]) 
   for (const p of (pickupsRes.data || []).filter((p: any) => p.notify_status !== 'PICKED_UP')) {
     const isPending = p.notify_status === 'PENDING';
     pending.push({
-      id: `pickup-${p.id}`, type: 'pickup', icon: '🏪',
+      id: `pickup-${p.id}`, type: 'pickup', icon: 'storefront-outline',
       title: isPending ? '待自提通知' : '待核销',
       subtitle: `${p.pickup_no} · ${p.pickup_station}`,
       detail: `${p.recipient_name || ''} · ${p.recipient_phone || ''}`,
@@ -463,7 +463,7 @@ async function loadWarehouseUsTasks(pending: TaskItem[], completed: TaskItem[]) 
   // ── 已完成 ──
   for (const j of (completedJobsRes.data || [])) {
     completed.push({
-      id: `done-inbound-${j.id}`, type: 'inbound', icon: '📦',
+      id: `done-inbound-${j.id}`, type: 'inbound', icon: 'cube-outline',
       title: '已入库', subtitle: j.job_no,
       detail: `${j.origin_port}→${j.dest_port} · ${j.total_pieces}件`,
       status: '已完成', statusColor: colors.success,
@@ -474,7 +474,7 @@ async function loadWarehouseUsTasks(pending: TaskItem[], completed: TaskItem[]) 
   }
   for (const d of (dpnsRes.data || []).filter((d: any) => ['SIGNED', 'COMPLETED'].includes(d.dpn_status))) {
     completed.push({
-      id: `done-dpn-${d.id}`, type: 'dispatch', icon: '📄',
+      id: `done-dpn-${d.id}`, type: 'dispatch', icon: 'document-text-outline',
       title: 'DPN完成', subtitle: d.dpn_no,
       detail: `${d.from_site || ''} → ${d.to_site || ''} · ${d.total_orders}单`,
       status: '已完成', statusColor: colors.success,
@@ -485,7 +485,7 @@ async function loadWarehouseUsTasks(pending: TaskItem[], completed: TaskItem[]) 
   }
   for (const dt of (deliveriesRes.data || []).filter((d: any) => d.task_status === 'SIGNED')) {
     completed.push({
-      id: `done-delivery-${dt.id}`, type: 'delivery', icon: '🚚',
+      id: `done-delivery-${dt.id}`, type: 'delivery', icon: 'car-outline',
       title: '已签收', subtitle: dt.task_no,
       detail: `${dt.recipient_name || ''}`,
       status: '已完成', statusColor: colors.success,
@@ -496,7 +496,7 @@ async function loadWarehouseUsTasks(pending: TaskItem[], completed: TaskItem[]) 
   }
   for (const p of (pickupsRes.data || []).filter((p: any) => p.notify_status === 'PICKED_UP')) {
     completed.push({
-      id: `done-pickup-${p.id}`, type: 'pickup', icon: '🏪',
+      id: `done-pickup-${p.id}`, type: 'pickup', icon: 'storefront-outline',
       title: '已自提', subtitle: `${p.pickup_no}`,
       detail: `${p.recipient_name || ''} · ${p.pickup_station || ''}`,
       status: '已完成', statusColor: colors.success,
@@ -525,7 +525,7 @@ async function loadSalesTasks(pending: TaskItem[], completed: TaskItem[]) {
   for (const o of urgentUnpaid) {
     const amt = Number(o.total_receivable_amount || o.actual_freight || o.estimated_freight || 0);
     pending.push({
-      id: `sales-unpaid-${o.id}`, type: 'sales-unpaid', icon: '💰',
+      id: `sales-unpaid-${o.id}`, type: 'sales-unpaid', icon: 'cash-outline',
       title: '货到未收款', subtitle: `${o.order_no} · ${o.customer_name}`,
       detail: `应收 ¥${amt > 0 ? amt.toFixed(2) : '待确认'} · ${o.order_status === 'ARRIVED' ? '已到达' : '已签收'}`,
       status: o.payment_status === 'PARTIAL' ? '部分已付' : '未付款',
@@ -545,7 +545,7 @@ async function loadSalesTasks(pending: TaskItem[], completed: TaskItem[]) {
   for (const c of newNoOrder) {
     const daysSince = c.createdAt ? Math.floor((now - new Date(c.createdAt).getTime()) / 86400000) : 0;
     pending.push({
-      id: `sales-noorder-${c.id}`, type: 'sales-customer', icon: '👤',
+      id: `sales-noorder-${c.id}`, type: 'sales-customer', icon: 'person-outline',
       title: '新客户未下单',
       subtitle: `${c.customerName || c.name} · ${c.customerCode || c.shortCode || ''}`,
       detail: `${c.country || '-'} · ${c.contactPhone || c.contact?.phone || '-'}`,
@@ -561,7 +561,7 @@ async function loadSalesTasks(pending: TaskItem[], completed: TaskItem[]) {
   for (const o of paidOrders) {
     const amt = Number(o.total_receivable_amount || o.actual_freight || 0);
     completed.push({
-      id: `done-paid-${o.id}`, type: 'sales-unpaid', icon: '💰',
+      id: `done-paid-${o.id}`, type: 'sales-unpaid', icon: 'cash-outline',
       title: '已收款', subtitle: `${o.order_no} · ${o.customer_name}`,
       detail: `¥${amt > 0 ? amt.toFixed(2) : '-'}`,
       status: '已完成', statusColor: colors.success,
@@ -575,7 +575,7 @@ async function loadSalesTasks(pending: TaskItem[], completed: TaskItem[]) {
   const convertedCustomers = myCustomers.filter((c: any) => (c.totalOrders || 0) > 0);
   for (const c of convertedCustomers) {
     completed.push({
-      id: `done-customer-${c.id}`, type: 'sales-customer', icon: '👤',
+      id: `done-customer-${c.id}`, type: 'sales-customer', icon: 'person-outline',
       title: '客户已下单',
       subtitle: `${c.customerName || c.name} · ${c.customerCode || c.shortCode || ''}`,
       detail: `累计 ${c.totalOrders || 0} 单 · ${c.country || '-'}`,
@@ -668,40 +668,39 @@ const styles = StyleSheet.create({
   list: { flex: 1 },
   listContent: { paddingHorizontal: spacing.md, paddingTop: spacing.sm },
 
-  // ── Compact Card (~72px)
+  // ── Card — Apple HIG inspired
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 8,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 14,
+    marginBottom: 10,
     ...shadow.sm,
   },
   cardRow1: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
+    gap: 10,
+    marginBottom: 6,
   },
-  cardIconWrap: { width: 24, height: 24, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
-  cardIcon: { fontSize: 13 },
-  cardTitle: { fontSize: font.md, fontWeight: '700', color: colors.text },
-  cardStatusBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.full, overflow: 'hidden' },
-  cardStatusText: { fontSize: font.xs, fontWeight: '600' },
+  cardIconWrap: { width: 30, height: 30, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  cardTitle: { fontSize: font.md, fontWeight: '600', color: colors.text },
+  cardStatusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.full, overflow: 'hidden' },
+  cardStatusText: { fontSize: 11, fontWeight: '600', letterSpacing: 0.2 },
   cardTime: { fontSize: font.xs, color: colors.textTertiary },
-  cardSubtitle: { fontSize: font.sm, color: colors.text, fontWeight: '500', fontFamily: font.mono, marginBottom: 2, paddingLeft: 32 },
-  cardDetail: { fontSize: font.sm, color: colors.textSecondary, paddingLeft: 32 },
+  cardSubtitle: { fontSize: font.sm, color: colors.text, fontWeight: '500', fontFamily: font.mono, marginBottom: 3, paddingLeft: 40 },
+  cardDetail: { fontSize: font.sm, color: colors.textSecondary, paddingLeft: 40, lineHeight: 20 },
   cardActionBtn: {
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: radius.md,
-    minWidth: 72,
+    minWidth: 76,
     alignItems: 'center',
   },
-  cardActionBtnText: { fontSize: font.sm, fontWeight: '700' },
+  cardActionBtnText: { fontSize: font.sm, fontWeight: '600' },
 
   // ── Progress Bar
-  progressRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: spacing.sm, paddingLeft: 32 },
+  progressRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: spacing.sm, paddingLeft: 40 },
   progressBar: { flex: 1, height: 4, backgroundColor: colors.borderLight, borderRadius: 2, overflow: 'hidden' },
   progressFill: { height: '100%', borderRadius: 2 },
   progressText: { fontSize: font.xs, fontWeight: '600', width: 36, textAlign: 'right' },

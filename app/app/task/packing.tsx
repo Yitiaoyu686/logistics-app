@@ -333,7 +333,7 @@ export default function PackingScreen() {
         // 已激活 → 直接绑
         await warehouseApi.loadUnit(activeUnit.id, [sub.id]);
         await loadJob(job.job_no || job.id);
-        showToast('success', `✓ 已绑入 ${activeUnit.unit_no}`, `${sub.sub_order_no} · ${sub.pieces || 0}件 ${(sub.actual_weight_kg || 0).toFixed(1)}kg`);
+        showToast('success', `已绑入 ${activeUnit.unit_no}`, `${sub.sub_order_no} · ${sub.pieces || 0}件 ${(sub.actual_weight_kg || 0).toFixed(1)}kg`);
       } else {
         // 未激活 → 进缓冲区
         if (pendingOrders.some((o) => o.id === sub.id)) {
@@ -624,7 +624,7 @@ export default function PackingScreen() {
                     <>
                       <View style={styles.section}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <Text style={styles.sectionTitle}>📦 {unitLabel}</Text>
+                          <Text style={styles.sectionTitle}>{unitLabel}</Text>
                           {(!job?.container_no && !createdUnit) && (
                             <TouchableOpacity
                               style={{
@@ -734,8 +734,8 @@ export default function PackingScreen() {
                     {!activeUnit && pendingOrders.length > 0 && (
                       <View style={styles.section}>
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
-                          <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>📋 待绑运单 ({pendingOrders.length})</Text>
-                          <Text style={{ fontSize: font.xs, color: colors.warning }}>⏳ 扫集装号绑定</Text>
+                          <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>待绑运单 ({pendingOrders.length})</Text>
+                          <Text style={{ fontSize: font.xs, color: colors.warning }}>扫集装号绑定</Text>
                         </View>
                         {pendingOrders.map((o) => (
                           <View key={o.id} style={styles.orderItem}>
@@ -1051,7 +1051,7 @@ export default function PackingScreen() {
           <View style={styles.modalBackdrop}>
             <View style={[styles.modalSheet, { paddingVertical: spacing.xl, maxHeight: '90%' }]}>
               <Text style={styles.modalTitle}>
-                📋 面单预览{printUnits.length > 1 ? ` · ${printUnits.length} 张` : ''}
+                面单预览{printUnits.length > 1 ? ` · ${printUnits.length} 张` : ''}
               </Text>
 
               <ScrollView
@@ -1116,7 +1116,7 @@ export default function PackingScreen() {
                   style={[styles.btnPrimary, { flex: 1, height: 48 }]}
                   onPress={() => {
                     const count = printUnits.length || 1;
-                    Alert.alert('🖨 打印', `${count} 张面单已发送到蓝牙打印机`, [
+                    Alert.alert('打印', `${count} 张面单已发送到蓝牙打印机`, [
                       { text: '确定', onPress: () => setLabelVisible(false) },
                     ]);
                   }}

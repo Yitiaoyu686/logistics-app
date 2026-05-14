@@ -311,7 +311,7 @@ export default function ShippingUnitsScreen() {
       <Modal visible={labelVisible} transparent animationType="fade" onRequestClose={() => setLabelVisible(false)}>
         <View style={styles.modalBackdrop}>
           <View style={[styles.modalSheet, { maxHeight: '90%' }]}>
-            <Text style={styles.modalTitle}>📋 面单预览 · {printUnits.length} 张</Text>
+            <Text style={styles.modalTitle}>面单预览 · {printUnits.length} 张</Text>
             <ScrollView style={{ maxHeight: 520 }} contentContainerStyle={{ gap: spacing.md, paddingVertical: spacing.sm }}>
               {printUnits.map((u, idx) => (
                 <View
@@ -357,7 +357,7 @@ export default function ShippingUnitsScreen() {
               <TouchableOpacity
                 style={styles.confirmBtn}
                 onPress={() => {
-                  Alert.alert('🖨 打印', `${printUnits.length} 张面单已发送到蓝牙打印机`, [
+                  Alert.alert('打印', `${printUnits.length} 张面单已发送到蓝牙打印机`, [
                     { text: '确定', onPress: () => setLabelVisible(false) },
                   ]);
                 }}

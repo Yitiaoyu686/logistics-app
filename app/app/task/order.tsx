@@ -87,30 +87,40 @@ export default function OrderScreen({ embedded = false }: OrderScreenProps = {})
 
   const renderItem = ({ item }: { item: OrderItem }) => {
     const meta = STATUS_META[item.order_status] || { label: item.order_status, color: colors.textSecondary, bg: colors.borderLight };
+    const isAir = item.business_line === 'AIR';
+    const accentColor = isAir ? colors.info : colors.taskDispatch;
     return (
       <TouchableOpacity
-        style={styles.card}
+        style={[styles.card, { borderLeftColor: accentColor }]}
         onPress={() => router.push({ pathname: '/task/order-detail' as any, params: { id: item.id } })}
         activeOpacity={0.7}
       >
         <View style={styles.cardHeader}>
-          <Text style={styles.orderNo}>{item.order_no}</Text>
+          <View style={styles.orderNoRow}>
+            <Ionicons name={isAir ? 'airplane-outline' : 'boat-outline'} size={16} color={colors.primary} />
+            <Text style={styles.orderNo}>{item.order_no}</Text>
+          </View>
           <View style={[styles.statusBadge, { backgroundColor: meta.bg }]}>
             <Text style={[styles.statusText, { color: meta.color }]}>{meta.label}</Text>
           </View>
         </View>
-        <Text style={styles.customerLine} numberOfLines={1}>
-          {item.customer_name} · {item.warehouse_entry_no}
-        </Text>
+        <View style={styles.customerRow}>
+          <Text style={styles.customerName} numberOfLines={1}>{item.customer_name}</Text>
+          {item.warehouse_entry_no ? (
+            <Text style={styles.entryNo}>{item.warehouse_entry_no}</Text>
+          ) : null}
+        </View>
         <View style={styles.routeRow}>
-          <Ionicons name="navigate-outline" size={14} color={colors.primary} />
-          <Text style={styles.routeText} numberOfLines={1}>{item.route_code}</Text>
+          <Ionicons name="navigate-outline" size={13} color={accentColor} />
+          <Text style={[styles.routeText, { color: accentColor }]} numberOfLines={1}>{item.route_code}</Text>
         </View>
         <View style={styles.cardFooter}>
           <Text style={styles.footerText}>
             {item.total_declared_pieces}件 · {item.total_declared_weight_kg}kg · {item.sub_order_count}子单
           </Text>
-          <Text style={styles.consigneeText} numberOfLines={1}>→ {item.consignee_name}</Text>
+          {item.consignee_name ? (
+            <Text style={styles.consigneeText} numberOfLines={1}>→ {item.consignee_name}</Text>
+          ) : null}
         </View>
       </TouchableOpacity>
     );
@@ -205,15 +215,18 @@ const styles = StyleSheet.create({
   chipText: { fontSize: font.sm, color: colors.textSecondary },
   chipTextActive: { color: '#fff', fontWeight: '600' },
   listContent: { padding: spacing.md, gap: spacing.md },
-  card: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.md },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
-  orderNo: { fontSize: font.sm, fontFamily: font.mono, fontWeight: '700', color: colors.primary, flex: 1 },
+  card: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.md, borderLeftWidth: 3, borderLeftColor: colors.border, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 },
+  orderNoRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1 },
+  orderNo: { fontSize: font.sm, fontFamily: font.mono, fontWeight: '700', color: colors.text, flex: 1 },
   statusBadge: { paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.sm },
   statusText: { fontSize: font.xs, fontWeight: '600' },
-  customerLine: { fontSize: font.sm, color: colors.text, marginBottom: 4 },
+  customerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: 4 },
+  customerName: { fontSize: font.sm, color: colors.text, fontWeight: '500', flex: 1 },
+  entryNo: { fontSize: font.xs, fontFamily: font.mono, color: colors.textTertiary },
   routeRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: spacing.sm },
-  routeText: { flex: 1, fontSize: font.xs, color: colors.primary, fontWeight: '500' },
+  routeText: { flex: 1, fontSize: font.xs, fontWeight: '600' },
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: spacing.sm, borderTopWidth: 0.5, borderTopColor: colors.borderLight },
   footerText: { fontSize: font.xs, color: colors.textSecondary },
-  consigneeText: { fontSize: font.xs, color: colors.textSecondary, maxWidth: '50%' },
+  consigneeText: { fontSize: font.xs, color: colors.textSecondary, maxWidth: '45%' },
 });

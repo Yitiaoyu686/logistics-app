@@ -352,7 +352,7 @@ export default function TransferScreen() {
             </TouchableOpacity>
           )}
           {item.transfer_status === 'RECEIVED' && (
-            <Text style={styles.completedText}>✓ 已完成</Text>
+            <Text style={styles.completedText}>已完成</Text>
           )}
         </View>
       </View>
@@ -416,9 +416,9 @@ export default function TransferScreen() {
             <View style={styles.modalSheet}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>
-                  {actionMode === 'dispatch' && '🚚 执行发车'}
-                  {actionMode === 'arrive' && '🚩 确认到达'}
-                  {actionMode === 'receive' && '📦 确认入库'}
+                  {actionMode === 'dispatch' && '执行发车'}
+                  {actionMode === 'arrive' && '确认到达'}
+                  {actionMode === 'receive' && '确认入库'}
                 </Text>
                 <TouchableOpacity onPress={() => { setSelected(null); setActionMode(null); }}>
                   <Ionicons name="close" size={24} color={colors.textSecondary} />
@@ -514,7 +514,7 @@ export default function TransferScreen() {
           <View style={styles.modalMask}>
             <View style={styles.modalSheet}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>🔗 绑运单到调拨单</Text>
+                <Text style={styles.modalTitle}>绑运单到调拨单</Text>
                 <TouchableOpacity onPress={() => setBindTarget(null)}>
                   <Ionicons name="close" size={24} color={colors.textSecondary} />
                 </TouchableOpacity>
@@ -623,7 +623,7 @@ export default function TransferScreen() {
           <View style={styles.modalMask}>
             <View style={styles.modalSheet}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>📋 创建调拨单</Text>
+                <Text style={styles.modalTitle}>创建调拨单</Text>
                 <TouchableOpacity onPress={() => setCreateVisible(false)}>
                   <Ionicons name="close" size={24} color={colors.textSecondary} />
                 </TouchableOpacity>

@@ -34,10 +34,28 @@ interface CustomerListItem {
 }
 
 const TYPE_LABEL: Record<string, string> = {
-  COMPANY_CN: '🏭 国内企业',
-  COMPANY_OS: '🏢 海外企业',
-  PERSONAL: '👤 个人客户',
+  COMPANY_CN: '国内企业',
+  COMPANY_OS: '海外企业',
+  COMPANY_OVERSEAS: '海外企业',
+  INDIVIDUAL: '个人客户',
+  PERSONAL: '个人客户',
 };
+
+// 根据名字生成固定颜色（避免全灰）
+const AVATAR_COLORS = [
+  { bg: '#EFF6FF', text: '#2563EB' }, // 蓝
+  { bg: '#F0FDF4', text: '#059669' }, // 绿
+  { bg: '#FFF7ED', text: '#D97706' }, // 橙
+  { bg: '#FDF4FF', text: '#9333EA' }, // 紫
+  { bg: '#FFF1F2', text: '#E11D48' }, // 红
+  { bg: '#F0FDFA', text: '#0D9488' }, // 青
+];
+
+function getAvatarColor(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
 
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: 'ALL', label: '全部' },
@@ -132,47 +150,55 @@ export default function CustomerScreen({ embedded = false }: CustomerScreenProps
     ]);
   };
 
-  const renderListItem = ({ item }: { item: CustomerListItem }) => (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() => router.push({ pathname: '/task/customer-detail' as any, params: { id: item.id } })}
-      activeOpacity={0.7}
-    >
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>{(item.customerName || '?')[0]}</Text>
-      </View>
-      <View style={{ flex: 1 }}>
-        <View style={styles.cardHeader}>
-          <Text style={styles.customerName} numberOfLines={1}>{item.customerName}</Text>
-          <View style={styles.codeBadge}>
-            <Text style={styles.codeText}>{item.customerCode}</Text>
+  const renderListItem = ({ item }: { item: CustomerListItem }) => {
+    const avatarColor = getAvatarColor(item.customerName || '?');
+    const typeLabel = TYPE_LABEL[item.customerType] || item.customerType;
+    return (
+      <TouchableOpacity
+        style={styles.card}
+        onPress={() => router.push({ pathname: '/task/customer-detail' as any, params: { id: item.id } })}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.avatar, { backgroundColor: avatarColor.bg }]}>
+          <Text style={[styles.avatarText, { color: avatarColor.text }]}>{(item.customerName || '?')[0]}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.customerName} numberOfLines={1}>{item.customerName}</Text>
+            <View style={styles.codeBadge}>
+              <Text style={styles.codeText}>{item.customerCode}</Text>
+            </View>
+          </View>
+          <View style={styles.contactRow}>
+            {item.contactName ? <Text style={styles.contactName}>{item.contactName}</Text> : null}
+            {item.contactName && item.contactPhone ? <Text style={styles.contactDot}>·</Text> : null}
+            {item.contactPhone ? (
+              <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleCall(item.contactPhone); }}>
+                <Text style={styles.contactPhone}>{item.contactPhone}</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+          <View style={styles.cardFooter}>
+            <Text style={styles.typeText}>{typeLabel}</Text>
+            <View style={styles.orderCountBadge}>
+              <Text style={styles.orderCount}>{item.orderCount || 0} 单</Text>
+            </View>
           </View>
         </View>
-        <View style={styles.contactRow}>
-          <Text style={styles.contactName}>{item.contactName}</Text>
-          <Text style={styles.contactDot}>·</Text>
-          <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleCall(item.contactPhone); }}>
-            <Text style={styles.contactPhone}>📞 {item.contactPhone}</Text>
+        {tab === 'PUBLIC' ? (
+          <TouchableOpacity
+            style={styles.claimBtn}
+            onPress={(e) => { e.stopPropagation(); handleClaim(item); }}
+            disabled={actionLoading}
+          >
+            <Text style={styles.claimBtnText}>认领</Text>
           </TouchableOpacity>
-        </View>
-        <View style={styles.cardFooter}>
-          <Text style={styles.typeText}>{TYPE_LABEL[item.customerType] || item.customerType}</Text>
-          <Text style={styles.orderCount}>📦 订单 {item.orderCount || 0}</Text>
-        </View>
-      </View>
-      {tab === 'PUBLIC' ? (
-        <TouchableOpacity
-          style={styles.claimBtn}
-          onPress={(e) => { e.stopPropagation(); handleClaim(item); }}
-          disabled={actionLoading}
-        >
-          <Text style={styles.claimBtnText}>认领</Text>
-        </TouchableOpacity>
-      ) : (
-        <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
-      )}
-    </TouchableOpacity>
-  );
+        ) : (
+          <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+        )}
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -299,19 +325,20 @@ const styles = StyleSheet.create({
 
   // 列表
   listContent: { padding: spacing.md, gap: spacing.md },
-  card: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.sm },
-  avatar: { width: 48, height: 48, borderRadius: radius.full, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: font.xl, fontWeight: '700', color: colors.primary },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: 4 },
+  card: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.sm, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 },
+  avatar: { width: 46, height: 46, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  avatarText: { fontSize: font.lg, fontWeight: '800' },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: 3 },
   customerName: { flex: 1, fontSize: font.md, fontWeight: '600', color: colors.text },
   codeBadge: { backgroundColor: colors.bg, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.sm },
   codeText: { fontSize: font.xs, fontFamily: font.mono, color: colors.textSecondary },
-  contactRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
-  contactName: { fontSize: font.sm, color: colors.text },
+  contactRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 5 },
+  contactName: { fontSize: font.sm, color: colors.textSecondary },
   contactDot: { fontSize: font.sm, color: colors.textTertiary },
-  contactPhone: { fontSize: font.sm, color: colors.primary },
+  contactPhone: { fontSize: font.sm, color: colors.info },
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   typeText: { fontSize: font.xs, color: colors.textSecondary },
+  orderCountBadge: { backgroundColor: colors.primaryLight, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.sm },
   orderCount: { fontSize: font.xs, color: colors.primary, fontWeight: '600' },
   claimBtn: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, backgroundColor: colors.primary, borderRadius: radius.md },
   claimBtnText: { color: '#fff', fontSize: font.sm, fontWeight: '600' },

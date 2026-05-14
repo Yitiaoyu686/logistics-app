@@ -3,7 +3,7 @@ import { View, Text, TextInput, StyleSheet, SafeAreaView, TouchableOpacity, Scro
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, radius, font } from '../../lib/theme';
+import { colors, spacing, radius, font, shadow } from '../../lib/theme';
 import { jobApi } from '../../lib/api';
 import CustomerScreen from '../task/customer';
 
@@ -36,19 +36,19 @@ interface PreviewJob {
 }
 
 const QUERY_ITEMS: MenuItem[] = [
-  { icon: '📋', label: '库存查询', desc: '搜索在库货物', route: '/task/stock' },
-  { icon: '📄', label: '订单查询', desc: '按运单号查订单', route: '/task/order' },
-  { icon: '👥', label: '客户查询', desc: '我的客户列表', route: '/task/customer', roles: ['SALES'] },
-  { icon: '💰', label: '运费试算', desc: '即时报价分享', route: '/task/quote', roles: ['SALES'] },
+  { icon: 'layers-outline', label: '库存查询', desc: '搜索在库货物', route: '/task/stock' },
+  { icon: 'document-text-outline', label: '订单查询', desc: '按运单号查订单', route: '/task/order' },
+  { icon: 'people-outline', label: '客户查询', desc: '我的客户列表', route: '/task/customer', roles: ['SALES'] },
+  { icon: 'calculator-outline', label: '运费试算', desc: '即时报价分享', route: '/task/quote', roles: ['SALES'] },
 ];
 
 const CREATE_ITEMS: MenuItem[] = [
-  { icon: '📝', label: '新建订单', desc: '4 步快速创建', route: '/task/order-create', roles: ['SALES'], tint: colors.primary },
-  { icon: '➕', label: '新增客户', desc: '录入新客户', route: '/task/customer-create', roles: ['SALES'], tint: colors.success },
-  { icon: '📦', label: '新增无单快递', desc: '登记无单收件', route: '/task/no-order-express', roles: ['WAREHOUSE_CN'], tint: colors.warning },
-  { icon: '🔄', label: '新建调拨', desc: '仓间货物调拨', route: '/task/transfer', roles: ['WAREHOUSE_CN'], tint: colors.info },
-  { icon: '↩️', label: '新建退运', desc: '异常货物退回', route: '/task/return-create', roles: ['WAREHOUSE_CN'], tint: colors.danger },
-  { icon: '🚚', label: '新建 DPN', desc: '创建派送运单', route: '/task/dpn-create', roles: ['WAREHOUSE_US'], tint: colors.primary },
+  { icon: 'create-outline', label: '新建订单', desc: '4 步快速创建', route: '/task/order-create', roles: ['SALES'], tint: colors.primary },
+  { icon: 'person-add-outline', label: '新增客户', desc: '录入新客户', route: '/task/customer-create', roles: ['SALES'], tint: colors.success },
+  { icon: 'cube-outline', label: '新增无单快递', desc: '登记无单收件', route: '/task/no-order-express', roles: ['WAREHOUSE_CN'], tint: colors.warning },
+  { icon: 'swap-horizontal-outline', label: '新建调拨', desc: '仓间货物调拨', route: '/task/transfer', roles: ['WAREHOUSE_CN'], tint: colors.info },
+  { icon: 'return-down-back-outline', label: '新建退运', desc: '异常货物退回', route: '/task/return-create', roles: ['WAREHOUSE_CN'], tint: colors.danger },
+  { icon: 'car-outline', label: '新建 DPN', desc: '创建派送运单', route: '/task/dpn-create', roles: ['WAREHOUSE_US'], tint: colors.primary },
 ];
 
 export default function SearchScreen() {
@@ -83,7 +83,7 @@ export default function SearchScreen() {
           const isAir = j.business_line === 'AIR';
           const daysToEtd = j.etd ? Math.ceil((new Date(j.etd).getTime() - Date.now()) / 86400000) : null;
           items.push({
-            id: j.id, icon: isAir ? '✈️' : '🚢',
+            id: j.id, icon: isAir ? 'airplane-outline' : 'boat-outline',
             route: `${j.origin_port || '-'} → ${j.dest_port || '-'}`,
             status: daysToEtd !== null ? `ETD ${daysToEtd}天后` : '待发运',
             statusColor: (daysToEtd || 99) <= 3 ? colors.danger : colors.info,
@@ -101,7 +101,7 @@ export default function SearchScreen() {
           const isAir = j.business_line === 'AIR';
           const daysToEta = j.eta ? Math.ceil((new Date(j.eta).getTime() - Date.now()) / 86400000) : null;
           items.push({
-            id: j.id, icon: isAir ? '✈️' : '🚢',
+            id: j.id, icon: isAir ? 'airplane-outline' : 'boat-outline',
             route: `${j.origin_port || '-'} → ${j.dest_port || '-'}`,
             status: daysToEta !== null ? `ETA ${daysToEta}天后` : '在途',
             statusColor: (daysToEta || 99) <= 5 ? colors.danger : colors.info,
@@ -123,22 +123,28 @@ export default function SearchScreen() {
 
   const visibleQuery = QUERY_ITEMS.filter((m) => !m.roles || m.roles.includes(role));
   const visibleCreate = CREATE_ITEMS.filter((m) => !m.roles || m.roles.includes(role));
-  const previewLabel = role === 'WAREHOUSE_CN' ? '📅 发运计划' : '🚢 到港预告';
+  const previewLabel = role === 'WAREHOUSE_CN' ? '发运计划' : '到港预告';
+  const previewIcon = role === 'WAREHOUSE_CN' ? 'calendar-outline' : 'boat-outline';
 
   const renderGrid = (items: MenuItem[], isCreate = false) => (
     <View style={styles.grid}>
-      {items.map((item) => (
-        <TouchableOpacity
-          key={item.label}
-          style={[styles.menuCard, isCreate && item.tint ? { borderTopWidth: 3, borderTopColor: item.tint } : null]}
-          activeOpacity={0.7}
-          onPress={() => router.push({ pathname: item.route as any, params: item.params || {} })}
-        >
-          <Text style={styles.menuIcon}>{item.icon}</Text>
-          <Text style={styles.menuLabel}>{item.label}</Text>
-          <Text style={styles.menuDesc}>{item.desc}</Text>
-        </TouchableOpacity>
-      ))}
+      {items.map((item) => {
+        const tintColor = (isCreate && item.tint) ? item.tint : colors.primary;
+        return (
+          <TouchableOpacity
+            key={item.label}
+            style={styles.menuCard}
+            activeOpacity={0.7}
+            onPress={() => router.push({ pathname: item.route as any, params: item.params || {} })}
+          >
+            <View style={[styles.menuIconWrap, { backgroundColor: tintColor + '12' }]}>
+              <Ionicons name={item.icon as any} size={22} color={tintColor} />
+            </View>
+            <Text style={styles.menuLabel}>{item.label}</Text>
+            <Text style={styles.menuDesc}>{item.desc}</Text>
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 
@@ -167,7 +173,10 @@ export default function SearchScreen() {
         {previewJobs.length > 0 && (
           <View style={styles.previewSection}>
             <Pressable style={styles.previewHeaderRow} onPress={() => setPreviewExpanded(!previewExpanded)}>
-              <Text style={styles.previewTitle}>{previewLabel} ({previewJobs.length})</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name={previewIcon as any} size={18} color={colors.primary} />
+                <Text style={styles.previewTitle}>{previewLabel} ({previewJobs.length})</Text>
+              </View>
               <Ionicons name={previewExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSecondary} />
             </Pressable>
             {previewExpanded && (
@@ -176,7 +185,7 @@ export default function SearchScreen() {
                   <View key={job.id} style={styles.previewCard}>
                     <View style={styles.previewTop}>
                       <View style={styles.previewRouteWrap}>
-                        <Text style={styles.previewRouteIcon}>{job.icon}</Text>
+                        <Ionicons name={job.icon as any} size={20} color={colors.primary} />
                         <Text style={styles.previewRouteText}>{job.route}</Text>
                         {job.isExpress && (
                           <View style={styles.expressBadge}>
@@ -253,8 +262,7 @@ const styles = StyleSheet.create({
   previewCard: { width: CARD_WIDTH, backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.md, borderWidth: 1, borderColor: colors.borderLight },
   previewTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
   previewRouteWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 },
-  previewRouteIcon: { fontSize: 18 },
-  previewRouteText: { fontSize: font.xl, fontWeight: '800', color: colors.text, letterSpacing: 0.5 },
+  previewRouteText: { fontSize: font.xl, fontWeight: '700', color: colors.text, letterSpacing: 0.3 },
   expressBadge: { backgroundColor: colors.warningLight, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.sm },
   expressText: { fontSize: font.xs, color: colors.warning, fontWeight: '700' },
   previewStatusBadge: { paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.sm },
@@ -275,8 +283,8 @@ const styles = StyleSheet.create({
   sectionDot: { width: 4, height: 16, borderRadius: 2, backgroundColor: colors.primary },
   sectionTitle: { fontSize: font.md, fontWeight: '700', color: colors.text },
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.md, gap: spacing.md },
-  menuCard: { width: '47%', backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 2, elevation: 1 },
-  menuIcon: { fontSize: 28, marginBottom: spacing.sm },
+  menuCard: { width: '47%', backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, alignItems: 'center', ...shadow.sm },
+  menuIconWrap: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
   menuLabel: { fontSize: font.md, fontWeight: '600', color: colors.text },
   menuDesc: { fontSize: font.xs, color: colors.textTertiary, marginTop: 4 },
 });

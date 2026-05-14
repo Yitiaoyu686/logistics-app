@@ -95,7 +95,7 @@ export function UnmatchedMatchDialog({ visible, target, onClose, onSuccess }: Un
       <View style={styles.mask}>
         <View style={styles.sheet}>
           <View style={styles.header}>
-            <Text style={styles.title}>🔗 匹配订单</Text>
+            <Text style={styles.title}>匹配订单</Text>
             <TouchableOpacity onPress={onClose}>
               <Ionicons name="close" size={24} color={colors.textSecondary} />
             </TouchableOpacity>
@@ -197,7 +197,7 @@ export function UnmatchedMatchDialog({ visible, target, onClose, onSuccess }: Un
               )}
 
               <Text style={styles.tipText}>
-                💡 点击订单即匹配，自动创建子运单
+                点击订单即匹配，自动创建子运单
               </Text>
             </>
           )}

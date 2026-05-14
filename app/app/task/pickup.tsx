@@ -124,7 +124,7 @@ export default function PickupScreen() {
             <>
               {/* 通知模式 */}
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>📱 发送自提通知</Text>
+                <Text style={styles.sectionTitle}>发送自提通知</Text>
                 <Text style={styles.hint}>
                   短信将包含以下信息：
                 </Text>
@@ -158,7 +158,7 @@ export default function PickupScreen() {
             <>
               {/* 核销模式 */}
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>🔢 验证提货码</Text>
+                <Text style={styles.sectionTitle}>验证提货码</Text>
                 <View style={styles.codeInputRow}>
                   <TextInput
                     style={styles.codeInput}
@@ -179,7 +179,7 @@ export default function PickupScreen() {
 
               {/* COD 收款 */}
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>💰 到付收款（如有）</Text>
+                <Text style={styles.sectionTitle}>到付收款（如有）</Text>
                 <Text style={styles.formLabel}>收款金额</Text>
                 <View style={styles.amountRow}>
                   <TextInput
@@ -196,8 +196,8 @@ export default function PickupScreen() {
                 <Text style={[styles.formLabel, { marginTop: spacing.md }]}>收款方式</Text>
                 <View style={styles.methodRow}>
                   {[
-                    { v: 'CASH' as const, label: '💵 现金' },
-                    { v: 'TRANSFER' as const, label: '💳 转账' },
+                    { v: 'CASH' as const, label: '现金' },
+                    { v: 'TRANSFER' as const, label: '转账' },
                   ].map((m) => (
                     <TouchableOpacity
                       key={m.v}

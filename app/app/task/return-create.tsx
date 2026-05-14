@@ -148,7 +148,7 @@ export default function ReturnCreateScreen() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           {/* 1. 查库存 */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>🔍 选择要退运的库存</Text>
+            <Text style={styles.sectionTitle}>选择要退运的库存</Text>
             <View style={styles.searchRow}>
               <TextInput
                 style={styles.searchInput}
@@ -187,7 +187,7 @@ export default function ReturnCreateScreen() {
 
           {/* 2. 退运原因 */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>❓ 退运原因</Text>
+            <Text style={styles.sectionTitle}>退运原因</Text>
             <View style={styles.chipWrap}>
               {REASON_OPTIONS.map((o) => (
                 <TouchableOpacity
@@ -213,7 +213,7 @@ export default function ReturnCreateScreen() {
 
           {/* 3. 货物处置 */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📦 货物处置方式</Text>
+            <Text style={styles.sectionTitle}>货物处置方式</Text>
             {DISPOSAL_OPTIONS.map((o) => (
               <TouchableOpacity
                 key={o.value}
@@ -238,7 +238,7 @@ export default function ReturnCreateScreen() {
           {/* 4. 收件信息（仅退回客户） */}
           {disposal === 'RETURN_TO_CUSTOMER' && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>📮 收件信息</Text>
+              <Text style={styles.sectionTitle}>收件信息</Text>
               <Field label="收件人姓名 *" value={recipientName} onChange={setRecipientName} placeholder="如：张先生" />
               <Field label="联系电话 *" value={recipientPhone} onChange={setRecipientPhone} placeholder="请输入联系电话" />
               <Field label="详细地址 *" value={recipientAddress} onChange={setRecipientAddress} placeholder="省/市/区/街道" />

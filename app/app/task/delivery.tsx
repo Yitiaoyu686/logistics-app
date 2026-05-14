@@ -12,11 +12,11 @@ import { safeBack } from '../../lib/nav';
 type Mode = 'sign' | 'fail';
 
 const FAIL_REASONS = [
-  { value: 'NO_RECIPIENT', label: '无人签收', icon: '🚪' },
-  { value: 'WRONG_ADDRESS', label: '地址错误', icon: '📍' },
-  { value: 'REFUSED', label: '客户拒收', icon: '🙅' },
-  { value: 'DAMAGED', label: '货物破损', icon: '📦' },
-  { value: 'OTHER', label: '其他', icon: '❓' },
+  { value: 'NO_RECIPIENT', label: '无人签收', icon: 'person-outline' },
+  { value: 'WRONG_ADDRESS', label: '地址错误', icon: 'location-outline' },
+  { value: 'REFUSED', label: '客户拒收', icon: 'close-circle-outline' },
+  { value: 'DAMAGED', label: '货物破损', icon: 'cube-outline' },
+  { value: 'OTHER', label: '其他', icon: 'help-circle-outline' },
 ];
 
 export default function DeliveryScreen() {
@@ -120,13 +120,19 @@ export default function DeliveryScreen() {
               style={[styles.modeBtn, mode === 'sign' && styles.modeBtnSign]}
               onPress={() => setMode('sign')}
             >
-              <Text style={[styles.modeText, mode === 'sign' && styles.modeTextActive]}>✅ 配送完成</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Ionicons name="checkmark-circle-outline" size={16} color={mode === 'sign' ? colors.success : colors.textSecondary} />
+                <Text style={[styles.modeText, mode === 'sign' && styles.modeTextActive]}>配送完成</Text>
+              </View>
             </Pressable>
             <Pressable
               style={[styles.modeBtn, mode === 'fail' && styles.modeBtnFail]}
               onPress={() => setMode('fail')}
             >
-              <Text style={[styles.modeText, mode === 'fail' && styles.modeTextActiveFail]}>❌ 配送失败</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Ionicons name="close-circle-outline" size={16} color={mode === 'fail' ? colors.danger : colors.textSecondary} />
+                <Text style={[styles.modeText, mode === 'fail' && styles.modeTextActiveFail]}>配送失败</Text>
+              </View>
             </Pressable>
           </View>
 
@@ -147,7 +153,7 @@ export default function DeliveryScreen() {
 
               {/* 签收照片 */}
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>📷 签收照片 <Text style={styles.required}>*</Text></Text>
+                <Text style={styles.sectionTitle}>签收照片 <Text style={styles.required}>*</Text></Text>
                 <View style={styles.photoRow}>
                   <TouchableOpacity
                     style={[styles.photoSlot, signPhoto && styles.photoSlotFilled]}
@@ -171,7 +177,7 @@ export default function DeliveryScreen() {
 
               {/* COD */}
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>💰 到付收款（如有）</Text>
+                <Text style={styles.sectionTitle}>到付收款（如有）</Text>
                 <Text style={styles.formLabel}>收款金额</Text>
                 <View style={styles.amountRow}>
                   <TextInput
@@ -188,8 +194,8 @@ export default function DeliveryScreen() {
                 <Text style={[styles.formLabel, { marginTop: spacing.md }]}>收款方式</Text>
                 <View style={styles.methodRow}>
                   {[
-                    { v: 'CASH' as const, label: '💵 现金' },
-                    { v: 'TRANSFER' as const, label: '💳 转账' },
+                    { v: 'CASH' as const, label: '现金' },
+                    { v: 'TRANSFER' as const, label: '转账' },
                   ].map((m) => (
                     <Pressable
                       key={m.v}
@@ -229,7 +235,10 @@ export default function DeliveryScreen() {
                     style={[styles.reasonBtn, failReason === r.value && styles.reasonBtnActive]}
                     onPress={() => setFailReason(r.value)}
                   >
-                    <Text style={styles.reasonText}>{r.icon} {r.label}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Ionicons name={r.icon as any} size={16} color={failReason === r.value ? colors.danger : colors.textSecondary} />
+                      <Text style={styles.reasonText}>{r.label}</Text>
+                    </View>
                     {failReason === r.value && <Ionicons name="checkmark" size={20} color={colors.danger} />}
                   </Pressable>
                 ))}
@@ -237,7 +246,7 @@ export default function DeliveryScreen() {
 
               {/* 现场照片 */}
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>📷 现场照片</Text>
+                <Text style={styles.sectionTitle}>现场照片</Text>
                 <View style={styles.photoRow}>
                   <TouchableOpacity
                     style={[styles.photoSlot, failPhoto && styles.photoSlotFilled]}

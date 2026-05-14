@@ -21,15 +21,15 @@ interface Country {
 }
 
 const TYPE_OPTIONS: { value: CustomerType; label: string }[] = [
-  { value: 'COMPANY_CN', label: '🏭 国内企业' },
-  { value: 'COMPANY_OVERSEAS', label: '🏢 海外企业' },
-  { value: 'INDIVIDUAL', label: '👤 个人客户' },
+  { value: 'COMPANY_CN', label: '国内企业' },
+  { value: 'COMPANY_OVERSEAS', label: '海外企业' },
+  { value: 'INDIVIDUAL', label: '个人客户' },
 ];
 
 const TRANSPORT_OPTIONS: { value: Transport; label: string }[] = [
-  { value: 'SEA', label: '🚢 海运' },
-  { value: 'AIR', label: '✈️ 空运' },
-  { value: 'BOTH', label: '🚢✈️ 海空运' },
+  { value: 'SEA', label: '海运' },
+  { value: 'AIR', label: '空运' },
+  { value: 'BOTH', label: '海空运' },
 ];
 
 const INDUSTRY_OPTIONS = ['电子产品', '服装鞋帽', '日用百货', '机械配件', '美妆个护', '家居家具', '食品饮料', '其他'];
@@ -104,7 +104,7 @@ export default function CustomerCreateScreen() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           {/* 客户名称 */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📋 基础信息</Text>
+            <Text style={styles.sectionTitle}>基础信息</Text>
 
             <FormField label="客户名称 *" value={customerName} onChangeText={setCustomerName} placeholder="请输入客户名称" />
 
@@ -166,7 +166,7 @@ export default function CustomerCreateScreen() {
 
           {/* 联系人 */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>👤 联系人</Text>
+            <Text style={styles.sectionTitle}>联系人</Text>
             <FormField label="联系人 *" value={contactName} onChangeText={setContactName} placeholder="联系人姓名" />
             <FormField label="电话 *" value={contactPhone} onChangeText={setContactPhone} placeholder="联系电话" keyboardType="phone-pad" />
             <FormField label="邮箱" value={contactEmail} onChangeText={setContactEmail} placeholder="邮箱（可选）" keyboardType="email-address" />
@@ -174,7 +174,7 @@ export default function CustomerCreateScreen() {
 
           {/* 物流偏好 */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>🚢 物流偏好</Text>
+            <Text style={styles.sectionTitle}>物流偏好</Text>
             <Text style={styles.formLabel}>运输方式偏好</Text>
             <View style={styles.optionRow}>
               {TRANSPORT_OPTIONS.map((opt) => (
@@ -193,7 +193,7 @@ export default function CustomerCreateScreen() {
 
           {/* 备注 */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📝 备注</Text>
+            <Text style={styles.sectionTitle}>备注</Text>
             <TextInput
               style={styles.textarea}
               value={remark}
