@@ -134,6 +134,14 @@ export const warehouseApi = {
   matchUnmatched: (id: string, data: any) => api.post(`/v2/wms/unmatched-packages/${id}/match`, data),
   createInbound: (data: any) => api.post('/v2/wms/inbounds', data),
   submitDestInbound: (jobId: string, data: any) => api.post(`/v2/wms/dest-inbound/${jobId}/submit`, data),
+  getInbound: (params?: Record<string, string>) => {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    return api.get(`/warehouse/inbound${qs}`);
+  },
+  getUnits: (params?: Record<string, string>) => {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    return api.get(`/warehouse/units${qs}`);
+  },
   getReturns: () => api.get('/warehouse/returns'),
   applyReturn: (stockId: string, data: any) => api.post(`/warehouse/stock/${stockId}/return`, data),
   // 装箱:把运单绑到集装号

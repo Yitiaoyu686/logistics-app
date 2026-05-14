@@ -15,8 +15,7 @@ interface MenuItem {
   desc: string;
   route: string;
   params?: Record<string, string>;
-  roles?: string[];
-  tint?: string;
+  tint: string;
 }
 
 interface PreviewJob {
@@ -35,20 +34,23 @@ interface PreviewJob {
   isExpress: boolean;
 }
 
-const QUERY_ITEMS: MenuItem[] = [
-  { icon: 'layers-outline', label: '库存查询', desc: '搜索在库货物', route: '/task/stock' },
-  { icon: 'document-text-outline', label: '订单查询', desc: '按运单号查订单', route: '/task/order' },
-  { icon: 'people-outline', label: '客户查询', desc: '我的客户列表', route: '/task/customer', roles: ['SALES'] },
-  { icon: 'calculator-outline', label: '运费试算', desc: '即时报价分享', route: '/task/quote', roles: ['SALES'] },
+const WAREHOUSE_CN_MODULES: MenuItem[] = [
+  { icon: 'log-in-outline', label: '入库管理', desc: '快递/调拨/退回入库', route: '/task/inbound-list', tint: colors.primary },
+  { icon: 'layers-outline', label: '库存管理', desc: '在库货物查询', route: '/task/stock', tint: colors.info },
+  { icon: 'cube-outline', label: '装箱发货', desc: '集装箱/板装管理', route: '/task/job-list', tint: colors.success },
+  { icon: 'help-circle-outline', label: '无单快递', desc: '无单收件处理', route: '/task/no-order-express', tint: colors.warning },
+  { icon: 'swap-horizontal-outline', label: '调拨管理', desc: '仓间货物调拨', route: '/task/transfer', tint: '#8B5CF6' },
+  { icon: 'return-down-back-outline', label: '退运处理', desc: '异常退运管理', route: '/task/return-process', tint: colors.danger },
+  { icon: 'document-text-outline', label: '订单查询', desc: '按运单号查订单', route: '/task/order', tint: colors.textSecondary },
 ];
 
-const CREATE_ITEMS: MenuItem[] = [
-  { icon: 'create-outline', label: '新建订单', desc: '4 步快速创建', route: '/task/order-create', roles: ['SALES'], tint: colors.primary },
-  { icon: 'person-add-outline', label: '新增客户', desc: '录入新客户', route: '/task/customer-create', roles: ['SALES'], tint: colors.success },
-  { icon: 'cube-outline', label: '新增无单快递', desc: '登记无单收件', route: '/task/no-order-express', roles: ['WAREHOUSE_CN'], tint: colors.warning },
-  { icon: 'swap-horizontal-outline', label: '新建调拨', desc: '仓间货物调拨', route: '/task/transfer-create', roles: ['WAREHOUSE_CN'], tint: colors.info },
-  { icon: 'return-down-back-outline', label: '新建退运', desc: '异常货物退回', route: '/task/return-create', roles: ['WAREHOUSE_CN'], tint: colors.danger },
-  { icon: 'car-outline', label: '新建 DPN', desc: '创建派送运单', route: '/task/dpn-create', roles: ['WAREHOUSE_US'], tint: colors.primary },
+const WAREHOUSE_US_MODULES: MenuItem[] = [
+  { icon: 'log-in-outline', label: '到仓入库', desc: 'JOB/DPN 到仓验收', route: '/task/dest-inbound-list', tint: colors.primary },
+  { icon: 'car-outline', label: 'DPN 管理', desc: '派送计划管理', route: '/task/dpn-list', tint: colors.info },
+  { icon: 'layers-outline', label: '库存查询', desc: '到达国库存', route: '/task/stock', params: { destination: '1' }, tint: colors.success },
+  { icon: 'navigate-outline', label: '配送管理', desc: '末端配送任务', route: '/task/delivery-list', tint: colors.warning },
+  { icon: 'hand-left-outline', label: '自提管理', desc: '客户自提管理', route: '/task/pickup-list', tint: '#8B5CF6' },
+  { icon: 'document-text-outline', label: '订单查询', desc: '按运单号查订单', route: '/task/order', tint: colors.textSecondary },
 ];
 
 export default function SearchScreen() {
@@ -121,32 +123,9 @@ export default function SearchScreen() {
   if (!loaded) return <SafeAreaView style={styles.safe} />;
   if (role === 'SALES') return <CustomerScreen embedded />;
 
-  const visibleQuery = QUERY_ITEMS.filter((m) => !m.roles || m.roles.includes(role));
-  const visibleCreate = CREATE_ITEMS.filter((m) => !m.roles || m.roles.includes(role));
+  const modules = role === 'WAREHOUSE_CN' ? WAREHOUSE_CN_MODULES : WAREHOUSE_US_MODULES;
   const previewLabel = role === 'WAREHOUSE_CN' ? '发运计划' : '到港预告';
   const previewIcon = role === 'WAREHOUSE_CN' ? 'calendar-outline' : 'boat-outline';
-
-  const renderGrid = (items: MenuItem[], isCreate = false) => (
-    <View style={styles.grid}>
-      {items.map((item) => {
-        const tintColor = (isCreate && item.tint) ? item.tint : colors.primary;
-        return (
-          <TouchableOpacity
-            key={item.label}
-            style={styles.menuCard}
-            activeOpacity={0.7}
-            onPress={() => router.push({ pathname: item.route as any, params: item.params || {} })}
-          >
-            <View style={[styles.menuIconWrap, { backgroundColor: tintColor + '12' }]}>
-              <Ionicons name={item.icon as any} size={22} color={tintColor} />
-            </View>
-            <Text style={styles.menuLabel}>{item.label}</Text>
-            <Text style={styles.menuDesc}>{item.desc}</Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
-  );
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -223,24 +202,29 @@ export default function SearchScreen() {
           </View>
         )}
 
-        {visibleCreate.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionDot} />
-              <Text style={styles.sectionTitle}>新建业务</Text>
-            </View>
-            {renderGrid(visibleCreate, true)}
+        {/* 业务模块 */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.sectionDot} />
+            <Text style={styles.sectionTitle}>业务模块</Text>
           </View>
-        )}
-        {visibleQuery.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <View style={[styles.sectionDot, { backgroundColor: colors.textSecondary }]} />
-              <Text style={styles.sectionTitle}>查询</Text>
-            </View>
-            {renderGrid(visibleQuery)}
+          <View style={styles.grid}>
+            {modules.map((item) => (
+              <TouchableOpacity
+                key={item.label}
+                style={styles.menuCard}
+                activeOpacity={0.7}
+                onPress={() => router.push({ pathname: item.route as any, params: item.params || {} })}
+              >
+                <View style={[styles.menuIconWrap, { backgroundColor: item.tint + '12' }]}>
+                  <Ionicons name={item.icon as any} size={22} color={item.tint} />
+                </View>
+                <Text style={styles.menuLabel}>{item.label}</Text>
+                <Text style={styles.menuDesc}>{item.desc}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
-        )}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
