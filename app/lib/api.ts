@@ -2,10 +2,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Platform } from 'react-native';
 
-// Web uses localhost, native device uses computer's local IP
+const LOCAL_URL = 'http://localhost:3001/api';
+const LAN_URL = 'http://192.168.3.127:3001/api';
+const TUNNEL_URL = 'https://unprovincial-unlabored-radia.ngrok-free.dev/api';
+
 const BASE_URL = Platform.OS === 'web'
-  ? 'http://localhost:3001/api'
-  : 'http://192.168.3.127:3001/api';
+  ? (typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+      ? TUNNEL_URL
+      : LOCAL_URL)
+  : LAN_URL;
 
 async function getToken(): Promise<string | null> {
   return AsyncStorage.getItem('token');
@@ -13,7 +18,10 @@ async function getToken(): Promise<string | null> {
 
 async function request(method: string, path: string, body?: any): Promise<any> {
   const token = await getToken();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'ngrok-skip-browser-warning': '1',
+  };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const res = await fetch(`${BASE_URL}${path}`, {

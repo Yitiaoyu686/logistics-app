@@ -156,7 +156,7 @@ export default function TasksScreen() {
           items.push({
             id: `orphan-${u.id}`, type: 'orphan', icon: '❓',
             title: '无单快递', subtitle: `${u.tracking_no} · ${u.express_company}`,
-            detail: `发件人: ${u.sender_name || '-'} ${u.sender_phone || ''}\n${u.pieces}件 · ${u.gross_weight_kg}kg`,
+            detail: `${u.sender_name || '-'} · ${u.pieces}件 · ${u.gross_weight_kg}kg`,
             status: '待匹配', statusColor: colors.warning,
             time: formatTime(u.created_at),
             actions: [
@@ -232,7 +232,7 @@ export default function TasksScreen() {
           items.push({
             id: `inbound-${j.id}`, type: 'inbound', icon: '📦',
             title: '任务入库', subtitle: `${j.job_no} · ${j.business_line === 'SEA' ? '海运' : '空运'}`,
-            detail: `${j.carrier_name || ''} · ${j.origin_port}→${j.dest_port}\n集装箱 ${j.container_no || '-'} · ${j.total_pieces}件/${j.total_weight_kg}kg`,
+            detail: `${j.origin_port}→${j.dest_port} · ${j.total_pieces}件/${j.total_weight_kg}kg`,
             status: '待入库', statusColor: colors.warning,
             actions: [
               { label: '入库核对', color: colors.primary, route: '/task/dest-inbound', params: { jobNo: j.job_no, jobId: j.id } },
@@ -252,7 +252,7 @@ export default function TasksScreen() {
             id: `dpn-${d.id}`, type: 'dispatch', icon: '📄',
             title: `DPN${statusMap[d.dpn_status] || d.dpn_status}`,
             subtitle: d.dpn_no,
-            detail: `${d.from_site || ''} → ${d.to_site || ''}\n运单 ${d.total_orders} · 件数 ${d.total_pieces}`,
+            detail: `${d.from_site || ''} → ${d.to_site || ''} · ${d.total_orders}单/${d.total_pieces}件`,
             status: statusMap[d.dpn_status] || d.dpn_status, statusColor: colors.info,
             actions: [
               ...(actionMap[d.dpn_status] ? [{ label: actionMap[d.dpn_status], color: colors.primary, route: '/task/dpn', params: dpnParams }] : []),
@@ -268,7 +268,7 @@ export default function TasksScreen() {
           items.push({
             id: `delivery-${dt.id}`, type: 'delivery', icon: '🚚',
             title: '待配送', subtitle: `${dt.task_no}`,
-            detail: `${dt.dpn_no || ''} · 送货上门\n${dt.recipient_name || ''} · ${dt.recipient_phone || ''}`,
+            detail: `${dt.recipient_name || ''} · ${dt.recipient_phone || ''}`,
             status: dt.task_status === 'IN_TRANSIT' ? '执行中' : '待接单', statusColor: dt.task_status === 'FAILED' ? colors.danger : colors.info,
             actions: [
               { label: '配送完成', color: colors.success, route: '/task/delivery', params: { taskId: dt.id, taskNo: dt.task_no, dpnNo: dt.dpn_no, recipientName: dt.recipient_name, recipientPhone: dt.recipient_phone, mode: 'sign' } },
@@ -483,25 +483,6 @@ export default function TasksScreen() {
             <View style={styles.headerAvatar}>
               <Text style={styles.headerAvatarText}>{userName ? userName[0] : '?'}</Text>
             </View>
-          </View>
-        </View>
-        {/* 今日任务数量摘要 */}
-        <View style={styles.headerStats}>
-          <View style={styles.headerStatItem}>
-            <Text style={styles.headerStatNum}>{actionTasks.length}</Text>
-            <Text style={styles.headerStatLabel}>待办任务</Text>
-          </View>
-          <View style={styles.headerStatDivider} />
-          <View style={styles.headerStatItem}>
-            <Text style={styles.headerStatNum}>{previewTasks.length}</Text>
-            <Text style={styles.headerStatLabel}>{role === 'WAREHOUSE_US' ? '到港预告' : role === 'SALES' ? '运输批次' : '发运计划'}</Text>
-          </View>
-          <View style={styles.headerStatDivider} />
-          <View style={styles.headerStatItem}>
-            <Text style={[styles.headerStatNum, { color: '#FF6B35' }]}>
-              {actionTasks.filter(t => t.statusColor === colors.danger || t.statusColor === colors.warning).length}
-            </Text>
-            <Text style={styles.headerStatLabel}>需关注</Text>
           </View>
         </View>
       </View>
@@ -764,17 +745,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   headerAvatarText: { fontSize: font.md, fontWeight: '700', color: '#fff' },
-  // 今日统计
-  headerStats: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: radius.lg,
-    paddingVertical: spacing.md,
-  },
-  headerStatItem: { flex: 1, alignItems: 'center' },
-  headerStatNum: { fontSize: font.xl, fontWeight: '800', color: '#fff' },
-  headerStatLabel: { fontSize: 10, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
-  headerStatDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.15)', marginVertical: 4 },
 
   // ── Preview section
   previewSection: { backgroundColor: colors.card, paddingTop: spacing.md, paddingBottom: spacing.md, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
@@ -807,13 +777,13 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: font.xs, color: colors.textSecondary, marginTop: 2 },
 
   // ── Filter Tabs
-  tabBar: { backgroundColor: colors.card, maxHeight: 44, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
+  tabBar: { backgroundColor: colors.card, maxHeight: 48, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
   tabBarContent: { paddingHorizontal: spacing.lg, alignItems: 'center' },
   tab: { paddingHorizontal: spacing.md, paddingVertical: spacing.md, marginRight: spacing.xs },
   tabActive: { borderBottomWidth: 2, borderBottomColor: colors.primary },
-  tabText: { fontSize: font.sm, color: colors.textSecondary },
+  tabText: { fontSize: font.md, color: colors.textSecondary },
   tabTextActive: { color: colors.primary, fontWeight: '600' },
-  tabBadge: { fontSize: font.xs, color: colors.primary },
+  tabBadge: { fontSize: font.sm, color: colors.primary },
 
   // ── Task List
   list: { flex: 1 },
@@ -823,8 +793,8 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.lg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
     marginBottom: spacing.sm,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -835,13 +805,13 @@ const styles = StyleSheet.create({
   cardClickable: { opacity: 0.95 },
   cardBody: { flexDirection: 'row', alignItems: 'center' },
   cardInfo: { flex: 1, marginRight: spacing.md },
-  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
-  cardIconWrap: { width: 24, height: 24, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
-  cardIcon: { fontSize: 13 },
-  cardTitle: { fontSize: font.sm, fontWeight: '700', color: colors.text },
-  cardStatus: { fontSize: 10, fontWeight: '600', paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.full, overflow: 'hidden' },
-  cardSubtitle: { fontSize: font.xs, color: colors.text, fontWeight: '500', fontFamily: font.mono, marginBottom: 2 },
-  cardDetail: { fontSize: font.xs, color: colors.textSecondary, lineHeight: 17 },
+  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  cardIconWrap: { width: 28, height: 28, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  cardIcon: { fontSize: 15 },
+  cardTitle: { fontSize: font.md, fontWeight: '700', color: colors.text },
+  cardStatus: { fontSize: font.xs, fontWeight: '600', paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.full, overflow: 'hidden' },
+  cardSubtitle: { fontSize: font.sm, color: colors.text, fontWeight: '500', fontFamily: font.mono, marginBottom: 3 },
+  cardDetail: { fontSize: font.sm, color: colors.textSecondary, lineHeight: 20 },
   // 右侧主操作按钮
   cardActionBtn: {
     paddingHorizontal: spacing.md,
@@ -851,7 +821,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cardActionBtnText: { fontSize: font.xs, fontWeight: '700' },
+  cardActionBtnText: { fontSize: font.sm, fontWeight: '700' },
   // 次要操作行
   cardSecondaryRow: {
     flexDirection: 'row',
@@ -861,7 +831,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 0.5,
     borderTopColor: colors.borderLight,
   },
-  cardSecondaryText: { fontSize: font.xs, fontWeight: '500' },
+  cardSecondaryText: { fontSize: font.sm, fontWeight: '500' },
 
   // ── Progress Bar
   progressRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: spacing.sm },
