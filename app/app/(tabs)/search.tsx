@@ -46,7 +46,7 @@ const CREATE_ITEMS: MenuItem[] = [
   { icon: 'create-outline', label: '新建订单', desc: '4 步快速创建', route: '/task/order-create', roles: ['SALES'], tint: colors.primary },
   { icon: 'person-add-outline', label: '新增客户', desc: '录入新客户', route: '/task/customer-create', roles: ['SALES'], tint: colors.success },
   { icon: 'cube-outline', label: '新增无单快递', desc: '登记无单收件', route: '/task/no-order-express', roles: ['WAREHOUSE_CN'], tint: colors.warning },
-  { icon: 'swap-horizontal-outline', label: '新建调拨', desc: '仓间货物调拨', route: '/task/transfer', roles: ['WAREHOUSE_CN'], tint: colors.info },
+  { icon: 'swap-horizontal-outline', label: '新建调拨', desc: '仓间货物调拨', route: '/task/transfer-create', roles: ['WAREHOUSE_CN'], tint: colors.info },
   { icon: 'return-down-back-outline', label: '新建退运', desc: '异常货物退回', route: '/task/return-create', roles: ['WAREHOUSE_CN'], tint: colors.danger },
   { icon: 'car-outline', label: '新建 DPN', desc: '创建派送运单', route: '/task/dpn-create', roles: ['WAREHOUSE_US'], tint: colors.primary },
 ];
