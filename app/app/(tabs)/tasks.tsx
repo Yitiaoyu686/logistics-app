@@ -391,6 +391,7 @@ async function loadWarehouseCnTasks(pending: TaskItem[], completed: TaskItem[]) 
       status: '已完成', statusColor: colors.success,
       time: fmtTime(o.updated_at || o.created_at),
       actions: [], borderColor: colors.taskInbound,
+      cardRoute: '/task/order-detail', cardParams: { id: o.id },
     });
   }
   for (const j of (completedJobsRes.data || [])) {
@@ -401,6 +402,7 @@ async function loadWarehouseCnTasks(pending: TaskItem[], completed: TaskItem[]) 
       status: '已完成', statusColor: colors.success,
       time: fmtTime(j.updated_at || j.created_at),
       actions: [], borderColor: colors.taskPacking,
+      cardRoute: '/task/packing', cardParams: { jobId: j.id, mode: 'view' },
     });
   }
   for (const t of (transfersRes.data || []).filter((t: any) => t.transfer_status === 'RECEIVED')) {
@@ -411,6 +413,7 @@ async function loadWarehouseCnTasks(pending: TaskItem[], completed: TaskItem[]) 
       status: '已完成', statusColor: colors.success,
       time: fmtTime(t.updated_at || t.created_at),
       actions: [], borderColor: colors.taskTransfer,
+      cardRoute: '/task/transfer-inbound', cardParams: { id: t.id },
     });
   }
   for (const u of (unmatchedRes.data || []).filter((u: any) => u.status === 'MATCHED')) {
@@ -506,6 +509,7 @@ async function loadWarehouseUsTasks(pending: TaskItem[], completed: TaskItem[]) 
       status: '已完成', statusColor: colors.success,
       time: fmtTime(j.updated_at || j.created_at),
       actions: [], borderColor: colors.taskInbound,
+      cardRoute: '/task/dest-inbound', cardParams: { jobNo: j.job_no, jobId: j.id },
     });
   }
   for (const d of (dpnsRes.data || []).filter((d: any) => ['SIGNED', 'COMPLETED'].includes(d.dpn_status))) {
@@ -516,6 +520,7 @@ async function loadWarehouseUsTasks(pending: TaskItem[], completed: TaskItem[]) 
       status: '已完成', statusColor: colors.success,
       time: fmtTime(d.updated_at || d.created_at),
       actions: [], borderColor: colors.taskDispatch,
+      cardRoute: '/task/dpn', cardParams: { dpnId: d.id, dpnNo: d.dpn_no, dpnStatus: d.dpn_status, fromSite: d.from_site, toSite: d.to_site },
     });
   }
   for (const dt of (deliveriesRes.data || []).filter((d: any) => d.task_status === 'SIGNED')) {
@@ -526,6 +531,7 @@ async function loadWarehouseUsTasks(pending: TaskItem[], completed: TaskItem[]) 
       status: '已完成', statusColor: colors.success,
       time: fmtTime(dt.updated_at || dt.created_at),
       actions: [], borderColor: colors.taskDelivery,
+      cardRoute: '/task/delivery', cardParams: { taskId: dt.id, taskNo: dt.task_no, mode: 'view' },
     });
   }
   for (const p of (pickupsRes.data || []).filter((p: any) => p.notify_status === 'PICKED_UP')) {
@@ -536,6 +542,7 @@ async function loadWarehouseUsTasks(pending: TaskItem[], completed: TaskItem[]) 
       status: '已完成', statusColor: colors.success,
       time: fmtTime(p.updated_at || p.created_at),
       actions: [], borderColor: colors.taskPickup,
+      cardRoute: '/task/pickup', cardParams: { pickupId: p.id, pickupNo: p.pickup_no, mode: 'view' },
     });
   }
 }
@@ -600,6 +607,7 @@ async function loadSalesTasks(pending: TaskItem[], completed: TaskItem[]) {
       status: '已完成', statusColor: colors.success,
       time: fmtTime(o.updated_at || o.created_at),
       actions: [], borderColor: colors.taskOrphan,
+      cardRoute: '/task/order-detail', cardParams: { id: o.id },
     });
   }
 }
