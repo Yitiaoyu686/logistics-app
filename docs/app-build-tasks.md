@@ -17,6 +17,7 @@
 | 后续：Web API 兼容 + App 实时感 | ✅ 完成 | 补齐 13 个 Web 旧接口 + App 三页 15s 轮询，无需 WebSocket 即可实时反映 Web 操作 |
 | 2026-04-22：补齐仓管创建入口 | ✅ 完成 | 新建退运页（return-create.tsx）+ 退运处理页解除只读；创建线路评估后暂缓（仍在 Web 维护） |
 | 2026-05-14：弹窗→页面跳转 + 详情Tab化 | ✅ 完成 | 3个底部弹窗改为独立页面（发车/到达/匹配）；订单详情+客户详情改为4Tab布局 |
+| 2026-05-14：销售底部菜单重构 | ✅ 完成 | 销售从5Tab改为4Tab(任务/客户/工具/我的)；新增工具页(搜索+发运计划+快捷操作+销售数据)；已完成任务支持分类筛选 |
 
 ---
 
@@ -78,7 +79,7 @@ cd server && npm run dev    # 后端 → http://localhost:3001
 | 根布局 | app/_layout.tsx | ✅ | 认证路由守卫 |
 | 入口重定向 | app/index.tsx | ✅ | → 登录页 |
 | 登录 | app/(auth)/login.tsx | ✅ | 用户名密码 + 3个快捷按钮 |
-| Tab导航 | app/(tabs)/_layout.tsx | ✅ | 5Tab + 中央扫码凸起按钮，按角色切换图标标签 |
+| Tab导航 | app/(tabs)/_layout.tsx | ✅ | 仓管5Tab(任务/办理/📷扫码FAB/消息/我的)；销售4Tab(任务/客户/工具/我的) |
 | 任务流 | app/(tabs)/tasks.tsx | ✅ | 核心页面，按角色加载不同任务卡片，从后端API实时读取 |
 | 查询 | app/(tabs)/search.tsx | ✅ | 搜索栏 + 6个功能入口网格（占位） |
 | 扫码 | app/(tabs)/scan.tsx | ✅ | 相机占位 + 扫描框 + 手动输入 |
@@ -133,7 +134,7 @@ cd app && npx expo start --web --port 4003    # Web预览 → http://localhost:4
 
 | # | 页面 | 文件路径 | 状态 | 说明 |
 |---|------|---------|------|------|
-| 10 | 待办首页 | app/(tabs)/tasks.tsx | ✅ 已完成 | 同文件，按角色分支+SALES快捷入口 |
+| 10 | 待办首页 | app/(tabs)/tasks.tsx | ✅ 已完成 | 同文件，按角色分支；待办/已完成均支持分类筛选(待收款/新客户) |
 | 11 | 客户列表+详情 | app/task/customer.tsx + customer-detail.tsx | ✅ 已完成 | 搜索+列表+独立详情页(4Tab:概览/信息/地址/订单)+快捷操作(拨打/短信/下单/试算) |
 | 12 | 订单列表+详情 | app/task/order.tsx + order-detail.tsx | ✅ 已完成 | 筛选Tab+列表+独立详情页(4Tab:概览/信息/货物/费用) |
 | 13 | 运费试算 | app/task/quote.tsx | ✅ 已完成 | 路线选择+体积计费+演示报价+复制+分享 |
@@ -143,8 +144,8 @@ cd app && npx expo start --web --port 4003    # Web预览 → http://localhost:4
 | # | 页面 | 文件路径 | 状态 | 说明 |
 |---|------|---------|------|------|
 | 14 | 登录 | app/(auth)/login.tsx | ✅ 已完成 | — |
-| 15 | 扫码页 | app/(tabs)/scan.tsx | ✅ 已完成 | expo-camera条码扫描+万能识别(JOB/DPN/运单/库位)+手动输入+最近扫描 |
-| 16 | 消息中心 | app/(tabs)/messages.tsx | ✅ 已完成 | 后端动态消息+角色过滤+4Tab+已读状态+点击跳转目标页 |
+| 15 | 扫码/工具页 | app/(tabs)/scan.tsx | ✅ 已完成 | 仓管:expo-camera扫码+万能识别+手动输入；销售:工具页(搜索+发运计划+快捷操作+销售数据) |
+| 16 | 消息中心 | app/(tabs)/messages.tsx | ✅ 已完成 | 仓管:后端动态消息+角色过滤+4Tab+已读状态；销售:Tab隐藏(订单查询移入工具页) |
 | 17 | 个人中心 | app/(tabs)/profile.tsx | ✅ 已完成 | — |
 | 18 | 库存查询(仓管US) | (复用#3) | ✅ 复用 | 复用 stock.tsx，多仓筛选 |
 | 19 | 订单查询(只读) | (复用#12) | ✅ 复用 | 复用 order.tsx |
@@ -227,11 +228,11 @@ cd app && npx expo start --web --port 4003    # Web预览 → http://localhost:4
 │   │   ├── _layout.tsx             # 根布局
 │   │   ├── index.tsx               # 入口重定向
 │   │   ├── (auth)/login.tsx        # 登录页
-│   │   ├── (tabs)/_layout.tsx      # 5Tab导航
+│   │   ├── (tabs)/_layout.tsx      # Tab导航(仓管5Tab/销售4Tab)
 │   │   ├── (tabs)/tasks.tsx        # ★ 任务流首页（核心）
-│   │   ├── (tabs)/search.tsx       # 查询
-│   │   ├── (tabs)/scan.tsx         # 扫码占位
-│   │   ├── (tabs)/messages.tsx     # 消息
+│   │   ├── (tabs)/search.tsx       # 仓管:办理；销售:客户中心
+│   │   ├── (tabs)/scan.tsx         # 仓管:扫码；销售:工具页
+│   │   ├── (tabs)/messages.tsx     # 仓管:消息；销售:隐藏
 │   │   ├── (tabs)/profile.tsx      # 个人中心
 │   │   └── task/                   # 各任务操作页（22页）
 │   │       ├── inbound.tsx         # 扫码入库
