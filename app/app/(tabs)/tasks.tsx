@@ -151,25 +151,23 @@ export default function TasksScreen() {
         </Pressable>
       </View>
 
-      {/* 子筛选Tab — 仅待办下显示 */}
-      {mainTab === 'pending' && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.subTabBar} contentContainerStyle={styles.subTabBarContent}>
-          {tabs.map((tab) => {
-            const count = tab === '全部' ? pendingTasks.length : pendingTasks.filter(t => (tabTypeMap[tab] || []).includes(t.type)).length;
-            return (
-              <Pressable
-                key={tab}
-                style={[styles.subTab, activeTab === tab && styles.subTabActive]}
-                onPress={() => setActiveTab(tab)}
-              >
-                <Text style={[styles.subTabText, activeTab === tab && styles.subTabTextActive]}>
-                  {tab}{count > 0 ? ` ${count}` : ''}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      )}
+      {/* 子筛选Tab */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.subTabBar} contentContainerStyle={styles.subTabBarContent}>
+        {tabs.map((tab) => {
+          const count = tab === '全部' ? currentTasks.length : currentTasks.filter(t => (tabTypeMap[tab] || []).includes(t.type)).length;
+          return (
+            <Pressable
+              key={tab}
+              style={[styles.subTab, activeTab === tab && styles.subTabActive]}
+              onPress={() => setActiveTab(tab)}
+            >
+              <Text style={[styles.subTabText, activeTab === tab && styles.subTabTextActive]}>
+                {tab}{count > 0 ? ` ${count}` : ''}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
 
       {/* Task List */}
       <ScrollView
@@ -570,6 +568,21 @@ async function loadSalesTasks(pending: TaskItem[], completed: TaskItem[]) {
       time: fmtTime(o.updated_at || o.created_at),
       actions: [], borderColor: colors.taskOrphan,
       cardRoute: '/task/order-detail', cardParams: { id: o.id },
+    });
+  }
+
+  // ── 已完成：新客户已下单 ──
+  const convertedCustomers = myCustomers.filter((c: any) => (c.totalOrders || 0) > 0);
+  for (const c of convertedCustomers) {
+    completed.push({
+      id: `done-customer-${c.id}`, type: 'sales-customer', icon: '👤',
+      title: '客户已下单',
+      subtitle: `${c.customerName || c.name} · ${c.customerCode || c.shortCode || ''}`,
+      detail: `累计 ${c.totalOrders || 0} 单 · ${c.country || '-'}`,
+      status: '已转化', statusColor: colors.success,
+      time: fmtTime(c.lastOrderAt || c.updatedAt || c.createdAt),
+      actions: [], borderColor: colors.taskInbound,
+      cardRoute: '/task/customer-detail', cardParams: { id: c.id },
     });
   }
 }

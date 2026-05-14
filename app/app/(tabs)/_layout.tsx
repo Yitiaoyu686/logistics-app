@@ -46,11 +46,16 @@ export default function TabLayout() {
       />
       <Tabs.Screen
         name="scan"
-        options={{
+        options={isSales ? {
+          title: '工具',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="construct-outline" size={size} color={color} />
+          ),
+        } : {
           title: '',
           tabBarIcon: () => (
             <View style={styles.scanBtn}>
-              <Ionicons name={isSales ? 'add' : 'scan-outline'} size={28} color="#fff" />
+              <Ionicons name="scan-outline" size={28} color="#fff" />
             </View>
           ),
           tabBarLabel: () => null,
@@ -59,9 +64,10 @@ export default function TabLayout() {
       <Tabs.Screen
         name="messages"
         options={{
-          title: isSales ? '订单' : '消息',
+          href: isSales ? null : undefined,
+          title: '消息',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name={isSales ? 'document-text-outline' : 'notifications-outline'} size={size} color={color} />
+            <Ionicons name="notifications-outline" size={size} color={color} />
           ),
         }}
       />
