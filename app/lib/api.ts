@@ -4,12 +4,9 @@ import { Platform } from 'react-native';
 
 const LOCAL_URL = 'http://localhost:3001/api';
 const LAN_URL = 'http://192.168.3.127:3001/api';
-const TUNNEL_URL = 'https://nonsanely-bitonal-santo.ngrok-free.dev/api';
 
 const BASE_URL = Platform.OS === 'web'
-  ? (typeof window !== 'undefined' && window.location.hostname !== 'localhost'
-      ? TUNNEL_URL
-      : LOCAL_URL)
+  ? '/api'
   : LAN_URL;
 
 async function getToken(): Promise<string | null> {
