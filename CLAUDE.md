@@ -63,8 +63,9 @@ cd client && npm run dev              # Web前端 → http://localhost:5173
 
 - **Web 前端**: ✅ 完成，所有页面含 Mock 数据和完整交互
 - **后端 API**: ✅ 完成，34表 + 7路由 + JWT认证 + Seed数据
-- **App 端**: ✅ 完成，22页 + 3角色 + 数据联通验证通过
+- **App 端**: ✅ 完成，30+页 + 3角色(销售/起运国仓管/到达国仓管) ~95%对齐Web端
 - **UI 设计**: ✅ Apple HIG 风格，全部 Ionicons 图标（无 emoji）
+- **对比验证**: ✅ 2026-05-18完成App vs Web三角色全模块对比+补齐，详见 `docs/app-web-comparison-2026-05-18.md`
 
 ## App 设计规范
 
