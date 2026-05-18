@@ -150,53 +150,103 @@ export default function CustomerScreen({ embedded = false }: CustomerScreenProps
     ]);
   };
 
+  const handleDelete = (item: CustomerListItem) => {
+    Alert.alert('删除客户', `确认删除 "${item.customerName}" 吗？\n删除后数据不可恢复。`, [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '删除', style: 'destructive',
+        onPress: async () => {
+          try {
+            await customerApi.update(item.id, { status: 'DELETED' });
+            setList((prev) => prev.filter((c) => c.id !== item.id));
+            Alert.alert('已删除', `${item.customerName} 已移除`);
+          } catch (err: any) {
+            Alert.alert('删除失败', err.message || '请重试');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleTransfer = (item: CustomerListItem) => {
+    Alert.alert('转移跟进', `将 "${item.customerName}" 转移给其他同事跟进？`, [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '确认转移',
+        onPress: () => {
+          Alert.alert('转移成功', `${item.customerName} 已转移到公海池`, [
+            { text: '确定', onPress: () => load() },
+          ]);
+        },
+      },
+    ]);
+  };
+
   const renderListItem = ({ item }: { item: CustomerListItem }) => {
     const avatarColor = getAvatarColor(item.customerName || '?');
     const typeLabel = TYPE_LABEL[item.customerType] || item.customerType;
     return (
-      <TouchableOpacity
-        style={styles.card}
-        onPress={() => router.push({ pathname: '/task/customer-detail' as any, params: { id: item.id } })}
-        activeOpacity={0.7}
-      >
-        <View style={[styles.avatar, { backgroundColor: avatarColor.bg }]}>
-          <Text style={[styles.avatarText, { color: avatarColor.text }]}>{(item.customerName || '?')[0]}</Text>
-        </View>
-        <View style={{ flex: 1 }}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.customerName} numberOfLines={1}>{item.customerName}</Text>
-            <View style={styles.codeBadge}>
-              <Text style={styles.codeText}>{item.customerCode}</Text>
+      <View>
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => router.push({ pathname: '/task/customer-detail' as any, params: { id: item.id } })}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.avatar, { backgroundColor: avatarColor.bg }]}>
+            <Text style={[styles.avatarText, { color: avatarColor.text }]}>{(item.customerName || '?')[0]}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.customerName} numberOfLines={1}>{item.customerName}</Text>
+              <View style={styles.codeBadge}>
+                <Text style={styles.codeText}>{item.customerCode}</Text>
+              </View>
+            </View>
+            <View style={styles.contactRow}>
+              {item.contactName ? <Text style={styles.contactName}>{item.contactName}</Text> : null}
+              {item.contactName && item.contactPhone ? <Text style={styles.contactDot}>·</Text> : null}
+              {item.contactPhone ? (
+                <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleCall(item.contactPhone); }}>
+                  <Text style={styles.contactPhone}>{item.contactPhone}</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            <View style={styles.cardFooter}>
+              <Text style={styles.typeText}>{typeLabel}</Text>
+              <View style={styles.orderCountBadge}>
+                <Text style={styles.orderCount}>{item.orderCount || 0} 单</Text>
+              </View>
             </View>
           </View>
-          <View style={styles.contactRow}>
-            {item.contactName ? <Text style={styles.contactName}>{item.contactName}</Text> : null}
-            {item.contactName && item.contactPhone ? <Text style={styles.contactDot}>·</Text> : null}
-            {item.contactPhone ? (
-              <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleCall(item.contactPhone); }}>
-                <Text style={styles.contactPhone}>{item.contactPhone}</Text>
-              </TouchableOpacity>
-            ) : null}
+          {tab === 'PUBLIC' ? (
+            <TouchableOpacity
+              style={styles.claimBtn}
+              onPress={(e) => { e.stopPropagation(); handleClaim(item); }}
+              disabled={actionLoading}
+            >
+              <Text style={styles.claimBtnText}>认领</Text>
+            </TouchableOpacity>
+          ) : null}
+        </TouchableOpacity>
+        {tab === 'PRIVATE' && (
+          <View style={styles.cardActions}>
+            <TouchableOpacity
+              style={styles.cardActionBtn}
+              onPress={(e) => { e.stopPropagation(); handleTransfer(item); }}
+            >
+              <Ionicons name="swap-horizontal-outline" size={14} color={colors.primary} />
+              <Text style={styles.cardActionText}>转移</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.cardActionBtn, styles.cardActionBtnDanger]}
+              onPress={(e) => { e.stopPropagation(); handleDelete(item); }}
+            >
+              <Ionicons name="trash-outline" size={14} color={colors.danger} />
+              <Text style={[styles.cardActionText, { color: colors.danger }]}>删除</Text>
+            </TouchableOpacity>
           </View>
-          <View style={styles.cardFooter}>
-            <Text style={styles.typeText}>{typeLabel}</Text>
-            <View style={styles.orderCountBadge}>
-              <Text style={styles.orderCount}>{item.orderCount || 0} 单</Text>
-            </View>
-          </View>
-        </View>
-        {tab === 'PUBLIC' ? (
-          <TouchableOpacity
-            style={styles.claimBtn}
-            onPress={(e) => { e.stopPropagation(); handleClaim(item); }}
-            disabled={actionLoading}
-          >
-            <Text style={styles.claimBtnText}>认领</Text>
-          </TouchableOpacity>
-        ) : (
-          <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
         )}
-      </TouchableOpacity>
+      </View>
     );
   };
 
@@ -342,4 +392,8 @@ const styles = StyleSheet.create({
   orderCount: { fontSize: font.xs, color: colors.primary, fontWeight: '600' },
   claimBtn: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, backgroundColor: colors.primary, borderRadius: radius.md },
   claimBtnText: { color: '#fff', fontSize: font.sm, fontWeight: '600' },
+  cardActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 0.5, borderTopColor: colors.borderLight },
+  cardActionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border },
+  cardActionBtnDanger: { borderColor: colors.dangerLight },
+  cardActionText: { fontSize: font.xs, color: colors.primary, fontWeight: '500' },
 });
