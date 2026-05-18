@@ -179,19 +179,11 @@ export default function MessagesScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.title}>
-            消息{unreadCount > 0 ? <Text style={styles.unreadBadge}> {unreadCount}</Text> : null}
-          </Text>
-          <Text style={styles.headerSub}>喵喵国际物流通知中心</Text>
-        </View>
-        {unreadCount > 0 && (
-          <TouchableOpacity onPress={markAllRead} style={styles.allReadBtn}>
-            <Text style={styles.allRead}>全部已读</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+      {unreadCount > 0 && (
+        <TouchableOpacity onPress={markAllRead} style={styles.allReadBtn}>
+          <Text style={styles.allRead}>全部已读</Text>
+        </TouchableOpacity>
+      )}
 
       <View style={styles.tabRow}>
         {tabs.map((t) => {

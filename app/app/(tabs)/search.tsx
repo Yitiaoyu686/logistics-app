@@ -130,10 +130,6 @@ export default function SearchScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
-        <Text style={styles.title}>办理</Text>
-      </View>
-
       <View style={styles.searchBar}>
         <Ionicons name="search-outline" size={18} color={colors.textTertiary} />
         <TextInput
@@ -233,8 +229,6 @@ export default function SearchScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
-  header: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
-  title: { fontSize: font.xl, fontWeight: '700', color: colors.text },
   searchBar: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.lg, marginBottom: spacing.lg, backgroundColor: colors.card, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.md, height: 44, gap: spacing.sm },
   searchInput: { flex: 1, fontSize: font.sm, color: colors.text },
   scanIcon: { padding: spacing.xs },

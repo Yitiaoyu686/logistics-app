@@ -173,10 +173,6 @@ function SalesToolsPage({ manualVisible, setManualVisible, manualCode, setManual
 
   return (
     <SafeAreaView style={ts.safe}>
-      <View style={ts.header}>
-        <Text style={ts.headerTitle}>工具</Text>
-      </View>
-
       <ScrollView
         contentContainerStyle={{ paddingBottom: 30 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
