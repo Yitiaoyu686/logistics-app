@@ -337,6 +337,35 @@ export default function ShippingUnitsScreen() {
                     JOB: {job?.job_no || '-'}
                   </Text>
                   <View style={{ height: 1, backgroundColor: colors.text, marginVertical: spacing.sm }} />
+                  {/* QR Code 可视化 */}
+                  <View style={{ alignItems: 'center', paddingVertical: spacing.xs }}>
+                    <View style={{ flexDirection: 'row', gap: 2 }}>
+                      {Array.from({ length: 13 }).map((_, i) => (
+                        <View key={i} style={{ width: 8, height: 8, backgroundColor: colors.text }} />
+                      ))}
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 2 }}>
+                      <View style={{ width: 8, height: 8, backgroundColor: colors.text }} />
+                      <View style={{ width: 72, height: 8 }} />
+                      <View style={{ width: 8, height: 8, backgroundColor: colors.text }} />
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 2 }}>
+                      <View style={{ width: 8, height: 8, backgroundColor: colors.text }} />
+                      <View style={{ width: 24, height: 8 }} />
+                      <View style={{ width: 24, height: 8, backgroundColor: colors.text }} />
+                      <View style={{ width: 24, height: 8 }} />
+                      <View style={{ width: 8, height: 8, backgroundColor: colors.text }} />
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 2 }}>
+                      {Array.from({ length: 13 }).map((_, i) => (
+                        <View key={i} style={{ width: 8, height: 8, backgroundColor: colors.text }} />
+                      ))}
+                    </View>
+                    <Text style={{ fontSize: 7, fontFamily: font.mono, marginTop: 3, color: colors.textSecondary }}>
+                      {u.unitNo}
+                    </Text>
+                  </View>
+                  <View style={{ height: 1, backgroundColor: colors.text, marginVertical: spacing.sm }} />
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                     <View>
                       <Text style={{ fontSize: font.xs, color: colors.textSecondary }}>承运人</Text>

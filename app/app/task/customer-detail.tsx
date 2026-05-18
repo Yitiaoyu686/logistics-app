@@ -143,6 +143,25 @@ export default function CustomerDetailScreen() {
     ]);
   };
 
+  const handleStatusChange = (newStatus: string) => {
+    if (!detail) return;
+    const labels: Record<string, string> = { ACTIVE: '激活', SLEEP: '设为沉睡', FROZEN: '冻结' };
+    Alert.alert(
+      '变更客户状态',
+      `确认将 "${detail.customerName}" 状态改为「${labels[newStatus] || newStatus}」吗？`,
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '确认',
+          onPress: () => {
+            setDetail({ ...detail, status: newStatus });
+            Alert.alert('状态已更新', `客户"${detail.customerName}" → ${labels[newStatus] || newStatus}`);
+          },
+        },
+      ],
+    );
+  };
+
   const renderOverview = (d: CustomerDetail) => (
     <View style={styles.entrySection}>
       <Text style={styles.entryLabel}>入仓号</Text>
@@ -261,6 +280,24 @@ export default function CustomerDetailScreen() {
         )}
       </View>
 
+      {/* 状态变更 */}
+      {d.status === 'ACTIVE' ? (
+        <View style={styles.statusActionRow}>
+          <TouchableOpacity style={[styles.statusBtn, { borderColor: colors.warning, backgroundColor: colors.warningLight }]} onPress={() => handleStatusChange('SLEEP')}>
+            <Ionicons name="moon-outline" size={16} color={colors.warning} />
+            <Text style={[styles.statusBtnText, { color: colors.warning }]}>设为沉睡</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.statusBtn, { borderColor: colors.danger, backgroundColor: colors.dangerLight }]} onPress={() => handleStatusChange('FROZEN')}>
+            <Ionicons name="snow-outline" size={16} color={colors.danger} />
+            <Text style={[styles.statusBtnText, { color: colors.danger }]}>冻结客户</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <TouchableOpacity style={[styles.statusBtnFull, { borderColor: colors.success, backgroundColor: colors.successLight }]} onPress={() => handleStatusChange('ACTIVE')}>
+          <Ionicons name="checkmark-circle-outline" size={18} color={colors.success} />
+          <Text style={[styles.statusBtnText, { color: colors.success }]}>恢复活跃</Text>
+        </TouchableOpacity>
+      )}
       {d.poolType === 'PRIVATE' && (
         <TouchableOpacity
           style={[styles.releaseBtn, actionLoading && styles.btnDisabled]}
@@ -413,4 +450,8 @@ const styles = StyleSheet.create({
   releaseBtn: { height: 48, backgroundColor: colors.warningLight, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.warning, marginTop: spacing.md },
   releaseBtnText: { color: colors.warning, fontSize: font.md, fontWeight: '600' },
   btnDisabled: { opacity: 0.6 },
+  statusActionRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  statusBtn: { flex: 1, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6, borderWidth: 1 },
+  statusBtnFull: { height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6, borderWidth: 1, marginTop: spacing.md },
+  statusBtnText: { fontSize: font.sm, fontWeight: '600' },
 });

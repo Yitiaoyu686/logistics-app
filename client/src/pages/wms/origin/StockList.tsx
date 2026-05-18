@@ -519,7 +519,7 @@ export const StockList = ({
             setEditRecord(record);
             setEditDrawerVisible(true);
           }}>编辑</Button>
-          <Button type="link" size="small" onClick={() => message.info('打印功能开发中')}>打印</Button>
+          <Button type="link" size="small" onClick={() => handlePrint(record)}>打印</Button>
           <Button type="link" size="small" danger onClick={() => handleOpenReturn(record)}>退运</Button>
         </Space>
       ),
