@@ -156,9 +156,8 @@ const MENU_CONFIG: MenuItemConfig[] = [
     roles: ['SALES', 'OPS_CN', 'ADMIN'],
     tabs: [
       { key: 'crm_my', label: '我的客户' },
-      { key: 'crm_public', label: '公海池' }
-      // { key: 'crm_price', label: '报价查询' },
-      // { key: 'crm_promo', label: '推广素材' }
+      { key: 'crm_public', label: '公海池' },
+      { key: 'crm_price', label: '报价查询' },
     ]
   },
   {
