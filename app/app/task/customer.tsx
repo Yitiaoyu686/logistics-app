@@ -196,13 +196,11 @@ export default function CustomerScreen({ embedded = false }: CustomerScreenProps
           onPress={() => router.push({ pathname: '/task/customer-detail' as any, params: { id: item.id } })}
           activeOpacity={0.7}
         >
-          {/* 左侧状态色条 */}
           <View style={[styles.statusStripe, { backgroundColor: statusColor }]} />
-          {/* Squircle 头像 */}
           <View style={[styles.avatar, { backgroundColor: avatarColor.bg }]}>
             <Text style={[styles.avatarText, { color: avatarColor.text }]}>{(item.customerName || '?')[0]}</Text>
           </View>
-          {/* 主信息区 */}
+
           <View style={styles.cardBody}>
             <View style={styles.topRow}>
               <Text style={styles.customerName} numberOfLines={1}>{item.customerName}</Text>
@@ -215,6 +213,7 @@ export default function CustomerScreen({ embedded = false }: CustomerScreenProps
                 <Text style={styles.codeText}>{item.customerCode}</Text>
               </View>
             </View>
+
             <View style={styles.metaRow}>
               <View style={styles.metaItem}>
                 <Ionicons name="business-outline" size={12} color={colors.textTertiary} />
@@ -235,6 +234,7 @@ export default function CustomerScreen({ embedded = false }: CustomerScreenProps
                 </View>
               ) : null}
             </View>
+
             <View style={styles.bottomRow}>
               <View style={styles.contactGroup}>
                 {item.contactName ? (
@@ -259,31 +259,32 @@ export default function CustomerScreen({ embedded = false }: CustomerScreenProps
                 </View>
               </View>
             </View>
-          </View>
-          {/* 右侧操作区 */}
-          <View style={styles.actionColumn}>
+
+            {/* 卡片内操作按钮 */}
             {tab === 'PUBLIC' ? (
               <TouchableOpacity
                 style={styles.claimBtn}
                 onPress={(e) => { e.stopPropagation(); handleClaim(item); }}
                 disabled={actionLoading}
               >
-                <Ionicons name="hand-left-outline" size={16} color="#fff" />
+                <Ionicons name="hand-left-outline" size={15} color="#fff" />
                 <Text style={styles.claimBtnText}>认领</Text>
               </TouchableOpacity>
             ) : (
-              <View style={styles.privateActions}>
+              <View style={styles.cardActions}>
                 <TouchableOpacity
-                  style={styles.iconActionBtn}
+                  style={styles.cardActionBtn}
                   onPress={(e) => { e.stopPropagation(); handleTransfer(item); }}
                 >
-                  <Ionicons name="swap-horizontal-outline" size={18} color={colors.primary} />
+                  <Ionicons name="swap-horizontal-outline" size={15} color={colors.primary} />
+                  <Text style={styles.cardActionText}>转移</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.iconActionBtn, styles.iconActionBtnDanger]}
+                  style={[styles.cardActionBtn, styles.cardActionBtnDanger]}
                   onPress={(e) => { e.stopPropagation(); handleDelete(item); }}
                 >
-                  <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                  <Ionicons name="trash-outline" size={15} color={colors.danger} />
+                  <Text style={styles.cardActionTextDanger}>删除</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -309,7 +310,6 @@ export default function CustomerScreen({ embedded = false }: CustomerScreenProps
         </TouchableOpacity>
       </View>
 
-      {/* Tab 切换：我的客户 / 公海池 */}
       <View style={styles.poolTabs}>
         <TouchableOpacity
           style={[styles.poolTab, tab === 'PRIVATE' && styles.poolTabActive]}
@@ -329,7 +329,6 @@ export default function CustomerScreen({ embedded = false }: CustomerScreenProps
         </TouchableOpacity>
       </View>
 
-      {/* 搜索栏 */}
       <View style={styles.searchRow}>
         <View style={styles.searchInputWrap}>
           <Ionicons name="search-outline" size={18} color={colors.textTertiary} />
@@ -348,7 +347,6 @@ export default function CustomerScreen({ embedded = false }: CustomerScreenProps
         </View>
       </View>
 
-      {/* 状态筛选 */}
       <View style={styles.filterRow}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.md, gap: spacing.sm }}>
           {STATUS_FILTERS.map((f) => {
@@ -366,7 +364,6 @@ export default function CustomerScreen({ embedded = false }: CustomerScreenProps
         </ScrollView>
       </View>
 
-      {/* 列表 */}
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.primary} /></View>
       ) : filtered.length === 0 ? (
@@ -383,7 +380,6 @@ export default function CustomerScreen({ embedded = false }: CustomerScreenProps
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
         />
       )}
-
     </SafeAreaView>
   );
 }
@@ -397,34 +393,26 @@ const styles = StyleSheet.create({
   navBtn: { padding: spacing.xs },
   navTitle: { flex: 1, marginLeft: spacing.sm, fontSize: font.lg, fontWeight: '600', color: colors.text },
 
-  // Pool 切换
   poolTabs: { flexDirection: 'row', backgroundColor: colors.card, paddingTop: spacing.sm, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
   poolTab: { flex: 1, alignItems: 'center', paddingVertical: spacing.md, borderBottomWidth: 2, borderBottomColor: 'transparent' },
   poolTabActive: { borderBottomColor: colors.primary },
   poolTabText: { fontSize: font.md, color: colors.textSecondary, fontWeight: '500' },
   poolTabTextActive: { color: colors.primary, fontWeight: '700' },
 
-  // 搜索
   searchRow: { paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm, backgroundColor: colors.card },
   searchInputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bg, borderRadius: radius.md, paddingHorizontal: spacing.md, height: 40, gap: spacing.sm },
   searchInput: { flex: 1, fontSize: font.md, color: colors.text },
 
-  // 筛选
   filterRow: { paddingVertical: spacing.sm, backgroundColor: colors.card, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
   chip: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
   chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   chipText: { fontSize: font.sm, color: colors.textSecondary },
   chipTextActive: { color: '#fff', fontWeight: '600' },
 
-  // 列表
   listContent: { padding: spacing.md, gap: spacing.sm },
 
   // ── 卡片 ──
-  cardOuter: {
-    borderRadius: radius.lg,
-    overflow: 'hidden',
-    ...shadow.md,
-  },
+  cardOuter: { borderRadius: radius.lg, overflow: 'hidden', ...shadow.md },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -432,7 +420,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     overflow: 'hidden',
   },
-  // 左侧状态色条
   statusStripe: {
     width: 4,
     alignSelf: 'stretch',
@@ -441,7 +428,7 @@ const styles = StyleSheet.create({
     marginLeft: spacing.xs,
   },
 
-  // 头像 - squircle 风格
+  // 头像
   avatar: {
     width: 48,
     height: 48,
@@ -454,165 +441,49 @@ const styles = StyleSheet.create({
   avatarText: { fontSize: font.lg, fontWeight: '800' },
 
   // 主信息区
-  cardBody: {
-    flex: 1,
-    paddingVertical: spacing.md,
-    paddingLeft: spacing.md,
-  },
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: 5,
-  },
-  customerName: {
-    fontSize: font.md,
-    fontWeight: '700',
-    color: colors.text,
-    flexShrink: 1,
-  },
-  overseasBadge: {
-    backgroundColor: colors.infoLight,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: radius.sm,
-  },
-  overseasBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: colors.info,
-  },
-  codeBadge: {
-    backgroundColor: colors.bg,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: radius.sm,
-  },
-  codeText: {
-    fontSize: font.xs,
-    fontFamily: font.mono,
-    color: colors.textSecondary,
-  },
+  cardBody: { flex: 1, paddingVertical: spacing.md, paddingLeft: spacing.md, paddingRight: spacing.md },
+  topRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: 5 },
+  customerName: { fontSize: font.md, fontWeight: '700', color: colors.text, flexShrink: 1 },
+  overseasBadge: { backgroundColor: colors.infoLight, paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.sm },
+  overseasBadgeText: { fontSize: 10, fontWeight: '700', color: colors.info },
+  codeBadge: { backgroundColor: colors.bg, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.sm },
+  codeText: { fontSize: font.xs, fontFamily: font.mono, color: colors.textSecondary },
 
-  // 元信息行：企业类型 · 行业 · 国家
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 2,
-    marginBottom: 7,
-  },
-  metaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  metaText: {
-    fontSize: font.xs,
-    color: colors.textSecondary,
-  },
-  metaSeparator: {
-    fontSize: font.xs,
-    color: colors.textTertiary,
-    marginHorizontal: 2,
-  },
+  metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 2, marginBottom: 7 },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  metaText: { fontSize: font.xs, color: colors.textSecondary },
+  metaSeparator: { fontSize: font.xs, color: colors.textTertiary, marginHorizontal: 2 },
 
-  // 底部行：联系人 + 单数
-  bottomRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  contactGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    flex: 1,
-    flexWrap: 'wrap',
-  },
-  contactChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: colors.primaryLight,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-    borderRadius: radius.sm,
-  },
-  contactChipText: {
-    fontSize: font.xs,
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  phoneChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: colors.infoLight,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-    borderRadius: radius.sm,
-  },
-  phoneChipText: {
-    fontSize: font.xs,
-    color: colors.info,
-    fontWeight: '600',
-  },
-  rightMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  orderCountBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: colors.primaryLight,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-    borderRadius: radius.sm,
-  },
-  orderCount: {
-    fontSize: font.xs,
-    color: colors.primary,
-    fontWeight: '600',
-  },
+  // 联系人行
+  bottomRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  contactGroup: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1, flexWrap: 'wrap' },
+  contactChip: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.primaryLight, paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.sm },
+  contactChipText: { fontSize: font.xs, color: colors.primary, fontWeight: '600' },
+  phoneChip: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.infoLight, paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.sm },
+  phoneChipText: { fontSize: font.xs, color: colors.info, fontWeight: '600' },
+  rightMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  orderCountBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.primaryLight, paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.sm },
+  orderCount: { fontSize: font.xs, color: colors.primary, fontWeight: '600' },
 
-  // 右侧操作区
-  actionColumn: {
-    paddingRight: spacing.sm,
-    justifyContent: 'center',
-    alignItems: 'center',
-    minWidth: 52,
-  },
+  // 卡片内操作按钮
   claimBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+    backgroundColor: colors.primary, borderRadius: radius.md,
+    paddingVertical: spacing.sm, marginTop: 2,
     ...shadow.sm,
   },
-  claimBtnText: {
-    color: '#fff',
-    fontSize: font.sm,
-    fontWeight: '700',
+  claimBtnText: { color: '#fff', fontSize: font.sm, fontWeight: '700' },
+  cardActions: {
+    flexDirection: 'row', gap: spacing.sm,
+    paddingTop: spacing.sm, marginTop: 2,
+    borderTopWidth: 1, borderTopColor: colors.borderLight,
   },
-  privateActions: {
-    gap: spacing.sm,
-    alignItems: 'center',
-  },
-  iconActionBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+  cardActionBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+    paddingVertical: spacing.sm, borderRadius: radius.md,
     backgroundColor: colors.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  iconActionBtnDanger: {
-    backgroundColor: colors.dangerLight,
-  },
+  cardActionBtnDanger: { backgroundColor: colors.dangerLight },
+  cardActionText: { fontSize: font.sm, color: colors.primary, fontWeight: '600' },
+  cardActionTextDanger: { fontSize: font.sm, color: colors.danger, fontWeight: '600' },
 });
