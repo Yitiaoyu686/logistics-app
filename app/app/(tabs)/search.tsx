@@ -50,6 +50,7 @@ const WAREHOUSE_US_MODULES: MenuItem[] = [
   { icon: 'layers-outline', label: '库存查询', desc: '到达国库存', route: '/task/stock', params: { destination: '1' }, tint: colors.success },
   { icon: 'navigate-outline', label: '配送管理', desc: '末端配送任务', route: '/task/delivery-list', tint: colors.warning },
   { icon: 'hand-left-outline', label: '自提管理', desc: '客户自提管理', route: '/task/pickup-list', tint: '#8B5CF6' },
+  { icon: 'swap-horizontal-outline', label: '调拨管理', desc: '到达国仓间调拨', route: '/task/transfer-dest', tint: '#F59E0B' },
   { icon: 'document-text-outline', label: '订单查询', desc: '按运单号查订单', route: '/task/order', tint: colors.textSecondary },
 ];
 

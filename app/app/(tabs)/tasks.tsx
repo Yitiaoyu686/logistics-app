@@ -82,7 +82,7 @@ export default function TasksScreen() {
   const tabs = role === 'WAREHOUSE_CN'
     ? ['全部', '入库', '装箱', '调拨', '无单']
     : role === 'WAREHOUSE_US'
-    ? ['全部', '入库', 'DPN', '配送', '自提']
+    ? ['全部', '入库', 'DPN', '配送', '自提', '调拨']
     : role === 'SALES'
     ? ['全部', '待收款', '新客户']
     : ['全部'];
@@ -389,12 +389,13 @@ async function loadWarehouseCnTasks(pending: TaskItem[], completed: TaskItem[]) 
 }
 
 async function loadWarehouseUsTasks(pending: TaskItem[], completed: TaskItem[]) {
-  const [jobsRes, dpnsRes, deliveriesRes, pickupsRes, completedJobsRes] = await Promise.all([
+  const [jobsRes, dpnsRes, deliveriesRes, pickupsRes, completedJobsRes, transfersRes] = await Promise.all([
     jobApi.list({ status: 'ARRIVED' }),
     deliveryApi.getDpns(),
     deliveryApi.getDeliveryTasks(),
     deliveryApi.getPickups(),
     jobApi.list({ status: 'COMPLETED' }),
+    warehouseApi.getTransfers(),
   ]);
 
   // 待入库
@@ -460,6 +461,38 @@ async function loadWarehouseUsTasks(pending: TaskItem[], completed: TaskItem[]) 
     });
   }
 
+  // 到达国调拨
+  const destWarehouses = ['LOS', 'ABV', 'ACC', 'IKEJ', 'VI', 'PH'];
+  const destTransfers = (transfersRes.data || []).filter((t: any) =>
+    destWarehouses.some((w: string) =>
+      (t.from_warehouse_name || '').includes(w) || (t.to_warehouse_name || '').includes(w)
+    )
+  );
+  for (const t of destTransfers.filter((t: any) => !['RECEIVED', 'CANCELLED'].includes(t.transfer_status))) {
+    const statusMap: Record<string, [string, string]> = {
+      PENDING: ['待发运', colors.warning],
+      IN_TRANSIT: ['运输中', colors.info],
+      ARRIVED: ['已到达', colors.primary],
+    };
+    const [label, color] = statusMap[t.transfer_status] || [t.transfer_status, colors.textSecondary];
+    const action = t.transfer_status === 'PENDING'
+      ? { label: '执行发车', color: colors.primary, route: '/task/transfer-dest', params: { id: t.id, action: 'dispatch' } }
+      : t.transfer_status === 'IN_TRANSIT'
+      ? { label: '确认到达', color: colors.success, route: '/task/transfer-dest', params: { id: t.id, action: 'arrive' } }
+      : t.transfer_status === 'ARRIVED'
+      ? { label: '扫码入库', color: colors.taskDispatch, route: '/task/transfer-inbound', params: { transferId: t.id, type: 'TRANSFER' } }
+      : null;
+    pending.push({
+      id: `transfer-${t.id}`, type: 'transfer', icon: 'swap-horizontal-outline',
+      title: `调拨${label}`,
+      subtitle: t.transfer_no,
+      detail: `${t.from_warehouse_name || ''} → ${t.to_warehouse_name || ''} · ${t.total_pieces}件/${t.total_weight_kg}kg`,
+      status: label, statusColor: color,
+      actions: action ? [action as any] : [],
+      borderColor: colors.taskTransfer || '#F59E0B',
+    });
+  }
+
   // ── 已完成 ──
   for (const j of (completedJobsRes.data || [])) {
     completed.push({
@@ -503,6 +536,19 @@ async function loadWarehouseUsTasks(pending: TaskItem[], completed: TaskItem[]) 
       time: fmtTime(p.updated_at || p.created_at),
       actions: [], borderColor: colors.taskPickup,
       cardRoute: '/task/pickup', cardParams: { pickupId: p.id, pickupNo: p.pickup_no, mode: 'view' },
+    });
+  }
+  // 调拨已完成
+  for (const t of destTransfers.filter((t: any) => ['RECEIVED', 'CANCELLED'].includes(t.transfer_status))) {
+    completed.push({
+      id: `done-transfer-${t.id}`, type: 'transfer', icon: 'swap-horizontal-outline',
+      title: t.transfer_status === 'RECEIVED' ? '调拨已签收' : '调拨已取消',
+      subtitle: t.transfer_no,
+      detail: `${t.from_warehouse_name || ''} → ${t.to_warehouse_name || ''} · ${t.total_pieces}件`,
+      status: '已完成', statusColor: t.transfer_status === 'CANCELLED' ? colors.textSecondary : colors.success,
+      time: fmtTime(t.updated_at || t.created_at),
+      actions: [], borderColor: colors.taskTransfer || '#F59E0B',
+      cardRoute: '/task/transfer-dest', cardParams: { id: t.id },
     });
   }
 }

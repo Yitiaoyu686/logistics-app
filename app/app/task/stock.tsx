@@ -152,6 +152,31 @@ export default function StockScreen() {
     setSelected(null);
   };
 
+  const handleAllocateToUnit = () => {
+    if (!selected) return;
+    setSelected(null);
+    router.push({ pathname: '/task/packing', params: { subOrderNo: selected.sub_order_no, mode: 'add-order' } });
+  };
+
+  const handleCancelOrder = () => {
+    if (!selected) return;
+    Alert.alert(
+      '取消订单',
+      `确认取消 ${selected.sub_order_no} 吗？\n取消后库存将标记为已退回，不可恢复。`,
+      [
+        { text: '保留', style: 'cancel' },
+        {
+          text: '确认取消', style: 'destructive',
+          onPress: () => {
+            setList((prev) => prev.map((s) => s.id === selected.id ? { ...s, stock_status: 'RETURNED' as StockStatus } : s));
+            Alert.alert('已取消', `${selected.sub_order_no} 已标记为退回`);
+            setSelected(null);
+          },
+        },
+      ],
+    );
+  };
+
   const openReturnDialog = () => {
     setReturnReason('');
     setReturnRecipient('');
@@ -433,24 +458,62 @@ export default function StockScreen() {
                   </TouchableOpacity>
                 </View>
                 {selected.stock_status === 'IN_STOCK' && !isDestination && (
-                  <TouchableOpacity
-                    style={{
-                      marginTop: spacing.md,
-                      height: 44,
-                      borderWidth: 1,
-                      borderColor: colors.warning,
-                      borderRadius: radius.md,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexDirection: 'row',
-                      gap: 6,
-                      backgroundColor: colors.warningLight,
-                    }}
-                    onPress={openReturnDialog}
-                  >
-                    <Ionicons name="return-down-back-outline" size={18} color={colors.warning} />
-                    <Text style={{ color: colors.warning, fontSize: font.md, fontWeight: '600' }}>申请退运</Text>
-                  </TouchableOpacity>
+                  <>
+                    <TouchableOpacity
+                      style={{
+                        marginTop: spacing.md,
+                        height: 44,
+                        borderWidth: 1,
+                        borderColor: colors.primary,
+                        borderRadius: radius.md,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexDirection: 'row',
+                        gap: 6,
+                        backgroundColor: colors.primaryLight,
+                      }}
+                      onPress={handleAllocateToUnit}
+                    >
+                      <Ionicons name="cube-outline" size={18} color={colors.primary} />
+                      <Text style={{ color: colors.primary, fontSize: font.md, fontWeight: '600' }}>分配至集装器</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={{
+                        marginTop: spacing.sm,
+                        height: 44,
+                        borderWidth: 1,
+                        borderColor: colors.danger,
+                        borderRadius: radius.md,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexDirection: 'row',
+                        gap: 6,
+                        backgroundColor: colors.dangerLight,
+                      }}
+                      onPress={handleCancelOrder}
+                    >
+                      <Ionicons name="close-circle-outline" size={18} color={colors.danger} />
+                      <Text style={{ color: colors.danger, fontSize: font.md, fontWeight: '600' }}>取消订单</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={{
+                        marginTop: spacing.sm,
+                        height: 44,
+                        borderWidth: 1,
+                        borderColor: colors.warning,
+                        borderRadius: radius.md,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexDirection: 'row',
+                        gap: 6,
+                        backgroundColor: colors.warningLight,
+                      }}
+                      onPress={openReturnDialog}
+                    >
+                      <Ionicons name="return-down-back-outline" size={18} color={colors.warning} />
+                      <Text style={{ color: colors.warning, fontSize: font.md, fontWeight: '600' }}>申请退运</Text>
+                    </TouchableOpacity>
+                  </>
                 )}
               </ScrollView>
             )}
