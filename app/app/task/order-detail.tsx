@@ -350,7 +350,12 @@ export default function OrderDetailScreen() {
           {/* Hero - always visible */}
           <View style={styles.heroCard}>
             <Text style={styles.heroOrderNo}>{detail.order_no}</Text>
-            <Text style={styles.heroEntry}>入仓号：{detail.warehouse_entry_no}</Text>
+            {detail.warehouse_entry_no ? (
+              <View style={styles.heroEntryTag}>
+                <Ionicons name="pricetag-outline" size={12} color="#7C3AED" />
+                <Text style={styles.heroEntryTagText}>入仓号：{detail.warehouse_entry_no}</Text>
+              </View>
+            ) : null}
             <View style={styles.heroTags}>
               {(() => {
                 const meta = STATUS_META[detail.order_status] || { label: detail.order_status, color: colors.textSecondary, bg: colors.borderLight };
@@ -411,6 +416,8 @@ const styles = StyleSheet.create({
   heroCard: { backgroundColor: colors.card, padding: spacing.lg, marginHorizontal: spacing.md, marginTop: spacing.md, borderRadius: radius.lg },
   heroOrderNo: { fontSize: font.lg, fontWeight: '700', color: colors.primary, fontFamily: font.mono },
   heroEntry: { fontSize: font.sm, color: colors.textSecondary, marginTop: 4 },
+  heroEntryTag: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#F5F3FF', paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.sm, alignSelf: 'flex-start', marginTop: 4, borderWidth: 1, borderColor: '#EDE9FE' },
+  heroEntryTagText: { fontSize: font.xs, fontFamily: font.mono, fontWeight: '700', color: '#7C3AED' },
   heroTags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
   statusBadge: { paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.sm },
   statusText: { fontSize: font.xs, fontWeight: '600' },

@@ -66,6 +66,39 @@ const ORDER_STATUS_LABEL: Record<string, string> = {
   DEPARTED: '已发车', IN_TRANSIT: '运输中', ARRIVED: '已到达', DELIVERED: '已签收',
 };
 
+type EntryStatus = '待使用' | '已关联' | '已入库' | '已失效';
+
+interface WarehouseEntry {
+  id: string;
+  entryNo: string;
+  status: EntryStatus;
+  warehouse: string;
+  orderId?: string;
+  orderNo?: string;
+  createdAt: string;
+  usedAt?: string;
+}
+
+const ENTRY_STATUS_META: Record<EntryStatus, { color: string; bg: string }> = {
+  '待使用': { color: colors.primary, bg: colors.primaryLight },
+  '已关联': { color: colors.info, bg: colors.infoLight },
+  '已入库': { color: colors.success, bg: colors.successLight },
+  '已失效': { color: colors.textTertiary, bg: colors.borderLight },
+};
+
+const WAREHOUSE_LIST = ['广州总仓', '深圳分仓', 'LOS 到达仓'];
+
+function generateEntryNo(shortCode: string, existingEntries: WarehouseEntry[]): string {
+  const maxSeq = existingEntries.reduce((max, e) => {
+    const seqStr = e.entryNo.slice(shortCode.length);
+    const n = parseInt(seqStr, 10);
+    return isNaN(n) ? max : Math.max(n, max);
+  }, 0);
+  const next = maxSeq + 1;
+  const digits = next > 999 ? 4 : 3;
+  return `${shortCode}${String(next).padStart(digits, '0')}`;
+}
+
 type TabKey = 'overview' | 'info' | 'address' | 'orders';
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'overview', label: '概览' },
@@ -88,6 +121,7 @@ export default function CustomerDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [detail, setDetail] = useState<CustomerDetail | null>(null);
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
+  const [entries, setEntries] = useState<WarehouseEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
@@ -107,12 +141,62 @@ export default function CustomerDetailScreen() {
       setDetail(detailRes.data);
       const allOrders = orderRes.data || [];
       setOrders(allOrders.filter((o: any) => o.customer_id === id));
+      // 初始化入仓号 (Mock: 每个仓库生成3-5个)
+      const code = detailRes.data.customerCode || 'XX';
+      const mockEntries: WarehouseEntry[] = [];
+      const customerOrders = allOrders.filter((o: any) => o.customer_id === id);
+      WAREHOUSE_LIST.forEach((wh) => {
+        const count = 3 + Math.floor(Math.random() * 3);
+        for (let i = 1; i <= count; i++) {
+          const entryNo = `${code}${String(i).padStart(3, '0')}`;
+          const linkedOrder = customerOrders.find((o: any) => o.warehouse_entry_no === entryNo);
+          mockEntries.push({
+            id: `${wh}-${i}`,
+            entryNo,
+            status: linkedOrder ? '已关联' : i === 1 ? '已入库' : '待使用',
+            warehouse: wh,
+            orderId: linkedOrder?.id,
+            orderNo: linkedOrder?.order_no,
+            createdAt: new Date(Date.now() - (count - i) * 86400000).toISOString(),
+            usedAt: linkedOrder ? new Date().toISOString() : undefined,
+          });
+        }
+      });
+      setEntries(mockEntries);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '请重试';
       Alert.alert('加载失败', msg);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGenerateEntry = (warehouse: string) => {
+    if (!detail) return;
+    const whEntries = entries.filter((e) => e.warehouse === warehouse);
+    const entryNo = generateEntryNo(detail.customerCode, entries);
+    const newEntry: WarehouseEntry = {
+      id: `${warehouse}-${Date.now()}`,
+      entryNo,
+      status: '待使用',
+      warehouse,
+      createdAt: new Date().toISOString(),
+    };
+    setEntries((prev) => [...prev, newEntry]);
+    Alert.alert('已生成', `入仓号 ${entryNo} 已生成\n仓库：${warehouse}`);
+  };
+
+  const handleInvalidateEntry = (entry: WarehouseEntry) => {
+    Alert.alert('作废入仓号', `确认作废 ${entry.entryNo} 吗？\n作废后该入仓号将不可使用。`, [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '作废', style: 'destructive',
+        onPress: () => {
+          setEntries((prev) => prev.map((e) => e.id === entry.id ? { ...e, status: '已失效' as EntryStatus } : e));
+          Alert.alert('已作废', `${entry.entryNo} 已标记为失效`);
+        },
+      },
+    ]);
   };
 
   const handleCall = (phone: string) => {
@@ -162,23 +246,83 @@ export default function CustomerDetailScreen() {
     );
   };
 
-  const renderOverview = (d: CustomerDetail) => (
-    <View style={styles.entrySection}>
-      <Text style={styles.entryLabel}>入仓号</Text>
-      <View style={styles.entryCard}>
-        <Text style={styles.entryCode}>{d.customerCode}</Text>
-        <Text style={styles.entryHint}>客户包裹填写此入仓号可自动关联订单</Text>
-      </View>
-      <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
-        {['广州总仓', '深圳分仓', 'LOS 到达仓'].map((wh, i) => (
-          <View key={i} style={styles.entryChip}>
-            <Text style={styles.entryChipLabel}>{wh}</Text>
-            <Text style={styles.entryChipValue}>{d.customerCode}-{['GZ', 'SZ', 'LOS'][i]}</Text>
+  const renderOverview = (d: CustomerDetail) => {
+    const availableEntries = entries.filter((e) => e.status === '待使用');
+    const usedEntries = entries.filter((e) => e.status === '已关联' || e.status === '已入库');
+    return (
+      <>
+        {/* 入仓号概览卡片 */}
+        <View style={styles.entrySection}>
+          <View style={styles.entryHeader}>
+            <Text style={styles.entryLabel}>入仓号管理</Text>
+            <View style={styles.entrySummary}>
+              <View style={styles.entryStat}>
+                <Text style={[styles.entryStatVal, { color: colors.primary }]}>{availableEntries.length}</Text>
+                <Text style={styles.entryStatLabel}>待使用</Text>
+              </View>
+              <View style={styles.entryStat}>
+                <Text style={[styles.entryStatVal, { color: colors.success }]}>{usedEntries.length}</Text>
+                <Text style={styles.entryStatLabel}>已使用</Text>
+              </View>
+            </View>
           </View>
-        ))}
-      </View>
-    </View>
-  );
+          <Text style={styles.entryHint}>客户包裹填写任一「待使用」入仓号，仓库收货后自动关联订单</Text>
+        </View>
+
+        {/* 按仓库列出入仓号 */}
+        {WAREHOUSE_LIST.map((wh) => {
+          const whEntries = entries.filter((e) => e.warehouse === wh);
+          const whAvailable = whEntries.filter((e) => e.status === '待使用');
+          return (
+            <View key={wh} style={styles.whSection}>
+              <View style={styles.whHeader}>
+                <Ionicons name="business-outline" size={16} color={colors.primary} />
+                <Text style={styles.whTitle}>{wh}</Text>
+                <View style={styles.whBadge}>
+                  <Text style={styles.whBadgeText}>{whAvailable.length} 个待使用</Text>
+                </View>
+                <TouchableOpacity style={styles.genBtn} onPress={() => handleGenerateEntry(wh)}>
+                  <Ionicons name="add-circle-outline" size={16} color={colors.primary} />
+                  <Text style={styles.genBtnText}>生成</Text>
+                </TouchableOpacity>
+              </View>
+              {whEntries.length === 0 ? (
+                <Text style={styles.whEmpty}>暂无入仓号，点击"生成"创建</Text>
+              ) : (
+                whEntries.map((e) => {
+                  const meta = ENTRY_STATUS_META[e.status];
+                  return (
+                    <View key={e.id} style={styles.entryRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.entryNoText, e.status === '已失效' && styles.entryNoInvalid]}>
+                          {e.entryNo}
+                        </Text>
+                        {e.orderNo && (
+                          <Text style={styles.entryOrderNo}>关联：{e.orderNo}</Text>
+                        )}
+                        <Text style={styles.entryTime}>
+                          {e.createdAt?.substring(0, 10)}
+                          {e.usedAt && ` · 使用于 ${e.usedAt.substring(0, 10)}`}
+                        </Text>
+                      </View>
+                      <View style={[styles.entryStatusBadge, { backgroundColor: meta.bg }]}>
+                        <Text style={[styles.entryStatusText, { color: meta.color }]}>{e.status}</Text>
+                      </View>
+                      {e.status === '待使用' && (
+                        <TouchableOpacity style={styles.invalidateBtn} onPress={() => handleInvalidateEntry(e)}>
+                          <Ionicons name="close-circle-outline" size={16} color={colors.danger} />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          );
+        })}
+      </>
+    );
+  };
 
   const renderInfo = (d: CustomerDetail) => (
     <>
@@ -419,14 +563,32 @@ const styles = StyleSheet.create({
   tabText: { fontSize: font.xs, color: colors.textSecondary },
   tabTextActive: { color: '#fff', fontWeight: '600' },
 
-  entrySection: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, borderLeftWidth: 3, borderLeftColor: colors.primary },
-  entryLabel: { fontSize: font.md, fontWeight: '600', color: colors.text, marginBottom: spacing.sm },
-  entryCard: { backgroundColor: colors.primaryLight, borderRadius: radius.md, padding: spacing.md },
-  entryCode: { fontSize: font.xxl, fontWeight: '800', color: colors.primary, fontFamily: font.mono, letterSpacing: 2 },
-  entryHint: { fontSize: font.xs, color: colors.textSecondary, marginTop: 4 },
-  entryChip: { flex: 1, padding: spacing.sm, backgroundColor: colors.bg, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderLight },
-  entryChipLabel: { fontSize: font.xs, color: colors.textSecondary },
-  entryChipValue: { fontSize: font.xs, color: colors.primary, fontWeight: '700', fontFamily: font.mono, marginTop: 2 },
+  entrySection: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, borderLeftWidth: 3, borderLeftColor: colors.primary, marginBottom: spacing.md },
+  entryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.sm },
+  entryLabel: { fontSize: font.md, fontWeight: '600', color: colors.text },
+  entrySummary: { flexDirection: 'row', gap: spacing.lg },
+  entryStat: { alignItems: 'center' },
+  entryStatVal: { fontSize: font.xl, fontWeight: '800' },
+  entryStatLabel: { fontSize: 10, color: colors.textTertiary },
+  entryHint: { fontSize: font.xs, color: colors.textSecondary },
+  // 仓库区块
+  whSection: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.md },
+  whHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
+  whTitle: { fontSize: font.md, fontWeight: '600', color: colors.text, flex: 1 },
+  whBadge: { backgroundColor: colors.primaryLight, paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.sm },
+  whBadgeText: { fontSize: font.xs, color: colors.primary, fontWeight: '500' },
+  whEmpty: { fontSize: font.xs, color: colors.textTertiary, textAlign: 'center', paddingVertical: spacing.md },
+  genBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.primary },
+  genBtnText: { fontSize: font.xs, color: colors.primary, fontWeight: '600' },
+  // 入仓号行
+  entryRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, borderTopWidth: 0.5, borderTopColor: colors.borderLight, gap: spacing.sm },
+  entryNoText: { fontSize: font.sm, fontFamily: font.mono, fontWeight: '700', color: colors.primary },
+  entryNoInvalid: { color: colors.textTertiary, textDecorationLine: 'line-through' },
+  entryOrderNo: { fontSize: font.xs, color: colors.textSecondary, marginTop: 2 },
+  entryTime: { fontSize: font.xs, color: colors.textTertiary, marginTop: 1 },
+  entryStatusBadge: { paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.sm },
+  entryStatusText: { fontSize: font.xs, fontWeight: '600' },
+  invalidateBtn: { padding: 4 },
 
   section: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.md },
   sectionTitle: { fontSize: font.md, fontWeight: '600', color: colors.text, marginBottom: spacing.md },
