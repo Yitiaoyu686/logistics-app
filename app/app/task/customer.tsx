@@ -304,9 +304,6 @@ export default function CustomerScreen({ embedded = false }: CustomerScreenProps
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
         )}
-          <TouchableOpacity onPress={() => router.push('/task/customer-create' as any)} style={styles.navBtn}>
-          <Ionicons name="add-circle-outline" size={24} color={colors.primary} />
-        </TouchableOpacity>
       </View>
 
       <View style={styles.poolTabs}>
