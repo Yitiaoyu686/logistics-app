@@ -7,7 +7,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, radius, font } from '../../lib/theme';
+import { colors, spacing, radius, font, shadow } from '../../lib/theme';
 import { customerApi } from '../../lib/api';
 import { safeBack } from '../../lib/nav';
 
@@ -41,14 +41,13 @@ const TYPE_LABEL: Record<string, string> = {
   PERSONAL: '个人客户',
 };
 
-// 根据名字生成固定颜色（避免全灰）
 const AVATAR_COLORS = [
-  { bg: '#EFF6FF', text: '#2563EB' }, // 蓝
-  { bg: '#F0FDF4', text: '#059669' }, // 绿
-  { bg: '#FFF7ED', text: '#D97706' }, // 橙
-  { bg: '#FDF4FF', text: '#9333EA' }, // 紫
-  { bg: '#FFF1F2', text: '#E11D48' }, // 红
-  { bg: '#F0FDFA', text: '#0D9488' }, // 青
+  { bg: '#EFF6FF', text: '#2563EB' },
+  { bg: '#F0FDF4', text: '#059669' },
+  { bg: '#FFF7ED', text: '#D97706' },
+  { bg: '#FDF4FF', text: '#9333EA' },
+  { bg: '#FFF1F2', text: '#E11D48' },
+  { bg: '#F0FDFA', text: '#0D9488' },
 ];
 
 function getAvatarColor(name: string) {
@@ -185,67 +184,111 @@ export default function CustomerScreen({ embedded = false }: CustomerScreenProps
   const renderListItem = ({ item }: { item: CustomerListItem }) => {
     const avatarColor = getAvatarColor(item.customerName || '?');
     const typeLabel = TYPE_LABEL[item.customerType] || item.customerType;
+    const statusColor =
+      item.status === 'ACTIVE' ? colors.success :
+      item.status === 'SLEEP' ? colors.warning :
+      item.status === 'FROZEN' ? colors.danger : colors.textTertiary;
+    const isOverseas = item.customerType === 'COMPANY_OS' || item.customerType === 'COMPANY_OVERSEAS';
     return (
-      <View>
+      <View style={styles.cardOuter}>
         <TouchableOpacity
           style={styles.card}
           onPress={() => router.push({ pathname: '/task/customer-detail' as any, params: { id: item.id } })}
           activeOpacity={0.7}
         >
+          {/* 左侧状态色条 */}
+          <View style={[styles.statusStripe, { backgroundColor: statusColor }]} />
+          {/* Squircle 头像 */}
           <View style={[styles.avatar, { backgroundColor: avatarColor.bg }]}>
             <Text style={[styles.avatarText, { color: avatarColor.text }]}>{(item.customerName || '?')[0]}</Text>
           </View>
-          <View style={{ flex: 1 }}>
-            <View style={styles.cardHeader}>
+          {/* 主信息区 */}
+          <View style={styles.cardBody}>
+            <View style={styles.topRow}>
               <Text style={styles.customerName} numberOfLines={1}>{item.customerName}</Text>
+              {isOverseas && (
+                <View style={styles.overseasBadge}>
+                  <Text style={styles.overseasBadgeText}>海外</Text>
+                </View>
+              )}
               <View style={styles.codeBadge}>
                 <Text style={styles.codeText}>{item.customerCode}</Text>
               </View>
             </View>
-            <View style={styles.contactRow}>
-              {item.contactName ? <Text style={styles.contactName}>{item.contactName}</Text> : null}
-              {item.contactName && item.contactPhone ? <Text style={styles.contactDot}>·</Text> : null}
-              {item.contactPhone ? (
-                <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleCall(item.contactPhone); }}>
-                  <Text style={styles.contactPhone}>{item.contactPhone}</Text>
-                </TouchableOpacity>
+            <View style={styles.metaRow}>
+              <View style={styles.metaItem}>
+                <Ionicons name="business-outline" size={12} color={colors.textTertiary} />
+                <Text style={styles.metaText}>{typeLabel}</Text>
+              </View>
+              {item.industry ? (
+                <View style={styles.metaItem}>
+                  <Text style={styles.metaSeparator}>·</Text>
+                  <Ionicons name="layers-outline" size={12} color={colors.textTertiary} />
+                  <Text style={styles.metaText}>{item.industry}</Text>
+                </View>
+              ) : null}
+              {item.country ? (
+                <View style={styles.metaItem}>
+                  <Text style={styles.metaSeparator}>·</Text>
+                  <Ionicons name="globe-outline" size={12} color={colors.textTertiary} />
+                  <Text style={styles.metaText}>{item.country}</Text>
+                </View>
               ) : null}
             </View>
-            <View style={styles.cardFooter}>
-              <Text style={styles.typeText}>{typeLabel}</Text>
-              <View style={styles.orderCountBadge}>
-                <Text style={styles.orderCount}>{item.orderCount || 0} 单</Text>
+            <View style={styles.bottomRow}>
+              <View style={styles.contactGroup}>
+                {item.contactName ? (
+                  <View style={styles.contactChip}>
+                    <Ionicons name="person-outline" size={12} color={colors.primary} />
+                    <Text style={styles.contactChipText}>{item.contactName}</Text>
+                  </View>
+                ) : null}
+                {item.contactPhone ? (
+                  <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleCall(item.contactPhone); }}>
+                    <View style={styles.phoneChip}>
+                      <Ionicons name="call-outline" size={12} color={colors.info} />
+                      <Text style={styles.phoneChipText}>{item.contactPhone}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+              <View style={styles.rightMeta}>
+                <View style={styles.orderCountBadge}>
+                  <Ionicons name="document-text-outline" size={11} color={colors.primary} />
+                  <Text style={styles.orderCount}>{item.orderCount || 0} 单</Text>
+                </View>
               </View>
             </View>
           </View>
-          {tab === 'PUBLIC' ? (
-            <TouchableOpacity
-              style={styles.claimBtn}
-              onPress={(e) => { e.stopPropagation(); handleClaim(item); }}
-              disabled={actionLoading}
-            >
-              <Text style={styles.claimBtnText}>认领</Text>
-            </TouchableOpacity>
-          ) : null}
-        </TouchableOpacity>
-        {tab === 'PRIVATE' && (
-          <View style={styles.cardActions}>
-            <TouchableOpacity
-              style={styles.cardActionBtn}
-              onPress={(e) => { e.stopPropagation(); handleTransfer(item); }}
-            >
-              <Ionicons name="swap-horizontal-outline" size={14} color={colors.primary} />
-              <Text style={styles.cardActionText}>转移</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.cardActionBtn, styles.cardActionBtnDanger]}
-              onPress={(e) => { e.stopPropagation(); handleDelete(item); }}
-            >
-              <Ionicons name="trash-outline" size={14} color={colors.danger} />
-              <Text style={[styles.cardActionText, { color: colors.danger }]}>删除</Text>
-            </TouchableOpacity>
+          {/* 右侧操作区 */}
+          <View style={styles.actionColumn}>
+            {tab === 'PUBLIC' ? (
+              <TouchableOpacity
+                style={styles.claimBtn}
+                onPress={(e) => { e.stopPropagation(); handleClaim(item); }}
+                disabled={actionLoading}
+              >
+                <Ionicons name="hand-left-outline" size={16} color="#fff" />
+                <Text style={styles.claimBtnText}>认领</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.privateActions}>
+                <TouchableOpacity
+                  style={styles.iconActionBtn}
+                  onPress={(e) => { e.stopPropagation(); handleTransfer(item); }}
+                >
+                  <Ionicons name="swap-horizontal-outline" size={18} color={colors.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.iconActionBtn, styles.iconActionBtnDanger]}
+                  onPress={(e) => { e.stopPropagation(); handleDelete(item); }}
+                >
+                  <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
-        )}
+        </TouchableOpacity>
       </View>
     );
   };
@@ -374,26 +417,202 @@ const styles = StyleSheet.create({
   chipTextActive: { color: '#fff', fontWeight: '600' },
 
   // 列表
-  listContent: { padding: spacing.md, gap: spacing.md },
-  card: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.sm, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 },
-  avatar: { width: 46, height: 46, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  listContent: { padding: spacing.md, gap: spacing.sm },
+
+  // ── 卡片 ──
+  cardOuter: {
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    ...shadow.md,
+  },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+  },
+  // 左侧状态色条
+  statusStripe: {
+    width: 4,
+    alignSelf: 'stretch',
+    borderRadius: 2,
+    marginVertical: spacing.sm,
+    marginLeft: spacing.xs,
+  },
+
+  // 头像 - squircle 风格
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    marginLeft: spacing.md,
+  },
   avatarText: { fontSize: font.lg, fontWeight: '800' },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: 3 },
-  customerName: { flex: 1, fontSize: font.md, fontWeight: '600', color: colors.text },
-  codeBadge: { backgroundColor: colors.bg, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.sm },
-  codeText: { fontSize: font.xs, fontFamily: font.mono, color: colors.textSecondary },
-  contactRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 5 },
-  contactName: { fontSize: font.sm, color: colors.textSecondary },
-  contactDot: { fontSize: font.sm, color: colors.textTertiary },
-  contactPhone: { fontSize: font.sm, color: colors.info },
-  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  typeText: { fontSize: font.xs, color: colors.textSecondary },
-  orderCountBadge: { backgroundColor: colors.primaryLight, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.sm },
-  orderCount: { fontSize: font.xs, color: colors.primary, fontWeight: '600' },
-  claimBtn: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, backgroundColor: colors.primary, borderRadius: radius.md },
-  claimBtnText: { color: '#fff', fontSize: font.sm, fontWeight: '600' },
-  cardActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 0.5, borderTopColor: colors.borderLight },
-  cardActionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border },
-  cardActionBtnDanger: { borderColor: colors.dangerLight },
-  cardActionText: { fontSize: font.xs, color: colors.primary, fontWeight: '500' },
+
+  // 主信息区
+  cardBody: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    paddingLeft: spacing.md,
+  },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: 5,
+  },
+  customerName: {
+    fontSize: font.md,
+    fontWeight: '700',
+    color: colors.text,
+    flexShrink: 1,
+  },
+  overseasBadge: {
+    backgroundColor: colors.infoLight,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: radius.sm,
+  },
+  overseasBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.info,
+  },
+  codeBadge: {
+    backgroundColor: colors.bg,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.sm,
+  },
+  codeText: {
+    fontSize: font.xs,
+    fontFamily: font.mono,
+    color: colors.textSecondary,
+  },
+
+  // 元信息行：企业类型 · 行业 · 国家
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 2,
+    marginBottom: 7,
+  },
+  metaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  metaText: {
+    fontSize: font.xs,
+    color: colors.textSecondary,
+  },
+  metaSeparator: {
+    fontSize: font.xs,
+    color: colors.textTertiary,
+    marginHorizontal: 2,
+  },
+
+  // 底部行：联系人 + 单数
+  bottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  contactGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flex: 1,
+    flexWrap: 'wrap',
+  },
+  contactChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radius.sm,
+  },
+  contactChipText: {
+    fontSize: font.xs,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  phoneChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: colors.infoLight,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radius.sm,
+  },
+  phoneChipText: {
+    fontSize: font.xs,
+    color: colors.info,
+    fontWeight: '600',
+  },
+  rightMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  orderCountBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: colors.primaryLight,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radius.sm,
+  },
+  orderCount: {
+    fontSize: font.xs,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+
+  // 右侧操作区
+  actionColumn: {
+    paddingRight: spacing.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minWidth: 52,
+  },
+  claimBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.primary,
+    borderRadius: radius.md,
+    ...shadow.sm,
+  },
+  claimBtnText: {
+    color: '#fff',
+    fontSize: font.sm,
+    fontWeight: '700',
+  },
+  privateActions: {
+    gap: spacing.sm,
+    alignItems: 'center',
+  },
+  iconActionBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: colors.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconActionBtnDanger: {
+    backgroundColor: colors.dangerLight,
+  },
 });
