@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import http from 'http';
+import path from 'path';
 import { createTables } from './database/schema';
 import { seedDatabase } from './database/seed';
 import authRoutes from './routes/auth';
@@ -61,20 +61,10 @@ app.use('/api', systemRoutes);
 // Web 端旧接口兼容层
 app.use('/api', compatRoutes);
 
-// 非 API 请求代理到 Expo Metro (8082)，统一走 ngrok 域名
-app.use('/', (req, res) => {
-  const fwd: Record<string, string> = {};
-  for (const [k, v] of Object.entries(req.headers)) {
-    if (!['host', 'connection', 'keep-alive', 'transfer-encoding', 'upgrade'].includes(k.toLowerCase())) {
-      fwd[k] = v as string;
-    }
-  }
-  const proxy = http.request({ hostname: 'localhost', port: 8082, path: req.url, method: req.method, headers: fwd }, (pres) => {
-    res.writeHead(pres.statusCode || 200, pres.headers);
-    pres.pipe(res);
-  });
-  proxy.on('error', () => { res.status(502).send('Frontend unavailable'); });
-  req.pipe(proxy);
+// 前端静态构建文件
+app.use(express.static(path.join(__dirname, '../../app/dist')));
+app.use((_req, res) => {
+  res.sendFile(path.join(__dirname, '../../app/dist/index.html'));
 });
 
 // Start server
