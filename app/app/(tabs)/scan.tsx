@@ -338,7 +338,7 @@ const ts = StyleSheet.create({
 
   searchBar: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    marginHorizontal: spacing.lg, marginBottom: spacing.lg,
+    marginHorizontal: spacing.lg, marginTop: spacing.md, marginBottom: spacing.lg,
     backgroundColor: colors.card, borderRadius: radius.lg,
     borderWidth: 1, borderColor: colors.border,
     paddingHorizontal: spacing.md, height: 44,
