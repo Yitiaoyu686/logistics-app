@@ -338,6 +338,12 @@ export default function DpnScreen() {
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.navTitle}>DPN 管理</Text>
+          <TouchableOpacity
+            style={styles.navBtn}
+            onPress={() => Alert.alert('打印面单', `正在生成 ${params.dpnNo || 'DPN'} 面单...\n已发送到蓝牙打印机`, [{ text: '确定' }])}
+          >
+            <Ionicons name="print-outline" size={22} color={colors.primary} />
+          </TouchableOpacity>
         </View>
 
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">

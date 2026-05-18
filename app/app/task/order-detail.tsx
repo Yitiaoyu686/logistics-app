@@ -327,7 +327,12 @@ export default function OrderDetailScreen() {
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.navTitle}>订单详情</Text>
-        <View style={styles.navBtn} />
+        <TouchableOpacity
+          style={styles.navBtn}
+          onPress={() => detail && router.push({ pathname: '/task/order-edit' as any, params: { id: detail.id } })}
+        >
+          <Ionicons name="create-outline" size={22} color={colors.primary} />
+        </TouchableOpacity>
       </View>
 
       {loading ? (

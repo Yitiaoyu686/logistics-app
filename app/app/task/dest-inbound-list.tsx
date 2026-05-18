@@ -129,7 +129,15 @@ export default function DestInboundListScreen() {
         </View>
         <View style={styles.cardFooter}>
           <Text style={styles.statText}>{item.total_pieces}件 · {item.total_weight_kg}kg</Text>
-          {item.eta && <Text style={styles.dateText}>ETA {item.eta.substring(5, 10)}</Text>}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+            {item.eta && <Text style={styles.dateText}>ETA {item.eta.substring(5, 10)}</Text>}
+            <TouchableOpacity
+              style={styles.detailBtn}
+              onPress={() => router.push({ pathname: '/task/dest-job-detail' as any, params: { jobId: item.id, jobNo: item.job_no } })}
+            >
+              <Text style={styles.detailBtnText}>详情</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -264,4 +272,6 @@ const styles = StyleSheet.create({
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   statText: { fontSize: font.xs, color: colors.text, fontWeight: '600' },
   dateText: { fontSize: font.xs, color: colors.textTertiary, fontFamily: font.mono },
+  detailBtn: { paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.primaryLight },
+  detailBtnText: { fontSize: font.xs, color: colors.primary, fontWeight: '600' },
 });
