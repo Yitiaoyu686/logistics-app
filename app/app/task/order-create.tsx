@@ -123,7 +123,7 @@ export default function OrderCreateScreen() {
         weight: Number(params.weightKg) || 0,
       }];
     }
-    return [{ expressCompany: '顺丰', trackingNo: '', goodsName: '', goodsCategory: 'OTHER', pieces: 1, weight: 0 }];
+    return [];
   });
 
   // Step 3: 发货 + 收货信息
@@ -204,9 +204,10 @@ export default function OrderCreateScreen() {
       if (!customerId) { Alert.alert('请选择客户'); return; }
     }
     if (step === 2) {
-      if (packages.length === 0) { Alert.alert('请至少添加一个包裹'); return; }
-      const invalid = packages.find((p) => !p.goodsName || !p.pieces);
-      if (invalid) { Alert.alert('请填写所有包裹的品名和件数'); return; }
+      if (packages.length > 0) {
+        const invalid = packages.find((p) => p.goodsName && !p.pieces);
+        if (invalid) { Alert.alert('已填写品名的包裹请补充件数'); return; }
+      }
     }
     if (step === 3) {
       if (!senderName || !senderPhone || !senderAddress) {
@@ -221,13 +222,11 @@ export default function OrderCreateScreen() {
 
   const submitHint = !customerId
     ? '请先选择客户'
-    : packages.length === 0
-      ? '请至少添加一个包裹'
-      : !senderName || !senderPhone || !senderAddress
-        ? '发货信息不完整'
-        : !consigneeName || !consigneePhone || !consigneeAddress
-          ? '收货信息不完整'
-          : null;
+    : !senderName || !senderPhone || !senderAddress
+      ? '发货信息不完整'
+      : !consigneeName || !consigneePhone || !consigneeAddress
+        ? '收货信息不完整'
+        : null;
 
   const handleSubmit = async () => {
     if (submitHint) return;
@@ -292,7 +291,7 @@ export default function OrderCreateScreen() {
       const successMsg = `运单号:${res.data?.orderNo}\n入仓号:${res.data?.warehouseEntryNo}${fromUnmatchedId ? '\n已自动关联无单快递' : ''}`;
       const resetForm = () => {
         setStep(1);
-        setPackages([{ expressCompany: '顺丰', trackingNo: '', goodsName: '', goodsCategory: 'OTHER', pieces: 1, weight: 0 }]);
+        setPackages([]);
       };
       if (Platform.OS === 'web') {
         window.alert(`${successTitle}\n${successMsg}`);
@@ -392,11 +391,21 @@ export default function OrderCreateScreen() {
 
   const renderStep2 = () => (
     <ScrollView contentContainerStyle={styles.scroll}>
-      <View style={styles.summaryBar}>
-        <Text style={styles.summaryText}>
-          共 {packages.length} 个包裹 · {totalPieces} 件 · {totalWeight.toFixed(1)} kg
-        </Text>
-      </View>
+      {packages.length > 0 && (
+        <View style={styles.summaryBar}>
+          <Text style={styles.summaryText}>
+            共 {packages.length} 个包裹 · {totalPieces} 件 · {totalWeight.toFixed(1)} kg
+          </Text>
+        </View>
+      )}
+
+      {packages.length === 0 && (
+        <View style={styles.emptyPackagesHint}>
+          <Ionicons name="cube-outline" size={36} color={colors.textTertiary} />
+          <Text style={styles.emptyPackagesTitle}>暂未添加包裹</Text>
+          <Text style={styles.emptyPackagesDesc}>包裹可在后续环节补录，现在可以跳过</Text>
+        </View>
+      )}
 
       {packages.map((pkg, idx) => (
         <View key={idx} style={styles.section}>
@@ -422,7 +431,7 @@ export default function OrderCreateScreen() {
             ))}
           </ScrollView>
 
-          <FormField label="快递单号" value={pkg.trackingNo} onChangeText={(v) => updatePackage(idx, { trackingNo: v })} placeholder="可扫码自动填入" />
+          <FormField label="快递单号" value={pkg.trackingNo} onChangeText={(v) => updatePackage(idx, { trackingNo: v })} placeholder="快递单号（选填）" />
 
           <FormField label="品名 *" value={pkg.goodsName} onChangeText={(v) => updatePackage(idx, { goodsName: v })} placeholder="货物名称" />
 
@@ -853,6 +862,9 @@ const styles = StyleSheet.create({
 
   summaryBar: { backgroundColor: colors.primaryLight, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md },
   summaryText: { fontSize: font.sm, color: colors.primary, fontWeight: '600', textAlign: 'center' },
+  emptyPackagesHint: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.xxl, alignItems: "center", marginBottom: spacing.md, borderWidth: 1.5, borderStyle: "dashed", borderColor: colors.border },
+  emptyPackagesTitle: { fontSize: font.md, fontWeight: "600", color: colors.textSecondary, marginTop: spacing.md },
+  emptyPackagesDesc: { fontSize: font.sm, color: colors.textTertiary, marginTop: spacing.xs },
 
   pkgHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
   row2: { flexDirection: 'row', gap: spacing.md },
