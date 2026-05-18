@@ -51,6 +51,23 @@ export default function CustomerCreateScreen() {
   const [preferredTransport, setPreferredTransport] = useState<Transport>('SEA');
   const [remark, setRemark] = useState('');
 
+  // 企业资质信息
+  const [companyFullName, setCompanyFullName] = useState('');
+  const [creditCode, setCreditCode] = useState('');
+  const [legalPerson, setLegalPerson] = useState('');
+  const [regAddress, setRegAddress] = useState('');
+  const [taxId, setTaxId] = useState('');
+  const [invoiceAddress, setInvoiceAddress] = useState('');
+  const [invoicePhone, setInvoicePhone] = useState('');
+  const [bankName, setBankName] = useState('');
+  const [bankAccount, setBankAccount] = useState('');
+  const [overseasRegNo, setOverseasRegNo] = useState('');
+  const [overseasTin, setOverseasTin] = useState('');
+  const [overseasPrincipal, setOverseasPrincipal] = useState('');
+  const [idType, setIdType] = useState<'ID_CARD' | 'PASSPORT'>('ID_CARD');
+  const [idNumber, setIdNumber] = useState('');
+  const [enterpriseCollapsed, setEnterpriseCollapsed] = useState(true);
+
   useEffect(() => {
     AsyncStorage.getItem('user').then((u) => {
       if (u) setCurrentUserId(JSON.parse(u).id);
@@ -74,6 +91,21 @@ export default function CustomerCreateScreen() {
         poolType: 'PRIVATE',
         status: 'ACTIVE',
         remark: remark || undefined,
+        // 企业资质
+        companyFullName: companyFullName || undefined,
+        creditCode: creditCode || undefined,
+        legalPerson: legalPerson || undefined,
+        regAddress: regAddress || undefined,
+        taxId: taxId || undefined,
+        invoiceAddress: invoiceAddress || undefined,
+        invoicePhone: invoicePhone || undefined,
+        bankName: bankName || undefined,
+        bankAccount: bankAccount || undefined,
+        overseasRegNo: overseasRegNo || undefined,
+        overseasTin: overseasTin || undefined,
+        overseasPrincipal: overseasPrincipal || undefined,
+        idType: customerType === 'INDIVIDUAL' ? idType : undefined,
+        idNumber: idNumber || undefined,
       });
       // 同时弹 Alert 和返回,原生端 Alert 能正常弹出
       Alert.alert('创建成功', `客户编号：${res.data?.customerCode || '-'}`, [
@@ -170,6 +202,90 @@ export default function CustomerCreateScreen() {
             <FormField label="联系人 *" value={contactName} onChangeText={setContactName} placeholder="联系人姓名" />
             <FormField label="电话 *" value={contactPhone} onChangeText={setContactPhone} placeholder="联系电话" keyboardType="phone-pad" />
             <FormField label="邮箱" value={contactEmail} onChangeText={setContactEmail} placeholder="邮箱（可选）" keyboardType="email-address" />
+          </View>
+
+          {/* 企业资质信息 */}
+          <View style={styles.section}>
+            <TouchableOpacity style={styles.collapseHeader} onPress={() => setEnterpriseCollapsed(!enterpriseCollapsed)}>
+              <Ionicons name={enterpriseCollapsed ? 'chevron-forward-outline' : 'chevron-down-outline'} size={18} color={colors.primary} />
+              <Text style={styles.sectionTitle}>企业资质信息</Text>
+              <Text style={styles.collapseHint}>{enterpriseCollapsed ? '展开填写' : '收起'}</Text>
+            </TouchableOpacity>
+
+            {!enterpriseCollapsed && (
+              <>
+                {customerType === 'COMPANY_CN' && (
+                  <>
+                    <FormField label="公司全称" value={companyFullName} onChangeText={setCompanyFullName} placeholder="营业执照上的公司全称" />
+                    <View style={styles.formRow}>
+                      <View style={styles.formHalf}>
+                        <FormField label="信用代码" value={creditCode} onChangeText={setCreditCode} placeholder="18位统一社会信用代码" />
+                      </View>
+                      <View style={styles.formHalf}>
+                        <FormField label="法定代表人" value={legalPerson} onChangeText={setLegalPerson} placeholder="法人姓名" />
+                      </View>
+                    </View>
+                    <FormField label="注册地址" value={regAddress} onChangeText={setRegAddress} placeholder="营业执照注册地址" />
+                    <View style={styles.formRow}>
+                      <View style={styles.formHalf}>
+                        <FormField label="纳税人识别号" value={taxId} onChangeText={setTaxId} placeholder="税号" />
+                      </View>
+                      <View style={styles.formHalf}>
+                        <FormField label="开票电话" value={invoicePhone} onChangeText={setInvoicePhone} placeholder="开票电话" keyboardType="phone-pad" />
+                      </View>
+                    </View>
+                    <FormField label="开票地址" value={invoiceAddress} onChangeText={setInvoiceAddress} placeholder="开票地址" />
+                  </>
+                )}
+
+                {customerType === 'COMPANY_OVERSEAS' && (
+                  <>
+                    <FormField label="公司名称" value={companyFullName} onChangeText={setCompanyFullName} placeholder="海外公司注册名称" />
+                    <FormField label="注册国家" value={regAddress} onChangeText={setRegAddress} placeholder="如：尼日利亚、加纳" />
+                    <View style={styles.formRow}>
+                      <View style={styles.formHalf}>
+                        <FormField label="注册号" value={overseasRegNo} onChangeText={setOverseasRegNo} placeholder="公司注册号" />
+                      </View>
+                      <View style={styles.formHalf}>
+                        <FormField label="税号 TIN" value={overseasTin} onChangeText={setOverseasTin} placeholder="税务识别号" />
+                      </View>
+                    </View>
+                    <FormField label="负责人" value={overseasPrincipal} onChangeText={setOverseasPrincipal} placeholder="公司负责人" />
+                  </>
+                )}
+
+                {customerType === 'INDIVIDUAL' && (
+                  <>
+                    <FormField label="姓名" value={companyFullName} onChangeText={setCompanyFullName} placeholder="证件姓名" />
+                    <Text style={styles.formLabel}>证件类型</Text>
+                    <View style={styles.optionRow}>
+                      {(['ID_CARD', 'PASSPORT'] as const).map((t) => (
+                        <TouchableOpacity
+                          key={t}
+                          style={[styles.optionBtn, idType === t && styles.optionBtnActive]}
+                          onPress={() => setIdType(t)}
+                        >
+                          <Text style={[styles.optionText, idType === t && styles.optionTextActive]}>
+                            {t === 'ID_CARD' ? '身份证' : '护照'}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    <FormField label="证件号码" value={idNumber} onChangeText={setIdNumber} placeholder="证件号码" />
+                  </>
+                )}
+
+                {/* 银行信息 — 所有类型共用 */}
+                <View style={styles.formRow}>
+                  <View style={styles.formHalf}>
+                    <FormField label="开户银行" value={bankName} onChangeText={setBankName} placeholder="开户银行" />
+                  </View>
+                  <View style={styles.formHalf}>
+                    <FormField label="银行账号" value={bankAccount} onChangeText={setBankAccount} placeholder="银行账号" />
+                  </View>
+                </View>
+              </>
+            )}
           </View>
 
           {/* 物流偏好 */}
@@ -295,6 +411,11 @@ const styles = StyleSheet.create({
   chipRow: { gap: spacing.sm, paddingVertical: spacing.xs },
   chip: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
   chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+
+  collapseHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  collapseHint: { fontSize: font.xs, color: colors.textTertiary, marginLeft: 'auto' as const },
+  formRow: { flexDirection: 'row', gap: spacing.md },
+  formHalf: { flex: 1 },
   chipText: { fontSize: font.sm, color: colors.textSecondary },
   chipTextActive: { color: '#fff', fontWeight: '600' },
 
