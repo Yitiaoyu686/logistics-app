@@ -1,0 +1,126 @@
+[03:28:14] 🚀 Starting WAREHOUSE_CN E2E Test
+[03:28:14] Screenshots: /Users/mac/Documents/code/111/docs/comparison-screenshots/web-warehouse-cn
+[03:28:15] 
+========== STEP 1: LOGIN ==========
+[03:28:19] Header after login: OK - 李仓管
+[03:28:19] Default domain: should be 海运业务
+[03:28:19] 
+========== STEP 2: DASHBOARD (工作台) ==========
+[03:28:21]   📸 Screenshot: /Users/mac/Documents/code/111/docs/comparison-screenshots/web-warehouse-cn/web-warehouse-cn--01-dashboard.png
+[03:28:21] Sidebar menu items:
+[03:28:21]   - 工作台
+[03:28:21]   - 订单中心
+[03:28:21]   - 起运国仓储
+[03:28:21]   - 海运业务
+[03:28:21]   - 空运业务
+[03:28:21] Sidebar submenus:
+[03:28:21]   - 
+[03:28:21] 
+========== STEP 3a: 订单中心 > 订单列表 ==========
+[03:28:21]   Clicking menu: "订单中心"
+[03:28:23] 
+=== Testing: 02-订单列表 ===
+[03:28:25]   >>> Table Rows: 10 rows
+[03:28:25]   >>> Enabled Buttons: 查询 | 重 置 | 高级筛选 | 新建订单 | 详情 | 编辑 | 取消订单 | 暂停
+[03:28:25]   📸 Screenshot: /Users/mac/Documents/code/111/docs/comparison-screenshots/web-warehouse-cn/web-warehouse-cn--02-订单列表.png
+[03:28:25] 
+========== STEP 3b: 起运国仓储 Submenu ==========
+[03:28:25]   Clicking menu: "起运国仓储"
+[03:28:28]   Clicking menu: "起运国仓储"
+[03:28:31] Tabs visible: 快递入库 | 调拨入库 | 退回入库 | 库存列表 | 无订单快递 | 任务执行 | 调拨管理 | 退运处理
+[03:28:31] 
+--- 快递入库 ---
+[03:28:31]   Switching to tab: "快递入库"
+[03:28:32] 
+=== Testing: 03a-快递入库 ===
+[03:28:34]   >>> Table Rows: 20 rows
+[03:28:34]   >>> Enabled Buttons: 查询 | 重置 | 添加三方快递
+[03:28:34]   >>> DISABLED Buttons: 完成入库
+[03:28:34]   📸 Screenshot: /Users/mac/Documents/code/111/docs/comparison-screenshots/web-warehouse-cn/web-warehouse-cn--03a-快递入库.png
+[03:28:35]   ℹ️ No detail drawer on row click
+[03:28:35] 
+--- 调拨入库 ---
+[03:28:35]   Switching to tab: "调拨入库"
+[03:28:37] 
+=== Testing: 03b-调拨入库 ===
+[03:28:38]   >>> Table Rows: 1 rows
+[03:28:38]   >>> Enabled Buttons: 查询 | 重置 | 入库 | 清单
+[03:28:38]   📸 Screenshot: /Users/mac/Documents/code/111/docs/comparison-screenshots/web-warehouse-cn/web-warehouse-cn--03b-调拨入库.png
+[03:28:39] 
+--- 退回入库 ---
+[03:28:39]   Switching to tab: "退回入库"
+[03:28:41] 
+=== Testing: 03c-退回入库 ===
+[03:28:42]   >>> Table Rows: 2 rows
+[03:28:42]   >>> Enabled Buttons: 查询 | 重置 | 入库 | 清单
+[03:28:42]   📸 Screenshot: /Users/mac/Documents/code/111/docs/comparison-screenshots/web-warehouse-cn/web-warehouse-cn--03c-退回入库.png
+[03:28:43] 
+--- 库存列表 ---
+[03:28:43]   Switching to tab: "库存列表"
+[03:28:45] 
+=== Testing: 03d-库存列表 ===
+[03:28:47]   >>> Table Rows: 20 rows
+[03:28:47]   >>> Enabled Buttons: 查询 | 重 置 | 刷新 | 编辑 | 打印 | 退运
+[03:28:47]   📸 Screenshot: /Users/mac/Documents/code/111/docs/comparison-screenshots/web-warehouse-cn/web-warehouse-cn--03d-库存列表.png
+[03:28:48] 
+--- 无订单快递 ---
+[03:28:48]   Switching to tab: "无订单快递"
+[03:28:50] 
+=== Testing: 03e-无订单快递 ===
+[03:28:51]   >>> Table Rows: 3 rows
+[03:28:51]   >>> Enabled Buttons: 查询 | 重 置 | 新增无订单快递 | 详情 | 编辑 | 匹配 | 创单 | 通知 | 退回 | 删除
+[03:28:52]   📸 Screenshot: /Users/mac/Documents/code/111/docs/comparison-screenshots/web-warehouse-cn/web-warehouse-cn--03e-无订单快递.png
+[03:28:52] 
+--- 任务执行(海运) ---
+[03:28:52]   Switching to tab: "任务执行"
+[03:28:53] 
+=== Testing: 03f-任务执行-海运 ===
+[03:28:55]   >>> Table Rows: 3 rows
+[03:28:55]   >>> Enabled Buttons: 查询 | 重 置 | 刷新 | 创建线路 | 添加订单 | 执行出库 | 详情 | 绑定任务
+[03:28:55]   >>> DISABLED Buttons: 添加订单
+[03:28:55]   📸 Screenshot: /Users/mac/Documents/code/111/docs/comparison-screenshots/web-warehouse-cn/web-warehouse-cn--03f-任务执行-海运.png
+[03:28:55]   Action column content examples: 2026/05/18 11:28 | 2026/05/18 11:28 | 2026/05/18 11:28
+[03:28:55]   All visible buttons: 查询 | 重 置 | 刷新 | 创建线路 | 添加订单 | 执行出库 | 详情 | 绑定任务 | 添加订单(disabled)
+[03:28:56] 
+--- Switching to AIR domain ---
+[03:28:58]   Switched to 空运业务 domain
+[03:28:58]   Clicking menu: "起运国仓储"
+[03:29:01] 
+--- 任务执行(空运) ---
+[03:29:01]   Switching to tab: "任务执行"
+[03:29:02] 
+=== Testing: 03g-任务执行-空运 ===
+[03:29:04]   >>> Table Rows: 3 rows
+[03:29:04]   >>> Enabled Buttons: 查询 | 重 置 | 刷新 | 创建线路 | 集装号 | 添加订单 | 执行出库 | 详情 | 绑定任务
+[03:29:04]   >>> DISABLED Buttons: 添加订单
+[03:29:04]   📸 Screenshot: /Users/mac/Documents/code/111/docs/comparison-screenshots/web-warehouse-cn/web-warehouse-cn--03g-任务执行-空运.png
+[03:29:04]   All visible buttons: 查询 | 重 置 | 刷新 | 创建线路 | 集装号 | 添加订单 | 执行出库 | 详情 | 绑定任务 | 添加订单(disabled)
+[03:29:05] 
+--- Switching back to SEA domain ---
+[03:29:07]   Clicking menu: "起运国仓储"
+[03:29:10] 
+--- 调拨管理 ---
+[03:29:10]   Switching to tab: "调拨管理"
+[03:29:11] 
+=== Testing: 03h-调拨管理 ===
+[03:29:13]   >>> Table Rows: 3 rows
+[03:29:13]   >>> Enabled Buttons: 查询 | 重 置 | 创建调拨单 | 详情 | 绑定运单 | 执行 | 打印 | 确认到达 | 确认入库
+[03:29:13]   📸 Screenshot: /Users/mac/Documents/code/111/docs/comparison-screenshots/web-warehouse-cn/web-warehouse-cn--03h-调拨管理.png
+[03:29:14] 
+--- 退运处理 ---
+[03:29:14]   Switching to tab: "退运处理"
+[03:29:16] 
+=== Testing: 03i-退运处理 ===
+[03:29:18]   >>> Table Rows: 8 rows
+[03:29:18]   >>> Enabled Buttons: 重置 | 新建退运 | 通过 | 驳回 | 详情 | 费用结算 | 确认补缴 | 执行退运 | 完成
+[03:29:18]   📸 Screenshot: /Users/mac/Documents/code/111/docs/comparison-screenshots/web-warehouse-cn/web-warehouse-cn--03i-退运处理.png
+[03:29:19]   ✅ New return form opened
+[03:29:19]   📸 Screenshot: /Users/mac/Documents/code/111/docs/comparison-screenshots/web-warehouse-cn/web-warehouse-cn--03i-退运处理-新建表单.png
+[03:29:19]   Form fields: 主运单号 | 子运单号 | 客户名称 | 退运类型 | 货物处置方式 | 件数 | 重量(kg) | 线路 | 退运原因
+[03:29:20] 
+
+============================================================
+[03:29:20] FINAL REPORT
+[03:29:20] ============================================================
+[03:29:20] 
+🏁 Test complete. Browser closed.

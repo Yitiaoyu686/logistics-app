@@ -1,0 +1,339 @@
+{
+  "testTime": "2026-05-18T03:33:26.488Z",
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "role": "WAREHOUSE_US",
+  "results": [
+    {
+      "step": 1,
+      "description": "Login form filled",
+      "screenshot": "01-login-form.png"
+    },
+    {
+      "step": 2,
+      "description": "Main page with all tabs visible",
+      "screenshot": "02-main-tabs-overview.png"
+    },
+    {
+      "step": 3,
+      "description": "Bottom tabs",
+      "data": [
+        "任务",
+        "办理",
+        "",
+        "消息",
+        "我的"
+      ]
+    },
+    {
+      "step": "4a",
+      "description": "Tasks tab",
+      "screenshot": "03-tasks-tab.png"
+    },
+    {
+      "step": "4a-data",
+      "description": "Tasks page content",
+      "data": [
+        "王仓管",
+        "到达国仓管",
+        "打印机",
+        "王",
+        "待办",
+        "5",
+        "已完成",
+        "4",
+        "全部 5",
+        "入库 1",
+        "DPN 3",
+        "配送 1",
+        "自提",
+        "",
+        "任务入库",
+        "待入库",
+        "入库核对",
+        "S-JOB260503007 · 海运",
+        "SZX→LOS · 1件/5kg",
+        "",
+        "DPN待绑定",
+        "待绑定",
+        "绑定运单",
+        "DPN-20260424-0005",
+        "x → y · 0单/0件",
+        "",
+        "DPNINBOUND",
+        "INBOUND",
+        "DPN-20260415-0002",
+        "IKEJ STA → ABV STA · 1单/6件",
+        "",
+        "DPN运输中",
+        "运输中",
+        "确认到达",
+        "DPN-20260415-0003",
+        "IKEJ STA → 客户家 · 1单/2件",
+        "",
+        "待配送",
+        "执行中",
+        "配送完成"
+      ],
+      "buttons": [
+        "任务",
+        "办理",
+        "",
+        "消息",
+        "我的"
+      ]
+    },
+    {
+      "step": "4b",
+      "description": "Operations tab (办理)",
+      "screenshot": "04-operations-tab.png"
+    },
+    {
+      "step": "4b-data",
+      "description": "Operations page content",
+      "data": [
+        "王仓管",
+        "到达国仓管",
+        "打印机",
+        "王",
+        "待办",
+        "5",
+        "已完成",
+        "4",
+        "全部 5",
+        "入库 1",
+        "DPN 3",
+        "配送 1",
+        "自提",
+        "",
+        "任务入库",
+        "待入库",
+        "入库核对",
+        "S-JOB260503007 · 海运",
+        "SZX→LOS · 1件/5kg",
+        "",
+        "DPN待绑定",
+        "待绑定",
+        "绑定运单",
+        "DPN-20260424-0005",
+        "x → y · 0单/0件",
+        "",
+        "DPNINBOUND",
+        "INBOUND",
+        "DPN-20260415-0002",
+        "IKEJ STA → ABV STA · 1单/6件",
+        "",
+        "DPN运输中",
+        "运输中",
+        "确认到达",
+        "DPN-20260415-0003",
+        "IKEJ STA → 客户家 · 1单/2件",
+        "",
+        "待配送",
+        "执行中",
+        "配送完成",
+        "DT-DPN-20260415-0003-oqp7",
+        "Amina Yusuf · +234-803-555-2001",
+        "办理",
+        "",
+        "",
+        "",
+        "到港预告 (1)",
+        "",
+        "",
+        "SZX → LOS",
+        "特快",
+        "ETA -23天后",
+        "ETD",
+        "04/01",
+        "→",
+        "ETA",
+        "04/25",
+        "中远海运",
+        "·",
+        "COSU3456789 40HQ"
+      ]
+    },
+    {
+      "step": "4b-1",
+      "description": "到仓入库 list",
+      "screenshot": "05-dest-inbound-list.png"
+    },
+    {
+      "step": "4b-1-data",
+      "description": "到仓入库 sub-tabs",
+      "data": {
+        "tabs": [
+          "JOB 入库",
+          "DPN 入库"
+        ],
+        "pageLines": [
+          "",
+          "到仓入库",
+          "",
+          "JOB 入库",
+          "1",
+          "",
+          "DPN 入库",
+          "0",
+          "",
+          "",
+          "S-JOB260401003",
+          "在途",
+          "SZX → LOS",
+          "中远海运",
+          "·",
+          "COSU3456789 40HQ",
+          "7件 · 33.4kg",
+          "ETA 04-25"
+        ]
+      }
+    },
+    {
+      "step": "4c",
+      "description": "Scan tab (扫码)",
+      "screenshot": "06-scan-tab.png"
+    },
+    {
+      "step": "4c-data",
+      "description": "Scan page content",
+      "data": {
+        "lines": [
+          "王仓管",
+          "到达国仓管",
+          "打印机",
+          "王",
+          "待办",
+          "5",
+          "已完成",
+          "4",
+          "全部 5",
+          "入库 1",
+          "DPN 3",
+          "配送 1",
+          "自提",
+          "",
+          "任务入库",
+          "待入库",
+          "入库核对",
+          "S-JOB260503007 · 海运",
+          "SZX→LOS · 1件/5kg",
+          "",
+          "DPN待绑定",
+          "待绑定",
+          "绑定运单",
+          "DPN-20260424-0005",
+          "x → y · 0单/0件",
+          "",
+          "DPNINBOUND",
+          "INBOUND",
+          "DPN-20260415-0002",
+          "IKEJ STA → ABV STA · 1单/6件"
+        ],
+        "buttons": [
+          "任务",
+          "办理",
+          "",
+          "消息",
+          "我的"
+        ]
+      }
+    },
+    {
+      "step": "4d",
+      "description": "Messages tab (消息)",
+      "screenshot": "07-messages-tab.png"
+    },
+    {
+      "step": "4d-data",
+      "description": "Messages content",
+      "data": [
+        "王仓管",
+        "到达国仓管",
+        "打印机",
+        "王",
+        "待办",
+        "5",
+        "已完成",
+        "4",
+        "全部 5",
+        "入库 1",
+        "DPN 3",
+        "配送 1",
+        "自提",
+        "",
+        "任务入库",
+        "待入库",
+        "入库核对",
+        "S-JOB260503007 · 海运",
+        "SZX→LOS · 1件/5kg",
+        ""
+      ]
+    },
+    {
+      "step": "4e",
+      "description": "Profile tab (我的)",
+      "screenshot": "08-profile-tab.png"
+    },
+    {
+      "step": "4e-data",
+      "description": "Profile content",
+      "data": {
+        "lines": [
+          "王仓管",
+          "到达国仓管",
+          "打印机",
+          "王",
+          "待办",
+          "5",
+          "已完成",
+          "4",
+          "全部 5",
+          "入库 1",
+          "DPN 3",
+          "配送 1",
+          "自提",
+          "",
+          "任务入库",
+          "待入库",
+          "入库核对",
+          "S-JOB260503007 · 海运",
+          "SZX→LOS · 1件/5kg",
+          "",
+          "DPN待绑定",
+          "待绑定",
+          "绑定运单",
+          "DPN-20260424-0005",
+          "x → y · 0单/0件",
+          "",
+          "DPNINBOUND",
+          "INBOUND",
+          "DPN-20260415-0002",
+          "IKEJ STA → ABV STA · 1单/6件"
+        ],
+        "buttons": [
+          "任务",
+          "办理",
+          "",
+          "消息",
+          "我的"
+        ]
+      }
+    },
+    {
+      "step": 9,
+      "description": "Placeholder check",
+      "data": "NONE"
+    },
+    {
+      "step": 10,
+      "description": "调拨 at destination",
+      "data": {
+        "hasTransferModule": false
+      }
+    }
+  ],
+  "fullPageText": "王仓管\n到达国仓管\n打印机\n王\n待办\n5\n已完成\n4\n全部 5\n入库 1\nDPN 3\n配送 1\n自提\n\n任务入库\n待入库\n入库核对\nS-JOB260503007 · 海运\nSZX→LOS · 1件/5kg\n\nDPN待绑定\n待绑定\n绑定运单\nDPN-20260424-0005\nx → y · 0单/0件\n\nDPNINBOUND\nINBOUND\nDPN-20260415-0002\nIKEJ STA → ABV STA · 1单/6件\n\nDPN运输中\n运输中\n确认到达\nDPN-20260415-0003\nIKEJ STA → 客户家 · 1单/2件\n\n待配送\n执行中\n配送完成\nDT-DPN-20260415-0003-oqp7\nAmina Yusuf · +234-803-555-2001\n办理\n\n\n\n到港预告 (1)\n\n\nSZX → LOS\n特快\nETA -23天后\nETD\n04/01\n→\nETA\n04/25\n中远海运\n·\nCOSU3456789 40HQ\n·\n7件 33.4kg\nS-JOB260401003\n业务模块\n\n到仓入库\nJOB/DPN 到仓验收\n\nDPN 管理\n派送计划管理\n\n库存查询\n到达国库存\n\n配送管理\n末端配送任务\n\n自提管理\n客户自提管理\n\n订单查询\n按运单号查订单\n\nWeb 预览不支持相机，请用「手动输入」测试\n\n闪光灯\n\n手动输入\n\n相册\n最近扫描\n暂无扫描记录\n消息 3\n喵喵国际物流通知中心\n全部已读\n全部 (3)\n未读 (3)\n业务 (3)\n预警 (1)\n\nDPN 待绑定\n24天前\nDPN-20260424-0005 · x → y · 0 单\n\n\n任务已到港\n24天前\nS-JOB260503007 已抵达 LOS，柜号 COSU7890123，1 件\n\n\nDPN 运输中\n33天前\nDPN-20260415-0003 · IKEJ STA → 客户家 · 1 单\n\n喵喵国际物流\n王\n王仓管\n\n到达国仓管\nwangcg@logistics.com\n\n快速切换角色\n一键登录其他演示账号\n\n账户\n\n个人信息\n\n\n切换仓库\n\n\n修改密码\n\n设置\n\n语言 / Language\n\n\n通知设置\n\n\n关于喵喵物流\n\n\n退出登录\n喵喵国际物流 v1.0.0\n\n\n任务\n\n\n办理\n\n\n\n\n消息\n\n\n我的"
+}

@@ -1,0 +1,205 @@
+{
+  "testDate": "2026-05-18T03:43:10Z",
+  "role": "WAREHOUSE_US (到达国仓管)",
+  "viewport": { "width": 390, "height": 844 },
+  "login": "warehouse_us1 / 123456",
+
+  "bottomTabs": [
+    "任务 (clipboard-outline)",
+    "办理 (apps-outline)",
+    "扫码 (scan-outline, center large button, no label)",
+    "消息 (notifications-outline)",
+    "我的 (person-outline)"
+  ],
+
+  "tasksTab": {
+    "userProfile": { "name": "王仓管", "role": "到达国仓管" },
+    "stats": { "待办": 5, "已完成": 4 },
+    "filterTabs": [
+      { "label": "全部", "count": 5 },
+      { "label": "入库", "count": 1 },
+      { "label": "DPN", "count": 3 },
+      { "label": "配送", "count": 1 },
+      { "label": "自提", "count": "hidden" }
+    ],
+    "taskItems": [
+      { "id": "S-JOB260503007", "type": "任务入库", "status": "待入库", "action": "入库核对", "details": "海运, SZX→LOS, 1件/5kg" },
+      { "id": "DPN-20260424-0005", "type": "DPN待绑定", "status": "待绑定", "action": "绑定运单", "details": "x→y, 0单/0件" },
+      { "id": "DPN-20260415-0002", "type": "DPNINBOUND", "status": "INBOUND", "details": "IKEJ STA→ABV STA, 1单/6件" },
+      { "id": "DPN-20260415-0003", "type": "DPN运输中", "status": "运输中", "action": "确认到达", "details": "IKEJ STA→客户家, 1单/2件" },
+      { "id": "DT-DPN-20260415-0003-oqp7", "type": "待配送", "status": "执行中", "action": "配送完成", "details": "Amina Yusuf, +234-803-555-2001" }
+    ],
+    "note": "Task items on Tasks tab are NOT clickable - they likely navigate to the Operations tab module"
+  },
+
+  "operationsTab": {
+    "header": "办理",
+    "searchBar": "运单号 / 快递单号 / 客户名 (with scan icon button)",
+    "previewSection": {
+      "title": "到港预告 (1)",
+      "card": "SZX→LOS, 特快, ETA -23天后, ETD 04/01→ETA 04/25, 中远海运, COSU3456789 40HQ, 7件 33.4kg, S-JOB260401003"
+    },
+    "moduleGrid": [
+      { "name": "到仓入库", "desc": "JOB/DPN 到仓验收", "route": "/task/dest-inbound-list" },
+      { "name": "DPN 管理", "desc": "派送计划管理", "route": "/task/dpn-list" },
+      { "name": "库存查询", "desc": "到达国库存", "route": "/task/stock?destination=1" },
+      { "name": "配送管理", "desc": "末端配送任务", "route": "/task/delivery-list" },
+      { "name": "自提管理", "desc": "客户自提管理", "route": "/task/pickup-list" },
+      { "name": "订单查询", "desc": "按运单号查订单", "route": "/task/order" }
+    ]
+  },
+
+  "moduleDetails": {
+    "destInbound": {
+      "title": "到仓入库",
+      "subTabs": ["JOB 入库 (1)", "DPN 入库 (0)"],
+      "jobList": [{ "id": "S-JOB260401003", "status": "在途", "route": "SZX→LOS", "carrier": "中远海运", "container": "COSU3456789 40HQ", "pieces": "7件·33.4kg", "eta": "04-25" }],
+      "jobDetail": "Clicking JOB row shows inbound scan/check screen",
+      "dpnTab": "DPN 入库 tab shows empty state (0 items)"
+    },
+    "dpnManage": {
+      "title": "DPN 管理",
+      "hasCreateButton": true,
+      "createButtonText": "新建",
+      "statusFilters": ["全部", "草稿", "待分配", "已分配", "运输中", "已送达", "已签收"],
+      "dpnList": [
+        { "id": "DPN-20260424-0005", "type": "DELIVERY", "pieces": 0, "date": "2026-04-24" },
+        { "id": "DPN-20260422-0004", "type": "DELIVERY", "pieces": 0, "customer": "Ibrahim Musa", "date": "2026-04-22" },
+        { "id": "DPN-20260415-0002", "type": "SATELLITE_STATION", "pieces": 6, "customer": "Chukwu Obi", "date": "2026-04-13" },
+        { "id": "DPN-20260415-0003", "type": "DELIVERY", "pieces": 2, "customer": "Ibrahim Musa", "date": "2026-04-13" },
+        { "id": "DPN-20260415-0001", "type": "DELIVERY", "pieces": 5, "customer": "Ibrahim Musa" }
+      ],
+      "createForm": {
+        "title": "新建 DPN",
+        "fields": ["站点信息 (section)", "起运站点*", "目的站点*", "派送方式: 送货上门 / 客户自提 / 卫星站点", "预计送达 (时间)", "备注"],
+        "placeholder": "请填写目的站点"
+      },
+      "dpnDetail": {
+        "title": "DPN 管理",
+        "subtitle": "待绑定",
+        "lifecycleActions": {
+          "buttons": [
+            { "name": "绑运单", "description": "Bind waybills to this DPN" },
+            { "name": "发车", "description": "Dispatch the vehicle" },
+            { "name": "到达", "description": "Arrive at satellite station / destination" },
+            { "name": "入库", "description": "Warehouse inbound / receiving" }
+          ]
+        },
+        "bindSection": { "prompt": "选择要绑定的运单", "empty": "暂无可绑定运单", "action": "绑定 0 条运单" }
+      }
+    },
+    "stockQuery": {
+      "title": "到达国库存查询",
+      "stats": { "totalInventory": 7, "inStock": 4, "totalWeight": "68.1 kg" },
+      "statusFilters": ["全部", "在库", "已分配", "已装箱", "已出库"],
+      "cascadingFilters": {
+        "country": ["全部国家", "尼日利亚"],
+        "site": ["全部站点", "wh-los"]
+      },
+      "hasCascading": true,
+      "stockItems": [
+        { "id": "S-2026041500002-01", "status": "在库", "customer": "深圳臻诚跨境贸易", "route": "route-gz-los-sea", "weight": "1件·5.2kg", "site": "LOS-TEST" },
+        { "id": "S-2026041500002-01", "status": "已出库", "customer": "深圳臻诚跨境贸易", "route": "route-gz-los-sea", "weight": "1件·5.2kg", "site": "LOS-A-01" },
+        { "id": "S-2026041500008-01", "status": "已装箱", "customer": "深圳旺达跨境贸易", "route": "route-gz-los-sea", "weight": "6件·28.7kg", "site": "LOS-A-01" }
+      ]
+    },
+    "deliveryManage": {
+      "title": "配送管理",
+      "statusFilters": ["全部", "待接单", "配送中", "已送达", "已签收", "失败"],
+      "deliveryItems": [
+        { "dpn": "DPN-20260422-0004", "customer": "Ada Nwosu", "phone": "+234-903-832-1727" },
+        { "dpn": "DPN-20260415-0003", "customer": "Amina Yusuf", "phone": "+234-803-555-2001" },
+        { "dpn": "DPN-20260415-0001", "customer": "Ada Nwosu", "phone": "+234-903-832-1727" }
+      ],
+      "deliveryDetail": {
+        "title": "配送签收",
+        "topActions": [
+          { "name": "转自提", "description": "Convert delivery to pickup" },
+          { "name": "配送完成", "description": "Mark delivery as complete (sign mode)" },
+          { "name": "配送失败", "description": "Mark delivery as failed (fail mode)" }
+        ],
+        "signInfoSection": {
+          "title": "签收信息",
+          "fields": ["签收人姓名*", "签收照片*"],
+          "photoAction": "拍照 (建议拍摄：货物 + 签收人/签收单)"
+        },
+        "codCollectionSection": {
+          "title": "到付收款（如有）",
+          "fields": ["收款金额 (NGN)", "收款方式 (现金 / 转账)"]
+        },
+        "bottomActions": ["备注", "确认签收"]
+      }
+    },
+    "pickupManage": {
+      "title": "自提管理",
+      "statusFilters": ["全部", "待通知", "已通知", "已自提"],
+      "data": "暂无自提记录",
+      "note": "When data exists, notify and verify actions would be available"
+    },
+    "orderQuery": {
+      "title": "订单查询",
+      "totalOrders": "16 单",
+      "statusFilters": ["全部", "待入库", "已入库", "已发车", "运输中", "已到达"],
+      "orders": [
+        { "id": "S-2026042400016", "status": "已入库", "warehouseNo": "W1X8616", "weight": "1件·3kg·1子单", "recipient": "李四" },
+        { "id": "S-2026042400015", "status": "已入库", "warehouseNo": "Q0H6979", "route": "GZ.CN→LOS.NGA", "weight": "1件·3kg·1子单" },
+        { "id": "S-2026042400014", "status": "已入库", "warehouseNo": "W1X8969", "route": "GZ.CN→LOS.NGA", "weight": "1件·66kg·1子单" }
+      ],
+      "orderDetail": {
+        "id": "S-2026042400016",
+        "warehouseNo": "W1X8616",
+        "status": "已入库",
+        "paymentStatus": "已付款",
+        "shippingMethod": "海运",
+        "subTabs": ["概览", "信息", "货物", "费用", "物流轨迹"],
+        "trackingBar10Steps": ["已下单", "已入库(当前节点)", "已装箱", "出口报关", "已发车", "运输中", "已到港", "清关中", "派送中", "已签收"]
+      }
+    }
+  },
+
+  "scanTab": {
+    "title": "扫码",
+    "cameraWarning": "Web 预览不支持相机，请用「手动输入」测试",
+    "options": ["闪光灯", "手动输入", "相册"],
+    "recentScans": "暂无扫描记录"
+  },
+
+  "messagesTab": {
+    "title": "消息 3",
+    "header": "喵喵国际物流通知中心",
+    "allReadButton": "全部已读",
+    "filters": ["全部 (3)", "未读 (3)", "业务 (3)", "预警 (1)"],
+    "messages": [
+      { "type": "DPN 待绑定", "time": "24天前", "content": "DPN-20260424-0005 · x→y · 0单", "unread": true },
+      { "type": "任务已到港", "time": "24天前", "content": "S-JOB260503007 已抵达 LOS，柜号 COSU7890123，1件", "unread": true },
+      { "type": "DPN 运输中", "time": "33天前", "content": "DPN-20260415-0003 · IKEJ STA→客户家 · 1单", "unread": true }
+    ]
+  },
+
+  "profileTab": {
+    "title": "我的",
+    "user": { "name": "王仓管", "role": "到达国仓管", "email": "wangcg@logistics.com" },
+    "quickSwitch": "快速切换角色 (一键登录其他演示账号)",
+    "accountSection": { "title": "账户", "items": ["个人信息", "切换仓库", "修改密码"] },
+    "settingsSection": { "title": "设置", "items": ["语言 / Language", "通知设置", "关于喵喵物流"] },
+    "logout": "退出登录",
+    "version": "喵喵国际物流 v1.0.0"
+  },
+
+  "placeholders": "NONE - no '功能开发中' or '建设中' found anywhere in the App",
+
+  "transferAtDestination": {
+    "appHasModule": false,
+    "webHasModule": true,
+    "webPages": ["DestTransferCreate.tsx", "DestTransferDetail.tsx", "DestTransferList.tsx"],
+    "analysis": "Web has 到达国调拨 (DestTransfer) pages. App does NOT have 调拨管理 module for WAREHOUSE_US. Only WAREHOUSE_CN has 调拨管理.",
+    "gap": "APP_MISSING - 到达国仓管的调拨管理功能在 App 端尚未实现"
+  },
+
+  "comparisonWithWeb": {
+    "overallCoverage": "App covers 6/6 main modules matching Web destination WMS",
+    "webHasDestTransfer": true,
+    "appHasDestTransfer": false,
+    "summary": "The App WAREHOUSE_US covers all core destination warehouse operations. Missing: 调拨管理 (dest transfer) which exists in Web but not in App. Web also has separate pages for DestInboundDetail, DestInboundOperation, DestStockDetail, JobDetail, PickupList which correspond to the App's detail screens."
+  }
+}

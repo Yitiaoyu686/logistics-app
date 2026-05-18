@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import http from 'http';
 import { createTables } from './database/schema';
 import { seedDatabase } from './database/seed';
 import authRoutes from './routes/auth';
@@ -12,7 +13,7 @@ import deliveryRoutes from './routes/delivery';
 import compatRoutes from './routes/compat';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = Number(process.env.PORT) || 3001;
 
 // Middleware
 app.use(cors());
@@ -60,7 +61,25 @@ app.use('/api', systemRoutes);
 // Web 端旧接口兼容层
 app.use('/api', compatRoutes);
 
+// 非 API 请求代理到 Expo Metro (8082)，统一走 ngrok 域名
+app.use('/', (req, res) => {
+  const fwd: Record<string, string> = {};
+  for (const [k, v] of Object.entries(req.headers)) {
+    if (!['host', 'connection', 'keep-alive', 'transfer-encoding', 'upgrade'].includes(k.toLowerCase())) {
+      fwd[k] = v as string;
+    }
+  }
+  const proxy = http.request({ hostname: 'localhost', port: 8082, path: req.url, method: req.method, headers: fwd }, (pres) => {
+    res.writeHead(pres.statusCode || 200, pres.headers);
+    pres.pipe(res);
+  });
+  proxy.on('error', () => { res.status(502).send('Frontend unavailable'); });
+  req.pipe(proxy);
+});
+
 // Start server
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running at http://0.0.0.0:${PORT}`);
+  console.log(`Local: http://localhost:${PORT}`);
+  console.log(`Network: http://192.168.3.127:${PORT}`);
 });

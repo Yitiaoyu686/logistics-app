@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 
 const LOCAL_URL = 'http://localhost:3001/api';
 const LAN_URL = 'http://192.168.3.127:3001/api';
-const TUNNEL_URL = 'https://unprovincial-unlabored-radia.ngrok-free.dev/api';
+const TUNNEL_URL = 'https://nonsanely-bitonal-santo.ngrok-free.dev/api';
 
 const BASE_URL = Platform.OS === 'web'
   ? (typeof window !== 'undefined' && window.location.hostname !== 'localhost'
