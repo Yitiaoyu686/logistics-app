@@ -121,6 +121,20 @@ export default function OrderScreen({ embedded = false }: OrderScreenProps = {})
           {item.consignee_name ? (
             <Text style={styles.consigneeText} numberOfLines={1}>→ {item.consignee_name}</Text>
           ) : null}
+          {['PENDING_INBOUND', 'INBOUND'].includes(item.order_status) && (
+            <TouchableOpacity
+              style={styles.cancelChip}
+              onPress={(e) => {
+                e.stopPropagation();
+                Alert.alert('取消订单', `确认取消 ${item.order_no} 吗？`, [
+                  { text: '保留', style: 'cancel' },
+                  { text: '确认取消', style: 'destructive', onPress: () => Alert.alert('已提交', '订单取消申请已提交') },
+                ]);
+              }}
+            >
+              <Text style={styles.cancelChipText}>取消</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </TouchableOpacity>
     );
@@ -229,4 +243,6 @@ const styles = StyleSheet.create({
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: spacing.sm, borderTopWidth: 0.5, borderTopColor: colors.borderLight },
   footerText: { fontSize: font.xs, color: colors.textSecondary },
   consigneeText: { fontSize: font.xs, color: colors.textSecondary, maxWidth: '45%' },
+  cancelChip: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.dangerLight, backgroundColor: colors.dangerLight },
+  cancelChipText: { fontSize: 10, color: colors.danger, fontWeight: '600' },
 });

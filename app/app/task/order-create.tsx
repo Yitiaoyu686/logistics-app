@@ -13,6 +13,7 @@ import { safeBack } from '../../lib/nav';
 type ServiceType = 'EXPRESS' | 'STANDARD';
 type ExportMode = 'BUYER_EXPORT' | 'SELF_EXPORT';
 type PaymentMethod = 'PREPAID' | 'COD';
+type DeliveryMethod = 'DELIVERY' | 'SELF_PICKUP';
 
 interface CustomerOption {
   id: string;
@@ -70,6 +71,11 @@ const PAYMENT_OPTIONS: { value: PaymentMethod; label: string }[] = [
   { value: 'COD', label: '到付' },
 ];
 
+const DELIVERY_OPTIONS: { value: DeliveryMethod; label: string; desc: string }[] = [
+  { value: 'DELIVERY', label: '配送', desc: '送货上门' },
+  { value: 'SELF_PICKUP', label: '自提', desc: '客户到站取货' },
+];
+
 const EXPRESS_COMPANIES = ['顺丰', '韵达', '圆通', '中通', '申通', '京东', '邮政', '德邦'];
 const GOODS_CATEGORIES = ['ELECTRONICS', 'APPAREL', 'DAILY_USE', 'BEAUTY', 'MACHINE_PARTS', 'FOOD', 'OTHER'];
 
@@ -100,6 +106,7 @@ export default function OrderCreateScreen() {
   const [serviceType, setServiceType] = useState<ServiceType>('EXPRESS');
   const [exportMode, setExportMode] = useState<ExportMode>('BUYER_EXPORT');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('PREPAID');
+  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('DELIVERY');
   const [showCustomerPicker, setShowCustomerPicker] = useState(false);
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [customerKeyword, setCustomerKeyword] = useState('');
@@ -244,6 +251,7 @@ export default function OrderCreateScreen() {
         routeCode,
         exportMode,
         paymentMethod,
+        deliveryMethod,
         senderName,
         senderPhone,
         senderAddress,
@@ -348,6 +356,20 @@ export default function OrderCreateScreen() {
               onPress={() => setExportMode(opt.value)}
             >
               <Text style={[styles.optionText, exportMode === opt.value && styles.optionTextActive]}>{opt.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={styles.formLabel}>交付方式</Text>
+        <View style={styles.optionRow}>
+          {DELIVERY_OPTIONS.map((opt) => (
+            <TouchableOpacity
+              key={opt.value}
+              style={[styles.optionBtn, deliveryMethod === opt.value && styles.optionBtnActive]}
+              onPress={() => setDeliveryMethod(opt.value)}
+            >
+              <Text style={[styles.optionText, deliveryMethod === opt.value && styles.optionTextActive]}>{opt.label}</Text>
+              <Text style={[styles.optionDesc, deliveryMethod === opt.value && { color: colors.primary }]}>{opt.desc}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -508,6 +530,10 @@ export default function OrderCreateScreen() {
         <View style={styles.confirmRow}>
           <Text style={styles.confirmLabel}>付款方式</Text>
           <Text style={styles.confirmValue}>{PAYMENT_OPTIONS.find((o) => o.value === paymentMethod)?.label}</Text>
+        </View>
+        <View style={styles.confirmRow}>
+          <Text style={styles.confirmLabel}>交付方式</Text>
+          <Text style={styles.confirmValue}>{DELIVERY_OPTIONS.find((o) => o.value === deliveryMethod)?.label}</Text>
         </View>
         <View style={styles.confirmRow}>
           <Text style={styles.confirmLabel}>包裹数</Text>
@@ -817,6 +843,7 @@ const styles = StyleSheet.create({
   optionBtnActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
   optionText: { fontSize: font.sm, color: colors.textSecondary },
   optionTextActive: { color: colors.primary, fontWeight: '600' },
+  optionDesc: { fontSize: 10, color: colors.textTertiary },
 
   chipRow: { gap: spacing.sm, paddingVertical: spacing.xs },
   chip: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
