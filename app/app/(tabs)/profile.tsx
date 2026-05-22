@@ -131,47 +131,22 @@ export default function ProfileScreen() {
         {/* ── 业务线切换 */}
         <View style={styles.section}>
           <View style={styles.modeCard}>
-            <View style={styles.modeHeader}>
-              <Ionicons name="git-branch-outline" size={18} color={colors.textSecondary} />
-              <Text style={styles.modeTitle}>业务模式</Text>
-              <Text style={styles.modeHint}>
-                {businessLine === 'SEA' ? '海运部门操作' : '空运部门操作'}
-              </Text>
-            </View>
             <View style={styles.modeToggle}>
               <TouchableOpacity
                 style={[styles.modeBtn, businessLine === 'SEA' && styles.modeBtnSea]}
                 onPress={() => setBusinessLine('SEA')}
                 activeOpacity={0.7}
               >
-                <Ionicons
-                  name="boat-outline"
-                  size={22}
-                  color={businessLine === 'SEA' ? '#fff' : colors.textSecondary}
-                />
-                <Text style={[styles.modeBtnLabel, businessLine === 'SEA' && styles.modeBtnLabelActive]}>
-                  海运
-                </Text>
-                <Text style={[styles.modeBtnDesc, businessLine === 'SEA' && { color: 'rgba(255,255,255,0.7)' }]}>
-                  整柜·拼箱·普运
-                </Text>
+                <Ionicons name="boat-outline" size={16} color={businessLine === 'SEA' ? '#fff' : '#0F766E'} />
+                <Text style={[styles.modeBtnLabel, businessLine === 'SEA' && styles.modeBtnLabelActive]}>海运</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modeBtn, businessLine === 'AIR' && styles.modeBtnAir]}
                 onPress={() => setBusinessLine('AIR')}
                 activeOpacity={0.7}
               >
-                <Ionicons
-                  name="airplane-outline"
-                  size={22}
-                  color={businessLine === 'AIR' ? '#fff' : colors.textSecondary}
-                />
-                <Text style={[styles.modeBtnLabel, businessLine === 'AIR' && styles.modeBtnLabelActive]}>
-                  空运
-                </Text>
-                <Text style={[styles.modeBtnDesc, businessLine === 'AIR' && { color: 'rgba(255,255,255,0.7)' }]}>
-                  特快·普快
-                </Text>
+                <Ionicons name="airplane-outline" size={16} color={businessLine === 'AIR' ? '#fff' : '#2563EB'} />
+                <Text style={[styles.modeBtnLabel, businessLine === 'AIR' && styles.modeBtnLabelActive]}>空运</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -356,21 +331,17 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: font.xs, color: colors.textTertiary, fontWeight: '600', letterSpacing: 0.5, marginBottom: spacing.sm, textTransform: 'uppercase' },
 
   // ── Mode Toggle
-  modeCard: { backgroundColor: colors.card, borderRadius: radius.xl, padding: spacing.lg, ...shadow.sm },
-  modeHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.md },
-  modeTitle: { fontSize: font.md, fontWeight: '700', color: colors.text, flex: 1 },
-  modeHint: { fontSize: font.xs, color: colors.textTertiary },
-  modeToggle: { flexDirection: 'row', gap: spacing.md },
+  modeCard: { backgroundColor: colors.card, borderRadius: radius.xl, padding: spacing.xs, ...shadow.sm },
+  modeToggle: { flexDirection: 'row', gap: 0 },
   modeBtn: {
-    flex: 1, alignItems: 'center', paddingVertical: spacing.lg,
-    borderRadius: radius.lg, backgroundColor: colors.bg,
-    borderWidth: 1.5, borderColor: colors.border,
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingVertical: spacing.sm, borderRadius: radius.lg,
+    backgroundColor: 'transparent',
   },
-  modeBtnSea: { backgroundColor: '#0F766E', borderColor: '#0F766E' },
-  modeBtnAir: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
-  modeBtnLabel: { fontSize: font.lg, fontWeight: '700', color: colors.text, marginTop: 6 },
+  modeBtnSea: { backgroundColor: '#0F766E' },
+  modeBtnAir: { backgroundColor: '#2563EB' },
+  modeBtnLabel: { fontSize: font.sm, fontWeight: '600', color: colors.textSecondary },
   modeBtnLabelActive: { color: '#fff' },
-  modeBtnDesc: { fontSize: 10, color: colors.textTertiary, marginTop: 2 },
 
   // ── Switch Card
   switchCard: {
