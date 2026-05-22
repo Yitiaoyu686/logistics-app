@@ -8,6 +8,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing, radius, font, shadow } from '../../lib/theme';
 import { jobApi, orderApi, customerApi } from '../../lib/api';
+import { useBusinessLine } from '../../lib/business-line';
 
 // Dynamic import of expo-camera to avoid breaking web preview
 let CameraView: any = null;
@@ -85,6 +86,7 @@ function SalesToolsPage({ manualVisible, setManualVisible, manualCode, setManual
   handleManualSubmit: () => void;
   router: any;
 }) {
+  const { businessLine, isSea } = useBusinessLine();
   const [searchKeyword, setSearchKeyword] = useState('');
   const [previewJobs, setPreviewJobs] = useState<PreviewJob[]>([]);
   const [previewExpanded, setPreviewExpanded] = useState(true);
@@ -258,10 +260,9 @@ function SalesToolsPage({ manualVisible, setManualVisible, manualCode, setManual
           </View>
           <View style={ts.quickGrid}>
             {[
-              { icon: 'create-outline', name: '新建订单', desc: '4 步快速创建', color: colors.primary, bg: colors.primaryLight, onPress: () => router.push('/task/order-create' as any) },
+              { icon: isSea ? 'boat-outline' : 'airplane-outline', name: isSea ? '海运下单' : '空运下单', desc: isSea ? '整柜·拼箱·普运' : '特快·普快', color: isSea ? '#0F766E' : '#2563EB', bg: isSea ? '#CCFBF1' : '#DBEAFE', onPress: () => router.push(`/task/order-create?businessLine=${businessLine}` as any) },
               { icon: 'person-add-outline', name: '新建客户', desc: '录入新客户', color: colors.success, bg: colors.successLight, onPress: () => router.push('/task/customer-create' as any) },
-              { icon: 'calculator-outline', name: '运费试算', desc: '即时报价分享', color: colors.warning, bg: colors.warningLight, onPress: () => router.push('/task/quote' as any) },
-              { icon: 'document-text-outline', name: '订单查询', desc: '查询所有订单', color: colors.info, bg: colors.infoLight, onPress: () => router.push('/task/order' as any) },
+              { icon: 'document-text-outline', name: '订单查询', desc: '查询所有订单', color: colors.info, bg: colors.infoLight, onPress: () => router.push({ pathname: '/task/order', params: { businessLine } } as any) },
               { icon: 'barcode-outline', name: '扫码查单', desc: '输入单号查询', color: colors.textSecondary, bg: `${colors.textSecondary}12`, onPress: () => setManualVisible(true) },
             ].map((item) => (
               <TouchableOpacity key={item.name} style={ts.quickCard} onPress={item.onPress}>

@@ -3,17 +3,19 @@ import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList,
   SafeAreaView, ActivityIndicator, ScrollView, Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { orderApi } from '../../lib/api';
 import { safeBack } from '../../lib/nav';
+import { useBusinessLine } from '../../lib/business-line';
 
 interface OrderItem {
   id: string;
   order_no: string;
   warehouse_entry_no: string;
   business_line: string;
+  service_type: string;
   customer_name: string;
   route_code: string;
   order_status: string;
@@ -35,6 +37,12 @@ const STATUS_FILTERS = [
   { value: 'ARRIVED', label: '已到达' },
 ];
 
+const BL_FILTERS = [
+  { value: 'ALL', label: '全部' },
+  { value: 'SEA', label: '海运' },
+  { value: 'AIR', label: '空运' },
+];
+
 const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
   PENDING_INBOUND: { label: '待入库', color: colors.warning,       bg: colors.warningLight },
   INBOUND:         { label: '已入库', color: colors.success,       bg: colors.successLight },
@@ -44,16 +52,24 @@ const STATUS_META: Record<string, { label: string; color: string; bg: string }> 
   DELIVERED:       { label: '已签收', color: colors.textSecondary, bg: colors.borderLight },
 };
 
+const SERVICE_LABEL: Record<string, string> = {
+  FCL: '整柜', LCL: '拼箱', STANDARD: '普运', EXPRESS: '特快',
+};
+
 interface OrderScreenProps {
   embedded?: boolean;
 }
 
 export default function OrderScreen({ embedded = false }: OrderScreenProps = {}) {
   const router = useRouter();
+  const { businessLine: globalBL } = useBusinessLine();
+  const params = useLocalSearchParams<{ businessLine?: string }>();
   const [list, setList] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState('ALL');
+  const [blFilter, setBlFilter] = useState((params.businessLine as string) || 'ALL');
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => { load(); }, []);
 
@@ -72,6 +88,7 @@ export default function OrderScreen({ embedded = false }: OrderScreenProps = {})
   const filtered = useMemo(() => {
     return list.filter((o) => {
       if (status !== 'ALL' && o.order_status !== status) return false;
+      if (blFilter !== 'ALL' && o.business_line !== blFilter) return false;
       if (keyword) {
         const k = keyword.toLowerCase();
         return (
@@ -83,22 +100,39 @@ export default function OrderScreen({ embedded = false }: OrderScreenProps = {})
       }
       return true;
     });
-  }, [list, keyword, status]);
+  }, [list, keyword, status, blFilter]);
+
+  const toggleExpand = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   const renderItem = ({ item }: { item: OrderItem }) => {
     const meta = STATUS_META[item.order_status] || { label: item.order_status, color: colors.textSecondary, bg: colors.borderLight };
     const isAir = item.business_line === 'AIR';
     const accentColor = isAir ? colors.info : colors.taskDispatch;
+    const serviceLabel = SERVICE_LABEL[item.service_type] || '';
+    const hasSub = item.sub_order_count > 0;
+    const expanded = expandedIds.has(item.id);
+
     return (
       <TouchableOpacity
         style={[styles.card, { borderLeftColor: accentColor }]}
-        onPress={() => router.push({ pathname: '/task/order-detail' as any, params: { id: item.id } })}
+        onPress={() => hasSub ? toggleExpand(item.id) : router.push({ pathname: '/task/order-detail' as any, params: { id: item.id } })}
         activeOpacity={0.7}
       >
         <View style={styles.cardHeader}>
           <View style={styles.orderNoRow}>
-            <Ionicons name={isAir ? 'airplane-outline' : 'boat-outline'} size={16} color={colors.primary} />
+            <Ionicons name={isAir ? 'airplane-outline' : 'boat-outline'} size={16} color={accentColor} />
             <Text style={styles.orderNo}>{item.order_no}</Text>
+            {serviceLabel ? (
+              <View style={[styles.serviceTag, { backgroundColor: accentColor + '18' }]}>
+                <Text style={[styles.serviceTagText, { color: accentColor }]}>{serviceLabel}</Text>
+              </View>
+            ) : null}
           </View>
           <View style={[styles.statusBadge, { backgroundColor: meta.bg }]}>
             <Text style={[styles.statusText, { color: meta.color }]}>{meta.label}</Text>
@@ -114,10 +148,32 @@ export default function OrderScreen({ embedded = false }: OrderScreenProps = {})
           <Ionicons name="navigate-outline" size={13} color={accentColor} />
           <Text style={[styles.routeText, { color: accentColor }]} numberOfLines={1}>{item.route_code}</Text>
         </View>
+
+        {/* 子订单展开 */}
+        {hasSub && expanded && (
+          <View style={styles.subOrderSection}>
+            <Text style={styles.subOrderTitle}>子运单 ({item.sub_order_count})</Text>
+            <TouchableOpacity
+              style={styles.viewDetailBtn}
+              onPress={() => router.push({ pathname: '/task/order-detail' as any, params: { id: item.id } })}
+            >
+              <Text style={styles.viewDetailText}>查看详情</Text>
+              <Ionicons name="chevron-forward" size={14} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+        )}
+
         <View style={styles.cardFooter}>
-          <Text style={styles.footerText}>
-            {item.total_declared_pieces}件 · {item.total_declared_weight_kg}kg · {item.sub_order_count}子单
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={styles.footerText}>
+              {item.total_declared_pieces}件 · {item.total_declared_weight_kg}kg
+            </Text>
+            {hasSub && (
+              <TouchableOpacity onPress={(e) => { e.stopPropagation(); toggleExpand(item.id); }}>
+                <Ionicons name={expanded ? 'chevron-up-circle' : 'chevron-down-circle'} size={16} color={colors.primary} />
+              </TouchableOpacity>
+            )}
+          </View>
           {item.consignee_name ? (
             <Text style={styles.consigneeText} numberOfLines={1}>→ {item.consignee_name}</Text>
           ) : null}
@@ -174,7 +230,28 @@ export default function OrderScreen({ embedded = false }: OrderScreenProps = {})
         </View>
       </View>
 
-      {/* Filter */}
+      {/* BL Filter */}
+      <View style={styles.blFilterRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.md, gap: spacing.sm }}>
+          {BL_FILTERS.map((f) => {
+            const active = blFilter === f.value;
+            const isSea = f.value === 'SEA', isAir = f.value === 'AIR';
+            return (
+              <TouchableOpacity
+                key={f.value}
+                style={[styles.blChip, active && (isSea ? styles.blChipSea : isAir ? styles.blChipAir : styles.chipActive)]}
+                onPress={() => setBlFilter(f.value)}
+              >
+                {isSea && <Ionicons name="boat-outline" size={14} color={active ? '#fff' : '#0F766E'} />}
+                {isAir && <Ionicons name="airplane-outline" size={14} color={active ? '#fff' : '#2563EB'} />}
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>{f.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      {/* Status Filter */}
       <View style={styles.filterRow}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.md, gap: spacing.sm }}>
           {STATUS_FILTERS.map((f) => {
@@ -223,7 +300,11 @@ const styles = StyleSheet.create({
   searchRow: { paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm, backgroundColor: colors.card },
   searchInputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bg, borderRadius: radius.md, paddingHorizontal: spacing.md, height: 40, gap: spacing.sm },
   searchInput: { flex: 1, fontSize: font.md, color: colors.text },
-  filterRow: { paddingVertical: spacing.md, backgroundColor: colors.card, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
+  blFilterRow: { paddingTop: spacing.md, paddingBottom: spacing.xs, backgroundColor: colors.card, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
+  blChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border },
+  blChipSea: { backgroundColor: '#0F766E', borderColor: '#0F766E' },
+  blChipAir: { backgroundColor: '#2563EB', borderColor: '#2563EB' },
+  filterRow: { paddingVertical: spacing.sm, backgroundColor: colors.card, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
   chip: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border },
   chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   chipText: { fontSize: font.sm, color: colors.textSecondary },
@@ -245,4 +326,10 @@ const styles = StyleSheet.create({
   consigneeText: { fontSize: font.xs, color: colors.textSecondary, maxWidth: '45%' },
   cancelChip: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.dangerLight, backgroundColor: colors.dangerLight },
   cancelChipText: { fontSize: 10, color: colors.danger, fontWeight: '600' },
+  serviceTag: { paddingHorizontal: 5, paddingVertical: 1, borderRadius: 3 },
+  serviceTagText: { fontSize: 9, fontWeight: '700' },
+  subOrderSection: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.bg, borderRadius: radius.md, padding: spacing.sm, marginBottom: spacing.sm },
+  subOrderTitle: { fontSize: font.xs, color: colors.textSecondary },
+  viewDetailBtn: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  viewDetailText: { fontSize: font.xs, color: colors.primary, fontWeight: '600' },
 });

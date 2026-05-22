@@ -149,24 +149,6 @@ export default function CustomerScreen({ embedded = false }: CustomerScreenProps
     ]);
   };
 
-  const handleDelete = (item: CustomerListItem) => {
-    Alert.alert('删除客户', `确认删除 "${item.customerName}" 吗？\n删除后数据不可恢复。`, [
-      { text: '取消', style: 'cancel' },
-      {
-        text: '删除', style: 'destructive',
-        onPress: async () => {
-          try {
-            await customerApi.update(item.id, { status: 'DELETED' });
-            setList((prev) => prev.filter((c) => c.id !== item.id));
-            Alert.alert('已删除', `${item.customerName} 已移除`);
-          } catch (err: any) {
-            Alert.alert('删除失败', err.message || '请重试');
-          }
-        },
-      },
-    ]);
-  };
-
   const handleTransfer = (item: CustomerListItem) => {
     Alert.alert('转移跟进', `将 "${item.customerName}" 转移给其他同事跟进？`, [
       { text: '取消', style: 'cancel' },
@@ -273,18 +255,11 @@ export default function CustomerScreen({ embedded = false }: CustomerScreenProps
             ) : (
               <View style={styles.cardActions}>
                 <TouchableOpacity
-                  style={styles.cardActionBtn}
+                  style={[styles.cardActionBtn, { flex: 1 }]}
                   onPress={(e) => { e.stopPropagation(); handleTransfer(item); }}
                 >
                   <Ionicons name="swap-horizontal-outline" size={15} color={colors.primary} />
                   <Text style={styles.cardActionText}>转移</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.cardActionBtn, styles.cardActionBtnDanger]}
-                  onPress={(e) => { e.stopPropagation(); handleDelete(item); }}
-                >
-                  <Ionicons name="trash-outline" size={15} color={colors.danger} />
-                  <Text style={styles.cardActionTextDanger}>删除</Text>
                 </TouchableOpacity>
               </View>
             )}

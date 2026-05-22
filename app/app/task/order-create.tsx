@@ -9,8 +9,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { customerApi, orderApi, systemApi } from '../../lib/api';
 import { safeBack } from '../../lib/nav';
+import { useBusinessLine } from '../../lib/business-line';
 
-type ServiceType = 'EXPRESS' | 'STANDARD';
+type ServiceType = 'EXPRESS' | 'STANDARD' | 'FCL' | 'LCL';
 type ExportMode = 'BUYER_EXPORT' | 'SELF_EXPORT';
 type PaymentMethod = 'PREPAID' | 'COD';
 type DeliveryMethod = 'DELIVERY' | 'SELF_PICKUP';
@@ -61,6 +62,17 @@ const SERVICE_OPTIONS: { value: ServiceType; label: string }[] = [
   { value: 'STANDARD', label: '普快' },
 ];
 
+const SEA_SERVICE_OPTIONS: { value: ServiceType; label: string; desc: string }[] = [
+  { value: 'FCL', label: '整柜', desc: 'FCL' },
+  { value: 'LCL', label: '拼箱', desc: 'LCL' },
+  { value: 'STANDARD', label: '普运', desc: '散货' },
+];
+
+const AIR_SERVICE_OPTIONS: { value: ServiceType; label: string; desc: string }[] = [
+  { value: 'EXPRESS', label: '特快', desc: '3-5天' },
+  { value: 'STANDARD', label: '普快', desc: '7-10天' },
+];
+
 const EXPORT_OPTIONS: { value: ExportMode; label: string }[] = [
   { value: 'BUYER_EXPORT', label: '买单出口' },
   { value: 'SELF_EXPORT', label: '自备单证' },
@@ -81,6 +93,7 @@ const GOODS_CATEGORIES = ['ELECTRONICS', 'APPAREL', 'DAILY_USE', 'BEAUTY', 'MACH
 
 export default function OrderCreateScreen() {
   const router = useRouter();
+  const { businessLine: globalBL } = useBusinessLine();
   const params = useLocalSearchParams<{
     customerId?: string;
     customerName?: string;
@@ -91,8 +104,10 @@ export default function OrderCreateScreen() {
     pieces?: string;
     weightKg?: string;
     expressCompany?: string;
+    businessLine?: string;
   }>();
   const fromUnmatchedId = params.fromUnmatchedId as string | undefined;
+  const businessLine = (params.businessLine as string) || globalBL;
 
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
@@ -103,7 +118,7 @@ export default function OrderCreateScreen() {
   const [customerId, setCustomerId] = useState<string>(params.customerId as string || '');
   const [customerName, setCustomerName] = useState<string>(params.customerName as string || '');
   const [customerCode, setCustomerCode] = useState<string>('');
-  const [serviceType, setServiceType] = useState<ServiceType>('EXPRESS');
+  const [serviceType, setServiceType] = useState<ServiceType>(businessLine === 'SEA' ? 'FCL' : 'EXPRESS');
   const [exportMode, setExportMode] = useState<ExportMode>('BUYER_EXPORT');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('PREPAID');
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('DELIVERY');
@@ -120,7 +135,7 @@ export default function OrderCreateScreen() {
         goodsName: '',
         goodsCategory: 'OTHER',
         pieces: Number(params.pieces) || 1,
-        weight: Number(params.weightKg) || 0,
+        weight: Number(params.weightKg) || 1,
       }];
     }
     return [];
@@ -140,7 +155,7 @@ export default function OrderCreateScreen() {
   const [consigneeCity, setConsigneeCity] = useState('');
 
   // 路线（用于预估运费）
-  const [routeCode, setRouteCode] = useState('GZ.CN→LOS.NGA');
+  const [routeCode, setRouteCode] = useState(businessLine === 'SEA' ? 'GZ.CN→LOS.NGA' : 'CAN.CN→LOS.NGA');
 
   useEffect(() => {
     customerApi.list({ poolType: 'PRIVATE' }).then((r) => setCustomers(r.data || [])).catch(() => {});
@@ -185,10 +200,20 @@ export default function OrderCreateScreen() {
 
   const totalPieces = packages.reduce((sum, p) => sum + (Number(p.pieces) || 0), 0);
   const totalWeight = packages.reduce((sum, p) => sum + (Number(p.weight) || 0), 0);
-  const estimatedFee = totalWeight > 0 ? (totalWeight <= 1 ? 63 : 63 + (totalWeight - 1) * 57) : 0;
+  const isSea = businessLine === 'SEA';
+  const warehouseEntryNo = useMemo(() => {
+    if (!isSea || !customerCode) return '';
+    const entrySeq = String(Math.floor(Math.random() * 900) + 100);
+    return `${customerCode}${entrySeq}`;
+  }, [isSea, customerCode]);
+  const estimatedFee = totalWeight > 0
+    ? (isSea
+        ? (totalWeight <= 1 ? 63 : 63 + (totalWeight - 1) * 57)
+        : (totalWeight <= 1 ? 120 : 120 + (totalWeight - 1) * 85))
+    : 0;
 
   const addPackage = () => {
-    setPackages([...packages, { expressCompany: '顺丰', trackingNo: '', goodsName: '', goodsCategory: 'OTHER', pieces: 1, weight: 0 }]);
+    setPackages([...packages, { expressCompany: '顺丰', trackingNo: '', goodsName: '', goodsCategory: 'OTHER', pieces: 1, weight: 1 }]);
   };
 
   const removePackage = (idx: number) => {
@@ -230,17 +255,49 @@ export default function OrderCreateScreen() {
 
   const handleSubmit = async () => {
     if (submitHint) return;
+
+    // 重复下单提醒
+    try {
+      const existing = await orderApi.list({ customerId, status: 'ALL' });
+      const existingOrders = (existing.data || []) as Array<{ order_no: string; consignee_name: string; business_line: string; created_at: string }>;
+      const similar = existingOrders.filter((o: { consignee_name: string; business_line: string }) =>
+        o.consignee_name === consigneeName && o.business_line === businessLine
+      );
+      if (similar.length > 0) {
+        const shouldContinue = await new Promise<boolean>((resolve) => {
+          if (Platform.OS === 'web') {
+            resolve(window.confirm(
+              `⚠️ 重复下单提醒\n\n该客户（${customerName}）已有 ${similar.length} 个相同收件人（${consigneeName}）的${isSea ? '海运' : '空运'}订单。\n\n确认继续创建吗？`
+            ));
+          } else {
+            Alert.alert('重复下单提醒',
+              `该客户已有 ${similar.length} 个同收件人的${isSea ? '海运' : '空运'}订单`,
+              [
+                { text: '取消', style: 'cancel', onPress: () => resolve(false) },
+                { text: '继续创建', onPress: () => resolve(true) },
+              ]
+            );
+          }
+        });
+        if (!shouldContinue) { setSubmitting(false); return; }
+      }
+    } catch { /* 非致命 */ }
+
     setSubmitting(true);
     try {
       const userStr = await AsyncStorage.getItem('user');
       const user = userStr ? JSON.parse(userStr) : {};
-      // 入仓号规则（对齐 Web OrderCreate）:客户编号 + 3 位流水(100-999)
-      const entryCode = customerCode || customerId.slice(-3).toUpperCase();
-      const entrySeq = String(Math.floor(Math.random() * 900) + 100);
-      const warehouseEntryNo = `${entryCode}${entrySeq}`;
+
+      // 入仓号：海运需要，空运不需要
+      let warehouseEntryNo = '';
+      if (isSea) {
+        const entryCode = customerCode || customerId.slice(-3).toUpperCase();
+        const entrySeq = String(Math.floor(Math.random() * 900) + 100);
+        warehouseEntryNo = `${entryCode}${entrySeq}`;
+      }
 
       const res = await orderApi.create({
-        businessLine: 'SEA',
+        businessLine,
         serviceType,
         customerId,
         customerName,
@@ -288,7 +345,7 @@ export default function OrderCreateScreen() {
         }
       }
       const successTitle = '订单创建成功';
-      const successMsg = `运单号:${res.data?.orderNo}\n入仓号:${res.data?.warehouseEntryNo}${fromUnmatchedId ? '\n已自动关联无单快递' : ''}`;
+      const successMsg = `运单号:${res.data?.orderNo}${isSea ? `\n入仓号:${res.data?.warehouseEntryNo}` : ''}${fromUnmatchedId ? '\n已自动关联无单快递' : ''}`;
       const resetForm = () => {
         setStep(1);
         setPackages([]);
@@ -333,15 +390,23 @@ export default function OrderCreateScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>服务信息</Text>
 
+        {isSea && customerId && (
+          <View style={styles.entryNoBanner}>
+            <Ionicons name="pricetag-outline" size={16} color="#7C3AED" />
+            <Text style={styles.entryNoText}>入仓号将在下单时自动生成（与客户绑定）</Text>
+          </View>
+        )}
+
         <Text style={styles.formLabel}>服务类型</Text>
         <View style={styles.optionRow}>
-          {SERVICE_OPTIONS.map((opt) => (
+          {(isSea ? SEA_SERVICE_OPTIONS : AIR_SERVICE_OPTIONS).map((opt) => (
             <TouchableOpacity
               key={opt.value}
               style={[styles.optionBtn, serviceType === opt.value && styles.optionBtnActive]}
               onPress={() => setServiceType(opt.value)}
             >
               <Text style={[styles.optionText, serviceType === opt.value && styles.optionTextActive]}>{opt.label}</Text>
+              <Text style={[styles.optionDesc, serviceType === opt.value && { color: colors.primary }]}>{opt.desc}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -444,17 +509,20 @@ export default function OrderCreateScreen() {
             </View>
           </View>
 
-          <View style={styles.row3}>
-            <View style={{ flex: 1 }}>
-              <FormField label="长(cm)" value={String(pkg.lengthCm || '')} onChangeText={(v) => updatePackage(idx, { lengthCm: Number(v) || undefined })} placeholder="0" keyboardType="numeric" />
+          {/* 体积字段：空运始终显示，海运仅非整柜显示 */}
+          {(!isSea || serviceType !== 'FCL') && (
+            <View style={styles.row3}>
+              <View style={{ flex: 1 }}>
+                <FormField label="长(cm)" value={String(pkg.lengthCm || '')} onChangeText={(v) => updatePackage(idx, { lengthCm: Number(v) || undefined })} placeholder="0" keyboardType="numeric" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <FormField label="宽(cm)" value={String(pkg.widthCm || '')} onChangeText={(v) => updatePackage(idx, { widthCm: Number(v) || undefined })} placeholder="0" keyboardType="numeric" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <FormField label="高(cm)" value={String(pkg.heightCm || '')} onChangeText={(v) => updatePackage(idx, { heightCm: Number(v) || undefined })} placeholder="0" keyboardType="numeric" />
+              </View>
             </View>
-            <View style={{ flex: 1 }}>
-              <FormField label="宽(cm)" value={String(pkg.widthCm || '')} onChangeText={(v) => updatePackage(idx, { widthCm: Number(v) || undefined })} placeholder="0" keyboardType="numeric" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <FormField label="高(cm)" value={String(pkg.heightCm || '')} onChangeText={(v) => updatePackage(idx, { heightCm: Number(v) || undefined })} placeholder="0" keyboardType="numeric" />
-            </View>
-          </View>
+          )}
         </View>
       ))}
 
@@ -525,6 +593,10 @@ export default function OrderCreateScreen() {
         <Text style={styles.sectionTitle}>订单确认</Text>
 
         <View style={styles.confirmRow}>
+          <Text style={styles.confirmLabel}>业务线</Text>
+          <Text style={styles.confirmValue}>{isSea ? '🚢 海运' : '✈️ 空运'}</Text>
+        </View>
+        <View style={styles.confirmRow}>
           <Text style={styles.confirmLabel}>客户</Text>
           <Text style={styles.confirmValue}>{customerName}</Text>
         </View>
@@ -534,8 +606,14 @@ export default function OrderCreateScreen() {
         </View>
         <View style={styles.confirmRow}>
           <Text style={styles.confirmLabel}>服务类型</Text>
-          <Text style={styles.confirmValue}>{SERVICE_OPTIONS.find((o) => o.value === serviceType)?.label}</Text>
+          <Text style={styles.confirmValue}>{(isSea ? SEA_SERVICE_OPTIONS : AIR_SERVICE_OPTIONS).find((o) => o.value === serviceType)?.label}</Text>
         </View>
+        {isSea && warehouseEntryNo ? (
+          <View style={styles.confirmRow}>
+            <Text style={styles.confirmLabel}>入仓号</Text>
+            <Text style={[styles.confirmValue, { color: '#7C3AED' }]}>{warehouseEntryNo}</Text>
+          </View>
+        ) : null}
         <View style={styles.confirmRow}>
           <Text style={styles.confirmLabel}>付款方式</Text>
           <Text style={styles.confirmValue}>{PAYMENT_OPTIONS.find((o) => o.value === paymentMethod)?.label}</Text>
@@ -599,7 +677,7 @@ export default function OrderCreateScreen() {
           <TouchableOpacity onPress={() => step > 1 ? setStep(step - 1) : safeBack(router)} style={styles.navBtn}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={styles.navTitle}>新建订单</Text>
+          <Text style={styles.navTitle}>{isSea ? '海运下单' : '空运下单'}</Text>
         </View>
 
         {/* 步骤指示器 */}
@@ -842,6 +920,8 @@ const styles = StyleSheet.create({
   customerSelector: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.bg },
   customerSelectedName: { fontSize: font.md, color: colors.text, fontWeight: '500' },
   customerPlaceholder: { fontSize: font.md, color: colors.textTertiary },
+  entryNoBanner: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F5F3FF', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, marginBottom: spacing.md, borderWidth: 1, borderColor: '#EDE9FE' },
+  entryNoText: { fontSize: font.xs, color: '#7C3AED', flex: 1 },
 
   formItem: { marginBottom: spacing.md },
   formLabel: { fontSize: font.sm, color: colors.textSecondary, marginBottom: 6, marginTop: spacing.sm },

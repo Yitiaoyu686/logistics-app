@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { customerApi, systemApi } from '../../lib/api';
 import { safeBack } from '../../lib/nav';
+import { useBusinessLine } from '../../lib/business-line';
 
 type CustomerType = 'COMPANY_CN' | 'COMPANY_OVERSEAS' | 'INDIVIDUAL';
 type Transport = 'SEA' | 'AIR' | 'BOTH';
@@ -36,6 +37,7 @@ const INDUSTRY_OPTIONS = ['电子产品', '服装鞋帽', '日用百货', '机�
 
 export default function CustomerCreateScreen() {
   const router = useRouter();
+  const { businessLine } = useBusinessLine();
   const [submitting, setSubmitting] = useState(false);
   const [countries, setCountries] = useState<Country[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string>('');
@@ -48,7 +50,7 @@ export default function CustomerCreateScreen() {
   const [contactName, setContactName] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [contactEmail, setContactEmail] = useState('');
-  const [preferredTransport, setPreferredTransport] = useState<Transport>('SEA');
+  const [preferredTransport, setPreferredTransport] = useState<Transport>(businessLine === 'AIR' ? 'AIR' : 'SEA');
   const [remark, setRemark] = useState('');
 
   // 企业资质信息
@@ -67,6 +69,44 @@ export default function CustomerCreateScreen() {
   const [idType, setIdType] = useState<'ID_CARD' | 'PASSPORT'>('ID_CARD');
   const [idNumber, setIdNumber] = useState('');
   const [enterpriseCollapsed, setEnterpriseCollapsed] = useState(true);
+
+  // 拍照上传
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [idPhotoUrl, setIdPhotoUrl] = useState<string | null>(null);
+
+  const handleTakePhoto = (type: 'biz_license' | 'id_card') => {
+    if (Platform.OS === 'web') {
+      // Web: 模拟拍照（添加占位图）
+      const url = `https://picsum.photos/seed/${Date.now()}/400/300`;
+      if (type === 'biz_license') setPhotoUrl(url);
+      else setIdPhotoUrl(url);
+      // 模拟 OCR
+      setOcrLoading(true);
+      setTimeout(() => {
+        if (type === 'biz_license') {
+          setCompanyFullName('广州市喵喵国际贸易有限公司');
+          setCreditCode('91440101MA5CXXXXX');
+          setLegalPerson('张三');
+          setRegAddress('广州市白云区XX路XX号');
+        } else {
+          setCompanyFullName('张三');
+          setIdNumber('440101199001011234');
+        }
+        setOcrLoading(false);
+        Alert.alert('识别完成', '已自动填充部分信息，请核对确认');
+      }, 1500);
+    } else {
+      Alert.alert('拍照', '原生拍照将在打包后启用', [
+        { text: '添加模拟图片', onPress: () => {
+          const url = `https://picsum.photos/seed/${Date.now()}/400/300`;
+          if (type === 'biz_license') setPhotoUrl(url);
+          else setIdPhotoUrl(url);
+        }},
+        { text: '取消', style: 'cancel' },
+      ]);
+    }
+  };
 
   useEffect(() => {
     AsyncStorage.getItem('user').then((u) => {
@@ -235,6 +275,25 @@ export default function CustomerCreateScreen() {
                       </View>
                     </View>
                     <FormField label="开票地址" value={invoiceAddress} onChangeText={setInvoiceAddress} placeholder="开票地址" />
+                    {/* 拍照上传营业执照 */}
+                    <TouchableOpacity style={styles.photoBtn} onPress={() => handleTakePhoto('biz_license')}>
+                      <Ionicons name="camera-outline" size={22} color={colors.primary} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.photoBtnTitle}>拍照上传营业执照</Text>
+                        <Text style={styles.photoBtnDesc}>自动识别填充公司信息</Text>
+                      </View>
+                      {photoUrl ? (
+                        <Ionicons name="checkmark-circle" size={22} color={colors.success} />
+                      ) : (
+                        <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+                      )}
+                    </TouchableOpacity>
+                    {ocrLoading && (
+                      <View style={styles.ocrBanner}>
+                        <ActivityIndicator size="small" color={colors.primary} />
+                        <Text style={styles.ocrText}>正在识别营业执照...</Text>
+                      </View>
+                    )}
                   </>
                 )}
 
@@ -272,6 +331,25 @@ export default function CustomerCreateScreen() {
                       ))}
                     </View>
                     <FormField label="证件号码" value={idNumber} onChangeText={setIdNumber} placeholder="证件号码" />
+                    {/* 拍照上传证件 */}
+                    <TouchableOpacity style={styles.photoBtn} onPress={() => handleTakePhoto('id_card')}>
+                      <Ionicons name="camera-outline" size={22} color={colors.primary} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.photoBtnTitle}>拍照上传{idType === 'ID_CARD' ? '身份证' : '护照'}</Text>
+                        <Text style={styles.photoBtnDesc}>自动识别填充证件信息</Text>
+                      </View>
+                      {idPhotoUrl ? (
+                        <Ionicons name="checkmark-circle" size={22} color={colors.success} />
+                      ) : (
+                        <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+                      )}
+                    </TouchableOpacity>
+                    {ocrLoading && (
+                      <View style={styles.ocrBanner}>
+                        <ActivityIndicator size="small" color={colors.primary} />
+                        <Text style={styles.ocrText}>正在识别证件信息...</Text>
+                      </View>
+                    )}
                   </>
                 )}
 
@@ -418,6 +496,11 @@ const styles = StyleSheet.create({
   formHalf: { flex: 1 },
   chipText: { fontSize: font.sm, color: colors.textSecondary },
   chipTextActive: { color: '#fff', fontWeight: '600' },
+  photoBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.primary, borderRadius: radius.md, backgroundColor: colors.primaryLight, marginTop: spacing.md },
+  photoBtnTitle: { fontSize: font.sm, color: colors.primary, fontWeight: '600' },
+  photoBtnDesc: { fontSize: font.xs, color: colors.textTertiary, marginTop: 2 },
+  ocrBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.infoLight, padding: spacing.sm, borderRadius: radius.sm, marginTop: spacing.sm },
+  ocrText: { fontSize: font.xs, color: colors.info },
 
   bottomBar: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.card, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xl, borderTopWidth: 0.5, borderTopColor: colors.borderLight },
   submitBtn: { flexDirection: 'row', height: 52, backgroundColor: colors.primary, borderRadius: radius.lg, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, shadowColor: colors.primary, shadowOpacity: 0.25, shadowOffset: { width: 0, height: 4 }, shadowRadius: 8 },

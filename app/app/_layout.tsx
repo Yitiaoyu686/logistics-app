@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useAuthState, User } from '../lib/auth';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuthState } from '../lib/auth';
+import { BusinessLineProvider } from '../lib/business-line';
 
 export default function RootLayout() {
   const { user, loading } = useAuthState();
@@ -24,13 +24,13 @@ export default function RootLayout() {
   if (loading) return null;
 
   return (
-    <>
+    <BusinessLineProvider>
       <StatusBar style="dark" />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
       </Stack>
-    </>
+    </BusinessLineProvider>
   );
 }

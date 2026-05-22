@@ -13,6 +13,7 @@ export const colors = {
 
   // Primary — 深色，用于主操作按钮、激活态、链接
   primary: '#1A1F36',
+  primaryDark: '#1A1F36',
   primaryLight: '#F0F1F5',
 
   // Header

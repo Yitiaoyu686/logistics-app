@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Pressable,
+  View, Text, StyleSheet, TouchableOpacity, Pressable, Modal,
   ActivityIndicator, ScrollView, Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -91,14 +91,27 @@ const STATUS_META: Record<string, { label: string; color: string; bg: string }> 
   ARRIVED:         { label: '已到达', color: colors.taskDelivery,  bg: '#fce7f3' },
   DELIVERED:       { label: '已签收', color: colors.textSecondary, bg: colors.borderLight },
 };
-const TIMELINE_NODES = [
+const TIMELINE_SEA = [
   { key: 'CREATED',        label: '已下单',   icon: 'document-text-outline' },
   { key: 'INBOUND',        label: '已入库',   icon: 'archive-outline' },
-  { key: 'PACKED',         label: '已装箱',   icon: 'cube-outline' },
+  { key: 'PACKED',         label: '已装柜',   icon: 'cube-outline' },
   { key: 'CUSTOMS_EXPORT', label: '出口报关', icon: 'reader-outline' },
   { key: 'DEPARTED',       label: '已发车',   icon: 'car-outline' },
-  { key: 'IN_TRANSIT',     label: '运输中',   icon: 'boat-outline' },
+  { key: 'IN_TRANSIT',     label: '海运中',   icon: 'boat-outline' },
   { key: 'ARRIVED',        label: '已到港',   icon: 'flag-outline' },
+  { key: 'CUSTOMS_IMPORT', label: '清关中',   icon: 'shield-checkmark-outline' },
+  { key: 'DELIVERING',     label: '派送中',   icon: 'bicycle-outline' },
+  { key: 'DELIVERED',      label: '已签收',   icon: 'checkmark-circle-outline' },
+];
+
+const TIMELINE_AIR = [
+  { key: 'CREATED',        label: '已下单',   icon: 'document-text-outline' },
+  { key: 'INBOUND',        label: '已入库',   icon: 'archive-outline' },
+  { key: 'PACKED',         label: '已装板',   icon: 'cube-outline' },
+  { key: 'CUSTOMS_EXPORT', label: '出口报关', icon: 'reader-outline' },
+  { key: 'DEPARTED',       label: '已发车',   icon: 'car-outline' },
+  { key: 'IN_TRANSIT',     label: '空运中',   icon: 'airplane-outline' },
+  { key: 'ARRIVED',        label: '已落地',   icon: 'flag-outline' },
   { key: 'CUSTOMS_IMPORT', label: '清关中',   icon: 'shield-checkmark-outline' },
   { key: 'DELIVERING',     label: '派送中',   icon: 'bicycle-outline' },
   { key: 'DELIVERED',      label: '已签收',   icon: 'checkmark-circle-outline' },
@@ -132,6 +145,7 @@ export default function OrderDetailScreen() {
   const [detail, setDetail] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
+  const [cargoModal, setCargoModal] = useState<PackageItem | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -153,11 +167,12 @@ export default function OrderDetailScreen() {
 
   const renderOverview = (d: OrderDetail) => {
     const currentIdx = getProgressIndex(d.order_status);
+    const timelineNodes = d.business_line === 'AIR' ? TIMELINE_AIR : TIMELINE_SEA;
     return (
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>物流轨迹</Text>
         <View style={styles.timeline}>
-          {TIMELINE_NODES.map((node, idx) => {
+          {timelineNodes.map((node, idx) => {
             const passed = idx <= currentIdx;
             const isCurrent = idx === currentIdx;
             return (
@@ -166,7 +181,7 @@ export default function OrderDetailScreen() {
                   <View style={[styles.timelineDot, passed && styles.timelineDotActive, isCurrent && styles.timelineDotCurrent]}>
                     <Ionicons name={node.icon as any} size={14} color={passed ? '#fff' : colors.textTertiary} />
                   </View>
-                  {idx < TIMELINE_NODES.length - 1 && (
+                  {idx < timelineNodes.length - 1 && (
                     <View style={[styles.timelineLine, passed && styles.timelineLineActive]} />
                   )}
                 </View>
@@ -221,28 +236,40 @@ export default function OrderDetailScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>子运单 ({d.subOrders?.length || 0})</Text>
         {(d.subOrders || []).map((sub) => (
-          <View key={sub.id} style={styles.subCard}>
+          <TouchableOpacity
+            key={sub.id}
+            style={styles.subCard}
+            onPress={() => Alert.alert('子运单详情', `${sub.sub_order_no}\n${sub.pieces}件 · ${sub.actual_weight_kg}kg${sub.container_no ? `\n${d.business_line === 'SEA' ? '柜号' : '集装号'}: ${sub.container_no}` : ''}\n状态: ${STATUS_META[sub.sub_status]?.label || sub.sub_status}`)}
+          >
             <View style={styles.subHeader}>
               <Text style={styles.subNo}>{sub.sub_order_no}</Text>
               <Text style={styles.subStatus}>{STATUS_META[sub.sub_status]?.label || sub.sub_status}</Text>
             </View>
             <Text style={styles.subInfo}>
-              {sub.pieces}件 · {sub.actual_weight_kg}kg{sub.container_no ? ` · 柜号 ${sub.container_no}` : ''}
+              {sub.pieces}件 · {sub.actual_weight_kg}kg{sub.container_no ? ` · ${d.business_line === 'SEA' ? '柜号' : '集装号'} ${sub.container_no}` : ''}
             </Text>
-          </View>
+          </TouchableOpacity>
         ))}
       </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>包裹清单 ({d.packages?.length || 0})</Text>
         {(d.packages || []).map((p) => (
-          <View key={p.id} style={styles.pkgRow}>
+          <TouchableOpacity
+            key={p.id}
+            style={styles.pkgRow}
+            onPress={() => setCargoModal(p)}
+          >
             <View style={{ flex: 1 }}>
-              <Text style={styles.pkgGoods}>{p.goods_name}</Text>
+              <Text style={styles.pkgGoods}>{p.goods_name || '未命名货物'}</Text>
               <Text style={styles.pkgTracking}>{p.express_company} · {p.tracking_no}</Text>
             </View>
-            <Text style={styles.pkgWeight}>{p.declared_weight_kg}kg</Text>
-          </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={styles.pkgWeight}>{p.declared_weight_kg}kg</Text>
+              <Text style={styles.pkgPieces}>{p.pieces}件</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={14} color={colors.textTertiary} style={{ marginLeft: 4 }} />
+          </TouchableOpacity>
         ))}
       </View>
     </>
@@ -398,6 +425,29 @@ export default function OrderDetailScreen() {
             {activeTab === 'cargo' && renderCargo(detail)}
             {activeTab === 'fees' && renderFees(detail)}
           </ScrollView>
+
+          {/* 包裹详情 Modal */}
+          <Modal visible={!!cargoModal} transparent animationType="fade" onRequestClose={() => setCargoModal(null)}>
+            <View style={styles.cargoModalMask}>
+              <View style={styles.cargoModalSheet}>
+                <View style={styles.cargoModalHeader}>
+                  <Text style={styles.cargoModalTitle}>包裹详情</Text>
+                  <TouchableOpacity onPress={() => setCargoModal(null)}>
+                    <Ionicons name="close" size={22} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+                {cargoModal && (
+                  <>
+                    <View style={styles.cargoModalRow}><Text style={styles.cargoModalLabel}>品名</Text><Text style={styles.cargoModalValue}>{cargoModal.goods_name || '-'}</Text></View>
+                    <View style={styles.cargoModalRow}><Text style={styles.cargoModalLabel}>快递公司</Text><Text style={styles.cargoModalValue}>{cargoModal.express_company}</Text></View>
+                    <View style={styles.cargoModalRow}><Text style={styles.cargoModalLabel}>快递单号</Text><Text style={styles.cargoModalValue}>{cargoModal.tracking_no}</Text></View>
+                    <View style={styles.cargoModalRow}><Text style={styles.cargoModalLabel}>件数</Text><Text style={styles.cargoModalValue}>{cargoModal.pieces} 件</Text></View>
+                    <View style={styles.cargoModalRow}><Text style={styles.cargoModalLabel}>重量</Text><Text style={styles.cargoModalValue}>{cargoModal.declared_weight_kg} kg</Text></View>
+                  </>
+                )}
+              </View>
+            </View>
+          </Modal>
         </>
       )}
     </View>
@@ -453,6 +503,14 @@ const styles = StyleSheet.create({
   pkgGoods: { fontSize: font.sm, color: colors.text, fontWeight: '500' },
   pkgTracking: { fontSize: font.xs, color: colors.textSecondary, marginTop: 2 },
   pkgWeight: { fontSize: font.sm, color: colors.primary, fontWeight: '600' },
+  pkgPieces: { fontSize: font.xs, color: colors.textTertiary, marginTop: 1 },
+  cargoModalMask: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: spacing.lg },
+  cargoModalSheet: { backgroundColor: colors.card, borderRadius: radius.xl, padding: spacing.lg, width: '100%', maxWidth: 320 },
+  cargoModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg },
+  cargoModalTitle: { fontSize: font.lg, fontWeight: '700', color: colors.text },
+  cargoModalRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing.sm, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
+  cargoModalLabel: { fontSize: font.sm, color: colors.textSecondary },
+  cargoModalValue: { fontSize: font.sm, color: colors.text, fontWeight: '500' },
   relCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, backgroundColor: colors.bg, borderRadius: radius.md, marginBottom: spacing.xs, borderLeftWidth: 3, borderLeftColor: colors.primary },
   relNo: { fontSize: font.sm, fontFamily: font.mono, fontWeight: '700', color: colors.primary },
   relSub: { fontSize: font.xs, color: colors.textSecondary, marginTop: 2 },

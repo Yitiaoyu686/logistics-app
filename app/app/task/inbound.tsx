@@ -96,6 +96,11 @@ export default function InboundScreen() {
   const [remark, setRemark] = useState('');
   const [goodsCategory, setGoodsCategory] = useState<string | undefined>(undefined);
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
+  const [cargoType, setCargoType] = useState<'GENERAL' | 'SPECIAL'>('GENERAL');
+  const [goodsName, setGoodsName] = useState('');
+  const [cargoRemark, setCargoRemark] = useState('');
+  // 多件包裹（每件独立尺寸重量）
+  const [multiPieces, setMultiPieces] = useState<Array<{ id: string; pieces: number; weight: string; length: string; width: string; height: string }>>([]);
   const [fees, setFees] = useState<InboundFee[]>([]);
   const [feeEditorOpen, setFeeEditorOpen] = useState(false);
   const [editingFee, setEditingFee] = useState<InboundFee | null>(null);
@@ -297,13 +302,21 @@ export default function InboundScreen() {
       });
 
       const title = '入库成功';
+      const askPrint = () => {
+        Alert.alert('打印面单', '是否需要多打几张贴码？\n可贴在箱子不同部位。', [
+          { text: '打1张', onPress: () => router.push({ pathname: '/task/label-print' as any, params: { id: order.id } }) },
+          { text: '打2张', onPress: () => router.push({ pathname: '/task/label-print' as any, params: { id: order.id } }) },
+          { text: '不打', style: 'cancel', onPress: () => safeBack(router) },
+        ]);
+      };
       const msg = andPrint ? '面单已发送到蓝牙打印机' : '';
       if (Platform.OS === 'web') {
         window.alert(msg ? `${title}:${msg}` : title);
-        safeBack(router);
+        askPrint();
       } else {
         Alert.alert(title, msg, [
-          { text: andPrint ? '继续扫下一单' : '确定', onPress: () => safeBack(router) },
+          { text: '打印面单', onPress: () => askPrint() },
+          { text: '继续扫下一单', onPress: () => safeBack(router) },
         ]);
       }
     } catch (err: any) {
@@ -407,6 +420,30 @@ export default function InboundScreen() {
           {/* 货物类别 */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>货物类别</Text>
+
+            {/* 普货/非普货 */}
+            <Text style={styles.formLabel}>货物类型</Text>
+            <View style={styles.optionRow}>
+              <TouchableOpacity
+                style={[styles.optionBtn2, cargoType === 'GENERAL' && { borderColor: colors.success, backgroundColor: colors.successLight }]}
+                onPress={() => setCargoType('GENERAL')}
+              >
+                <Ionicons name="checkmark-circle-outline" size={16} color={cargoType === 'GENERAL' ? colors.success : colors.textTertiary} />
+                <Text style={[styles.optionText, cargoType === 'GENERAL' && { color: colors.success, fontWeight: '600' }]}>普货</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.optionBtn2, cargoType === 'SPECIAL' && { borderColor: colors.danger, backgroundColor: colors.dangerLight }]}
+                onPress={() => setCargoType('SPECIAL')}
+              >
+                <Ionicons name="warning-outline" size={16} color={cargoType === 'SPECIAL' ? colors.danger : colors.textTertiary} />
+                <Text style={[styles.optionText, cargoType === 'SPECIAL' && { color: colors.danger, fontWeight: '600' }]}>非普货</Text>
+              </TouchableOpacity>
+            </View>
+
+            {cargoType === 'SPECIAL' && (
+              <FormField label="非普货说明 *" value={cargoRemark} onChangeText={setCargoRemark} placeholder="如：含电池、液体、粉末等" />
+            )}
+
             <TouchableOpacity
               style={styles.selectField}
               onPress={() => setCategoryPickerOpen(true)}
@@ -416,6 +453,8 @@ export default function InboundScreen() {
               </Text>
               <Ionicons name="chevron-down" size={18} color={colors.textTertiary} />
             </TouchableOpacity>
+
+            <FormField label="品名" value={goodsName} onChangeText={setGoodsName} placeholder="货物名称（如：手机壳、数据线）" />
           </View>
 
           {/* 费用明细 */}
@@ -860,9 +899,9 @@ function renderHiddenFileInput(
   });
 }
 
-function FormField({ label, value, onChangeText, keyboardType, unit, compact }: {
+function FormField({ label, value, onChangeText, keyboardType, unit, compact, placeholder }: {
   label: string; value: string; onChangeText: (v: string) => void;
-  keyboardType?: any; unit?: string; compact?: boolean;
+  keyboardType?: any; unit?: string; compact?: boolean; placeholder?: string;
 }) {
   return (
     <View style={[styles.formItem, compact && { flex: 1 }]}>
@@ -872,6 +911,7 @@ function FormField({ label, value, onChangeText, keyboardType, unit, compact }: 
           style={styles.input}
           value={value}
           onChangeText={onChangeText}
+          placeholder={placeholder}
           keyboardType={keyboardType || 'default'}
           placeholderTextColor={colors.textTertiary}
         />
@@ -903,6 +943,10 @@ const styles = StyleSheet.create({
   noMatchText: { fontSize: font.sm, color: colors.warning },
   // Section
   section: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.md },
+  // Cargo type toggle
+  optionRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  optionBtn2: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: spacing.md, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.card },
+  optionText: { fontSize: font.sm, color: colors.textSecondary },
   sectionTitle: { fontSize: font.md, fontWeight: '600', color: colors.text, marginBottom: spacing.md },
   required: { color: colors.danger, fontSize: font.sm },
   // Form
