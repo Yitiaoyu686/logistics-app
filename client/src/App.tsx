@@ -39,7 +39,6 @@ import { InboundList } from './pages/wms/origin/InboundList';
 import { InboundScan } from './pages/wms/origin/InboundScan';
 import { StockList } from './pages/wms/origin/StockList';
 import { ContainerMgt } from './pages/wms/origin/ContainerMgt';
-import { AirCargoMgt } from './pages/wms/origin/AirCargoMgt';
 import { ReturnProcess } from './pages/wms/origin/ReturnProcess';
 import { NoOrderExpress } from './pages/wms/origin/NoOrderExpress';
 import { TransferList } from './pages/wms/origin/TransferList';
