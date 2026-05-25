@@ -166,6 +166,29 @@ export default function JobListScreen() {
         </View>
       </View>
 
+      <View style={styles.statsRow}>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>{list.filter((j) => j.job_status !== 'DEPARTED').length}</Text>
+          <Text style={styles.statLabel}>待执行</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>{list.filter((j) => j.job_status === 'DEPARTED').length}</Text>
+          <Text style={styles.statLabel}>已执行</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={[styles.statValue, styles.statWarn]}>{list.filter((j) => !j.container_no).length}</Text>
+          <Text style={styles.statLabel}>未建{list.find((j) => j.business_line === 'AIR') ? '集装号' : '箱号'}</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>{new Set(list.map((j) => `${j.origin_port || ''}→${j.dest_port || ''}`).filter(Boolean)).size}</Text>
+          <Text style={styles.statLabel}>总线路</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>{new Set(list.map((j) => j.container_no).filter(Boolean)).size}</Text>
+          <Text style={styles.statLabel}>总{list.find((j) => j.business_line === 'AIR') ? '集装号' : '集装箱'}</Text>
+        </View>
+      </View>
+
       <View style={styles.filterRow}>
         {STATUS_FILTERS.map((f) => (
           <Pressable
@@ -210,6 +233,12 @@ const styles = StyleSheet.create({
   searchRow: { paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm, backgroundColor: colors.card },
   searchInputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bg, borderRadius: radius.md, paddingHorizontal: spacing.md, height: 40, gap: spacing.sm },
   searchInput: { flex: 1, fontSize: font.md, color: colors.text },
+
+  statsRow: { flexDirection: 'row', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.card, gap: spacing.sm },
+  statCard: { flex: 1, alignItems: 'center', backgroundColor: colors.bg, borderRadius: radius.md, paddingVertical: spacing.sm },
+  statValue: { fontSize: font.lg, fontWeight: '700', color: colors.primary },
+  statWarn: { color: colors.warning },
+  statLabel: { fontSize: font.xs, color: colors.textTertiary, marginTop: 2 },
 
   filterRow: { flexDirection: 'row', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: spacing.sm, backgroundColor: colors.card, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
   filterChip: { paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.full, backgroundColor: colors.bg },

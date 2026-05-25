@@ -345,7 +345,56 @@ export default function InboundScreen() {
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.navTitle}>{MODE_LABEL[mode]}</Text>
-          <Text style={styles.navExtra}>今日 12件</Text>
+          {order ? (
+            <TouchableOpacity
+              style={styles.navCancelBtn}
+              onPress={() => {
+                const goodsReceived = () => {
+                  Alert.alert('取消入库', '货物是否已收到？', [
+                    { text: '未收到货', onPress: () => { showCancelReason(false); } },
+                    { text: '已收到货', style: 'destructive', onPress: () => { showCancelReason(true); } },
+                    { text: '返回', style: 'cancel' },
+                  ]);
+                };
+                const showCancelReason = (received: boolean) => {
+                  const reasons = received
+                    ? ['客户取消', '货物损坏', '禁运物品', '货物不符', '客户拒收']
+                    : ['未收到货物', '物流丢失', '运单信息错误', '重复下单', '其他'];
+                  const reasonButtons: Array<{ text: string; style?: 'cancel' | 'destructive' | 'default'; onPress?: () => void }> = reasons.map((r) => ({
+                    text: r,
+                    onPress: () => {
+                      Alert.alert(
+                        `确认${received ? '取消并创建退运单' : '取消入库'}？`,
+                        `原因：${r}${received ? '\n\n确认后将自动创建退运单' : ''}`,
+                        [
+                          { text: '返回', style: 'cancel' },
+                          {
+                            text: received ? '确认取消并创建退运单' : '确认取消',
+                            style: 'destructive',
+                            onPress: async () => {
+                              try {
+                                await warehouseApi.cancelInbound({ orderId: order.id, reason: r, goodsReceived: received });
+                                Alert.alert('已取消', received ? '已取消并创建退运单' : '入库已取消', [{ text: '返回列表', onPress: () => safeBack(router) }]);
+                              } catch {
+                                Alert.alert('取消失败', '请重试');
+                              }
+                            },
+                          },
+                        ]
+                      );
+                    },
+                  }));
+                  reasonButtons.push({ text: '返回', style: 'cancel' });
+                  Alert.alert('选择原因', '', reasonButtons);
+                };
+                goodsReceived();
+              }}
+            >
+              <Text style={styles.navCancelText}>取消入库</Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={styles.navExtra}>今日 12件</Text>
+          )}
         </View>
 
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
@@ -929,6 +978,8 @@ const styles = StyleSheet.create({
   navBtn: { padding: spacing.xs },
   navTitle: { flex: 1, marginLeft: spacing.sm, fontSize: font.lg, fontWeight: '600', color: colors.text },
   navExtra: { fontSize: font.sm, color: colors.primary },
+  navCancelBtn: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.sm, backgroundColor: colors.dangerLight },
+  navCancelText: { fontSize: font.xs, color: colors.danger, fontWeight: '600' },
   // Scroll
   scroll: { padding: spacing.md, paddingBottom: 140 },
   // Match card

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList,
-  SafeAreaView, ActivityIndicator, RefreshControl, Pressable,
+  SafeAreaView, ActivityIndicator, RefreshControl, Pressable, Alert,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -40,6 +40,7 @@ const STATUS_META: Record<string, { label: string; color: string; bg: string }> 
   PENDING:   { label: '待入库', color: colors.warning, bg: colors.warningLight },
   PARTIAL:   { label: '部分入库', color: colors.info, bg: colors.infoLight },
   COMPLETED: { label: '已完成', color: colors.success, bg: colors.successLight },
+  ABNORMAL:  { label: '异常', color: colors.danger, bg: colors.dangerLight },
 };
 
 export default function InboundListScreen() {
@@ -88,6 +89,17 @@ export default function InboundListScreen() {
     return items;
   }, [list, tab, keyword]);
 
+  const stats = useMemo(() => {
+    const today = list.filter((r) => {
+      const d = r.inbound_at || r.created_at || '';
+      return d.startsWith(new Date().toISOString().slice(0, 10));
+    });
+    const total = filtered.reduce((s, r) => s + (r.total_pieces || 0), 0);
+    const totalWt = filtered.reduce((s, r) => s + (r.total_weight_kg || 0), 0);
+    const abnormal = filtered.filter((r) => r.inbound_status === 'ABNORMAL').length;
+    return { todayCount: today.length, totalPieces: total, totalWeight: totalWt, abnormal };
+  }, [list, filtered]);
+
   const handlePress = (item: InboundRecord) => {
     if (tab === 'TRANSFER') {
       router.push('/task/transfer-inbound' as any);
@@ -132,7 +144,30 @@ export default function InboundListScreen() {
 
         <View style={styles.cardFooter}>
           <Text style={styles.statText}>{item.total_pieces || 0}件 · {item.total_weight_kg || 0}kg</Text>
-          <Text style={styles.timeText}>{(item.inbound_at || item.created_at || '').substring(0, 16)}</Text>
+          <View style={styles.footerRight}>
+            {item.inbound_status === 'ABNORMAL' && (
+              <TouchableOpacity
+                style={styles.deleteBtn}
+                onPress={() => {
+                  Alert.alert('确认删除', `确定要删除入库记录 ${item.inbound_no || ''} 吗？`, [
+                    { text: '取消', style: 'cancel' },
+                    {
+                      text: '删除', style: 'destructive',
+                      onPress: async () => {
+                        try {
+                          await warehouseApi.deleteInbound(item.id);
+                          load();
+                        } catch { Alert.alert('删除失败', '请重试'); }
+                      },
+                    },
+                  ]);
+                }}
+              >
+                <Ionicons name="trash-outline" size={16} color={colors.danger} />
+              </TouchableOpacity>
+            )}
+            <Text style={styles.timeText}>{(item.inbound_at || item.created_at || '').substring(0, 16)}</Text>
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -171,6 +206,25 @@ export default function InboundListScreen() {
             value={keyword}
             onChangeText={setKeyword}
           />
+        </View>
+      </View>
+
+      <View style={styles.statsRow}>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>{stats.todayCount}</Text>
+          <Text style={styles.statLabel}>今日入库</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>{stats.totalPieces}</Text>
+          <Text style={styles.statLabel}>总件数</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>{stats.totalWeight.toFixed(1)}</Text>
+          <Text style={styles.statLabel}>总重量 kg</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={[styles.statValue, styles.statWarn]}>{stats.abnormal}</Text>
+          <Text style={styles.statLabel}>异常</Text>
         </View>
       </View>
 
@@ -213,6 +267,12 @@ const styles = StyleSheet.create({
   searchInputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: radius.md, paddingHorizontal: spacing.md, height: 40, gap: spacing.sm },
   searchInput: { flex: 1, fontSize: font.md, color: colors.text },
 
+  statsRow: { flexDirection: 'row', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: spacing.sm },
+  statCard: { flex: 1, alignItems: 'center', backgroundColor: colors.card, borderRadius: radius.md, paddingVertical: spacing.sm },
+  statValue: { fontSize: font.lg, fontWeight: '700', color: colors.primary },
+  statWarn: { color: colors.warning },
+  statLabel: { fontSize: font.xs, color: colors.textTertiary, marginTop: 2 },
+
   listContent: { padding: spacing.md, gap: spacing.sm },
   card: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
@@ -221,6 +281,8 @@ const styles = StyleSheet.create({
   statusText: { fontSize: font.xs, fontWeight: '600' },
   metaLine: { fontSize: font.sm, color: colors.textSecondary, marginBottom: 2 },
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.sm },
+  footerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   statText: { fontSize: font.xs, color: colors.text, fontWeight: '600' },
   timeText: { fontSize: font.xs, color: colors.textTertiary },
+  deleteBtn: { padding: spacing.xs },
 });
