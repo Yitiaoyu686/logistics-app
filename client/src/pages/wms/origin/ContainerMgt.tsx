@@ -501,6 +501,9 @@ export const ContainerMgt = ({
 }) => {
   const isSea = businessMode !== 'AIR';
   const unitLabel = isSea ? '集装箱' : '集装号';
+  const defaultUnitType: ShippingUnit['unitType'] = isSea ? '40HQ' : 'PALLET';
+  const defaultMaxWeight = isSea ? 26000 : 1500;
+  const defaultMaxVolume = isSea ? 76 : 5;
   const TXT = {
     scanPlaceholder: isSea ? '扫描/输入订单号' : '扫描/输入订单号',
     drawerTitle: isSea ? '添加订单' : '添加订单',
@@ -967,10 +970,10 @@ export const ContainerMgt = ({
           const unitNo = `${prefix}${String(current).padStart(2, '0')}`;
           const res: any = await warehouseApi.createUnit({
             unitNo,
-            unitType: DEFAULT_UNIT_TYPE,
-            transportMode: 'SEA',
-            maxWeight: DEFAULT_MAX_WEIGHT,
-            maxVolume: DEFAULT_MAX_VOLUME,
+            unitType: defaultUnitType,
+            transportMode: isSea ? 'SEA' : 'AIR',
+            maxWeight: defaultMaxWeight,
+            maxVolume: defaultMaxVolume,
             warehouse: 'CN',
             warehouseId: warehouseId || null,
             route: selectedRoute.routeText,
@@ -1194,7 +1197,10 @@ export const ContainerMgt = ({
 
   const taskOptions = useMemo(
     () => jobs
-      .filter((job) => String(job.transportType || '').toUpperCase() === 'SEA')
+      .filter((job) => {
+        const transportType = String(job.transportType || '').toUpperCase();
+        return transportType === (isSea ? 'SEA' : 'AIR');
+      })
       .filter((job) => String(job.status || '').toUpperCase() !== 'CANCELLED')
       .map((job) => ({
         label: `${job.jobNo} ${job.route ? `| ${job.route}` : ''}`,
@@ -1846,7 +1852,7 @@ export const ContainerMgt = ({
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16 }}>
                   <div>
                     <div style={{ fontSize: 38, fontWeight: 700, lineHeight: 1.1 }}>
-                      {selectedRoute?.serviceType === '特快' ? 'EXPRES' : 'AIR CARGO'}
+                      {selectedRoute?.serviceType === '特快' ? 'EXPRES' : isSea ? 'SEA FREIGHT' : 'AIR CARGO'}
                     </div>
                     <div style={{ fontSize: 24, fontWeight: 700, marginTop: 8 }}>
                       {String(selectedRoute?.routeText || unit.route || '').replace(/→/g, '-')}
