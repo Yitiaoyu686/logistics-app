@@ -14,8 +14,6 @@ import { useBusinessLine } from '../../lib/business-line';
 type ServiceType = 'EXPRESS' | 'STANDARD' | 'FCL' | 'LCL';
 type ExportMode = 'BUYER_EXPORT' | 'SELF_EXPORT';
 type PaymentMethod = 'PREPAID' | 'COD';
-type DeliveryMethod = 'DELIVERY' | 'SELF_PICKUP';
-
 interface CustomerOption {
   id: string;
   customerCode: string;
@@ -27,13 +25,7 @@ interface CustomerOption {
 interface PackageItem {
   expressCompany: string;
   trackingNo: string;
-  goodsName: string;
-  goodsCategory: string;
   pieces: number;
-  weight: number;
-  lengthCm?: number;
-  widthCm?: number;
-  heightCm?: number;
 }
 
 interface CustomerDetail {
@@ -83,13 +75,7 @@ const PAYMENT_OPTIONS: { value: PaymentMethod; label: string }[] = [
   { value: 'COD', label: '到付' },
 ];
 
-const DELIVERY_OPTIONS: { value: DeliveryMethod; label: string; desc: string }[] = [
-  { value: 'DELIVERY', label: '配送', desc: '送货上门' },
-  { value: 'SELF_PICKUP', label: '自提', desc: '客户到站取货' },
-];
-
 const EXPRESS_COMPANIES = ['顺丰', '韵达', '圆通', '中通', '申通', '京东', '邮政', '德邦'];
-const GOODS_CATEGORIES = ['ELECTRONICS', 'APPAREL', 'DAILY_USE', 'BEAUTY', 'MACHINE_PARTS', 'FOOD', 'OTHER'];
 
 export default function OrderCreateScreen() {
   const router = useRouter();
@@ -121,7 +107,6 @@ export default function OrderCreateScreen() {
   const [serviceType, setServiceType] = useState<ServiceType>(businessLine === 'SEA' ? 'FCL' : 'EXPRESS');
   const [exportMode, setExportMode] = useState<ExportMode>('BUYER_EXPORT');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('PREPAID');
-  const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('DELIVERY');
   const [showCustomerPicker, setShowCustomerPicker] = useState(false);
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [customerKeyword, setCustomerKeyword] = useState('');
@@ -132,10 +117,7 @@ export default function OrderCreateScreen() {
       return [{
         expressCompany: (params.expressCompany as string) || '顺丰',
         trackingNo: params.trackingNo as string,
-        goodsName: '',
-        goodsCategory: 'OTHER',
         pieces: Number(params.pieces) || 1,
-        weight: Number(params.weightKg) || 1,
       }];
     }
     return [];
@@ -199,21 +181,10 @@ export default function OrderCreateScreen() {
   }, [customers, customerKeyword]);
 
   const totalPieces = packages.reduce((sum, p) => sum + (Number(p.pieces) || 0), 0);
-  const totalWeight = packages.reduce((sum, p) => sum + (Number(p.weight) || 0), 0);
   const isSea = businessLine === 'SEA';
-  const warehouseEntryNo = useMemo(() => {
-    if (!isSea || !customerCode) return '';
-    const entrySeq = String(Math.floor(Math.random() * 900) + 100);
-    return `${customerCode}${entrySeq}`;
-  }, [isSea, customerCode]);
-  const estimatedFee = totalWeight > 0
-    ? (isSea
-        ? (totalWeight <= 1 ? 63 : 63 + (totalWeight - 1) * 57)
-        : (totalWeight <= 1 ? 120 : 120 + (totalWeight - 1) * 85))
-    : 0;
 
   const addPackage = () => {
-    setPackages([...packages, { expressCompany: '顺丰', trackingNo: '', goodsName: '', goodsCategory: 'OTHER', pieces: 1, weight: 1 }]);
+    setPackages([...packages, { expressCompany: '顺丰', trackingNo: '', pieces: 1 }]);
   };
 
   const removePackage = (idx: number) => {
@@ -227,12 +198,6 @@ export default function OrderCreateScreen() {
   const handleNext = () => {
     if (step === 1) {
       if (!customerId) { Alert.alert('请选择客户'); return; }
-    }
-    if (step === 2) {
-      if (packages.length > 0) {
-        const invalid = packages.find((p) => p.goodsName && !p.pieces);
-        if (invalid) { Alert.alert('已填写品名的包裹请补充件数'); return; }
-      }
     }
     if (step === 3) {
       if (!senderName || !senderPhone || !senderAddress) {
@@ -288,26 +253,16 @@ export default function OrderCreateScreen() {
       const userStr = await AsyncStorage.getItem('user');
       const user = userStr ? JSON.parse(userStr) : {};
 
-      // 入仓号：海运需要，空运不需要
-      let warehouseEntryNo = '';
-      if (isSea) {
-        const entryCode = customerCode || customerId.slice(-3).toUpperCase();
-        const entrySeq = String(Math.floor(Math.random() * 900) + 100);
-        warehouseEntryNo = `${entryCode}${entrySeq}`;
-      }
-
       const res = await orderApi.create({
         businessLine,
         serviceType,
         customerId,
         customerName,
         customerCode,
-        warehouseEntryNo,
         salesUserId: user.id || 'user-sales1',
         routeCode,
         exportMode,
         paymentMethod,
-        deliveryMethod,
         senderName,
         senderPhone,
         senderAddress,
@@ -317,17 +272,10 @@ export default function OrderCreateScreen() {
         consigneeCountry,
         consigneeCity,
         totalPieces,
-        totalWeight,
         items: packages.map((p) => ({
           expressCompany: p.expressCompany,
           trackingNo: p.trackingNo,
-          goodsName: p.goodsName,
-          goodsCategory: p.goodsCategory,
           pieces: p.pieces,
-          weight: p.weight,
-          lengthCm: p.lengthCm,
-          widthCm: p.widthCm,
-          heightCm: p.heightCm,
         })),
       });
       // 如果是从无订单快递跳过来的，创建订单后立即匹配
@@ -345,7 +293,7 @@ export default function OrderCreateScreen() {
         }
       }
       const successTitle = '订单创建成功';
-      const successMsg = `运单号:${res.data?.orderNo}${isSea ? `\n入仓号:${res.data?.warehouseEntryNo}` : ''}${fromUnmatchedId ? '\n已自动关联无单快递' : ''}`;
+      const successMsg = `运单号:${res.data?.orderNo}${fromUnmatchedId ? '\n已自动关联无单快递' : ''}`;
       const resetForm = () => {
         setStep(1);
         setPackages([]);
@@ -390,13 +338,6 @@ export default function OrderCreateScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>服务信息</Text>
 
-        {isSea && customerId && (
-          <View style={styles.entryNoBanner}>
-            <Ionicons name="pricetag-outline" size={16} color="#7C3AED" />
-            <Text style={styles.entryNoText}>入仓号将在下单时自动生成（与客户绑定）</Text>
-          </View>
-        )}
-
         <Text style={styles.formLabel}>服务类型</Text>
         <View style={styles.optionRow}>
           {(isSea ? SEA_SERVICE_OPTIONS : AIR_SERVICE_OPTIONS).map((opt) => (
@@ -424,20 +365,6 @@ export default function OrderCreateScreen() {
           ))}
         </View>
 
-        <Text style={styles.formLabel}>交付方式</Text>
-        <View style={styles.optionRow}>
-          {DELIVERY_OPTIONS.map((opt) => (
-            <TouchableOpacity
-              key={opt.value}
-              style={[styles.optionBtn, deliveryMethod === opt.value && styles.optionBtnActive]}
-              onPress={() => setDeliveryMethod(opt.value)}
-            >
-              <Text style={[styles.optionText, deliveryMethod === opt.value && styles.optionTextActive]}>{opt.label}</Text>
-              <Text style={[styles.optionDesc, deliveryMethod === opt.value && { color: colors.primary }]}>{opt.desc}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
         <Text style={styles.formLabel}>付款方式</Text>
         <View style={styles.optionRow}>
           {PAYMENT_OPTIONS.map((opt) => (
@@ -458,9 +385,7 @@ export default function OrderCreateScreen() {
     <ScrollView contentContainerStyle={styles.scroll}>
       {packages.length > 0 && (
         <View style={styles.summaryBar}>
-          <Text style={styles.summaryText}>
-            共 {packages.length} 个包裹 · {totalPieces} 件 · {totalWeight.toFixed(1)} kg
-          </Text>
+          <Text style={styles.summaryText}>共 {packages.length} 个包裹 · {totalPieces} 件</Text>
         </View>
       )}
 
@@ -472,63 +397,60 @@ export default function OrderCreateScreen() {
         </View>
       )}
 
-      {packages.map((pkg, idx) => (
-        <View key={idx} style={styles.section}>
-          <View style={styles.pkgHeader}>
-            <Text style={styles.sectionTitle}>包裹 #{idx + 1}</Text>
-            {packages.length > 1 && (
-              <TouchableOpacity onPress={() => removePackage(idx)}>
-                <Ionicons name="trash-outline" size={20} color={colors.danger} />
-              </TouchableOpacity>
-            )}
+      {packages.length > 0 && (
+        <View style={styles.section}>
+          {/* 表头 */}
+          <View style={styles.tableHeader}>
+            <Text style={[styles.thText, { flex: 1.5 }]}>快递公司</Text>
+            <Text style={[styles.thText, { flex: 2 }]}>快递单号</Text>
+            <Text style={[styles.thText, { flex: 0.8 }]}>件数</Text>
+            <View style={{ width: 28 }} />
           </View>
-
-          <Text style={styles.formLabel}>快递公司</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-            {EXPRESS_COMPANIES.map((c) => (
-              <TouchableOpacity
-                key={c}
-                style={[styles.chip, pkg.expressCompany === c && styles.chipActive]}
-                onPress={() => updatePackage(idx, { expressCompany: c })}
-              >
-                <Text style={[styles.chipText, pkg.expressCompany === c && styles.chipTextActive]}>{c}</Text>
+          {packages.map((pkg, idx) => (
+            <View key={idx} style={styles.tableRow}>
+              <View style={{ flex: 1.5 }}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRowCompact}>
+                  {EXPRESS_COMPANIES.map((c) => (
+                    <TouchableOpacity
+                      key={c}
+                      style={[styles.chipSmall, pkg.expressCompany === c && styles.chipActive]}
+                      onPress={() => updatePackage(idx, { expressCompany: c })}
+                    >
+                      <Text style={[styles.chipSmallText, pkg.expressCompany === c && styles.chipTextActive]}>{c}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+              <View style={{ flex: 2 }}>
+                <TextInput
+                  style={styles.tableInput}
+                  value={pkg.trackingNo}
+                  onChangeText={(v) => updatePackage(idx, { trackingNo: v })}
+                  placeholder="快递单号"
+                  placeholderTextColor={colors.textTertiary}
+                />
+              </View>
+              <View style={{ flex: 0.8 }}>
+                <TextInput
+                  style={styles.tableInput}
+                  value={String(pkg.pieces || '')}
+                  onChangeText={(v) => updatePackage(idx, { pieces: Number(v) || 0 })}
+                  placeholder="0"
+                  placeholderTextColor={colors.textTertiary}
+                  keyboardType="numeric"
+                />
+              </View>
+              <TouchableOpacity onPress={() => removePackage(idx)} style={{ padding: 4 }}>
+                <Ionicons name="close-circle" size={18} color={colors.textTertiary} />
               </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          <FormField label="快递单号" value={pkg.trackingNo} onChangeText={(v) => updatePackage(idx, { trackingNo: v })} placeholder="快递单号（选填）" />
-
-          <FormField label="品名 *" value={pkg.goodsName} onChangeText={(v) => updatePackage(idx, { goodsName: v })} placeholder="货物名称" />
-
-          <View style={styles.row2}>
-            <View style={{ flex: 1 }}>
-              <FormField label="件数 *" value={String(pkg.pieces || '')} onChangeText={(v) => updatePackage(idx, { pieces: Number(v) || 0 })} placeholder="0" keyboardType="numeric" />
             </View>
-            <View style={{ flex: 1 }}>
-              <FormField label="重量(kg)" value={String(pkg.weight || '')} onChangeText={(v) => updatePackage(idx, { weight: Number(v) || 0 })} placeholder="0" keyboardType="decimal-pad" />
-            </View>
-          </View>
-
-          {/* 体积字段：空运始终显示，海运仅非整柜显示 */}
-          {(!isSea || serviceType !== 'FCL') && (
-            <View style={styles.row3}>
-              <View style={{ flex: 1 }}>
-                <FormField label="长(cm)" value={String(pkg.lengthCm || '')} onChangeText={(v) => updatePackage(idx, { lengthCm: Number(v) || undefined })} placeholder="0" keyboardType="numeric" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <FormField label="宽(cm)" value={String(pkg.widthCm || '')} onChangeText={(v) => updatePackage(idx, { widthCm: Number(v) || undefined })} placeholder="0" keyboardType="numeric" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <FormField label="高(cm)" value={String(pkg.heightCm || '')} onChangeText={(v) => updatePackage(idx, { heightCm: Number(v) || undefined })} placeholder="0" keyboardType="numeric" />
-              </View>
-            </View>
-          )}
+          ))}
         </View>
-      ))}
+      )}
 
       <TouchableOpacity style={styles.addPkgBtn} onPress={addPackage}>
         <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
-        <Text style={styles.addPkgBtnText}>添加更多包裹</Text>
+        <Text style={styles.addPkgBtnText}>添加包裹</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -608,19 +530,9 @@ export default function OrderCreateScreen() {
           <Text style={styles.confirmLabel}>服务类型</Text>
           <Text style={styles.confirmValue}>{(isSea ? SEA_SERVICE_OPTIONS : AIR_SERVICE_OPTIONS).find((o) => o.value === serviceType)?.label}</Text>
         </View>
-        {isSea && warehouseEntryNo ? (
-          <View style={styles.confirmRow}>
-            <Text style={styles.confirmLabel}>入仓号</Text>
-            <Text style={[styles.confirmValue, { color: '#7C3AED' }]}>{warehouseEntryNo}</Text>
-          </View>
-        ) : null}
         <View style={styles.confirmRow}>
           <Text style={styles.confirmLabel}>付款方式</Text>
           <Text style={styles.confirmValue}>{PAYMENT_OPTIONS.find((o) => o.value === paymentMethod)?.label}</Text>
-        </View>
-        <View style={styles.confirmRow}>
-          <Text style={styles.confirmLabel}>交付方式</Text>
-          <Text style={styles.confirmValue}>{DELIVERY_OPTIONS.find((o) => o.value === deliveryMethod)?.label}</Text>
         </View>
         <View style={styles.confirmRow}>
           <Text style={styles.confirmLabel}>包裹数</Text>
@@ -629,10 +541,6 @@ export default function OrderCreateScreen() {
         <View style={styles.confirmRow}>
           <Text style={styles.confirmLabel}>总件数</Text>
           <Text style={styles.confirmValue}>{totalPieces} 件</Text>
-        </View>
-        <View style={styles.confirmRow}>
-          <Text style={styles.confirmLabel}>总重量</Text>
-          <Text style={styles.confirmValue}>{totalWeight.toFixed(1)} kg</Text>
         </View>
         <View style={styles.confirmDivider} />
         <View style={styles.confirmRow}>
@@ -662,11 +570,6 @@ export default function OrderCreateScreen() {
         </View>
       </View>
 
-      <View style={[styles.section, { backgroundColor: colors.primaryLight }]}>
-        <Text style={styles.feeLabel}>预估运费（仅供参考）</Text>
-        <Text style={styles.feeValue}>¥ {estimatedFee.toFixed(2)}</Text>
-        <Text style={styles.feeHint}>* 最终以实际称重为准</Text>
-      </View>
     </ScrollView>
   );
 
@@ -939,6 +842,14 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   chipText: { fontSize: font.sm, color: colors.textSecondary },
   chipTextActive: { color: '#fff', fontWeight: '600' },
+
+  tableHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.sm, paddingVertical: spacing.sm, backgroundColor: colors.bg, borderRadius: radius.sm, marginBottom: spacing.xs },
+  thText: { fontSize: font.xs, fontWeight: '600', color: colors.textTertiary },
+  tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight, gap: spacing.sm },
+  tableInput: { borderWidth: 0.5, borderColor: colors.border, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 6, fontSize: font.sm, color: colors.text, backgroundColor: colors.bg },
+  chipRowCompact: { gap: 4, paddingVertical: 2 },
+  chipSmall: { paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
+  chipSmallText: { fontSize: font.xs, color: colors.textSecondary },
 
   summaryBar: { backgroundColor: colors.primaryLight, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md },
   summaryText: { fontSize: font.sm, color: colors.primary, fontWeight: '600', textAlign: 'center' },
