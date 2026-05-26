@@ -46,6 +46,8 @@ router.get('/:id/full', (req: Request, res: Response) => {
   const subOrderIds = (subOrders as any[]).map((s) => s.id);
   let relatedJobs: any[] = [];
   let relatedDpns: any[] = [];
+  let trackingEvents: any[] = [];
+  let jobBindings: any[] = [];
   if (subOrderIds.length > 0) {
     const placeholders = subOrderIds.map(() => '?').join(',');
     relatedJobs = db.prepare(`
@@ -60,6 +62,48 @@ router.get('/:id/full', (req: Request, res: Response) => {
       JOIN pod_dpn d ON d.id = di.dpn_id
       WHERE di.sub_order_id IN (${placeholders})
     `).all(...subOrderIds);
+    trackingEvents = db.prepare(`
+      SELECT * FROM tms_tracking_event
+      WHERE sub_order_id IN (${placeholders})
+      ORDER BY event_time
+    `).all(...subOrderIds);
+    jobBindings = db.prepare(`
+      SELECT r.sub_order_id, j.job_no, j.container_no, s.unit_no as shipping_unit_no
+      FROM tms_job_order_rel r
+      JOIN tms_job j ON j.id = r.job_id
+      LEFT JOIN tms_shipping_unit s ON s.id = r.shipping_unit_id
+      WHERE r.sub_order_id IN (${placeholders})
+    `).all(...subOrderIds);
+  }
+
+  // 按子单号组织 trackingBySubOrder: { subOrderId: [{ siteCode, siteName, nodes }] }
+  const trackingBySubOrder: Record<string, any[]> = {};
+  for (const ev of trackingEvents) {
+    const subId = String(ev.sub_order_id || '');
+    if (!subId) continue;
+    if (!trackingBySubOrder[subId]) trackingBySubOrder[subId] = [];
+    const siteCode = ev.node_code?.split(':')[0] || 'TRACKING';
+    const siteName = ev.location || ev.node_code || '物流节点';
+    let site = trackingBySubOrder[subId].find((s: any) => s.siteCode === siteCode);
+    if (!site) {
+      site = { siteCode, siteName, nodes: [] };
+      trackingBySubOrder[subId].push(site);
+    }
+    site.nodes.push({
+      nodeCode: ev.node_code || '',
+      nodeName: ev.node_name || ev.event_type || '',
+      statusCode: ev.status_code || 'COMPLETED',
+      eventTime: ev.event_time || ev.created_at || '',
+    });
+  }
+
+  // 按子单号组织 jobBindingBySubOrder
+  const jobBindingBySubOrder: Record<string, any[]> = {};
+  for (const b of jobBindings) {
+    const subId = String(b.sub_order_id || '');
+    if (!subId) continue;
+    if (!jobBindingBySubOrder[subId]) jobBindingBySubOrder[subId] = [];
+    jobBindingBySubOrder[subId].push(b);
   }
 
   res.json({
@@ -71,6 +115,10 @@ router.get('/:id/full', (req: Request, res: Response) => {
       fees,
       relatedJobs,
       relatedDpns,
+      trackingEvents,
+      trackingBySubOrder,
+      jobBindings,
+      jobBindingBySubOrder,
     },
   });
 });

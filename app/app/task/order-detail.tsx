@@ -16,6 +16,12 @@ interface SubOrder {
   pieces: number;
   actual_weight_kg: number;
   container_no: string | null;
+  created_at?: string;
+  updated_at?: string;
+  etd?: string;
+  eta?: string;
+  actual_departure?: string;
+  actual_arrival?: string;
 }
 
 interface PackageItem {
@@ -205,115 +211,136 @@ export default function OrderDetailScreen() {
     const tracking = d.trackingBySubOrder || {};
     const hasTracking = Object.keys(tracking).length > 0;
 
+    // 从子单状态构建简易物流节点
+    const buildSubTimeline = (sub: SubOrder) => {
+      const nodes: { label: string; time?: string; done: boolean }[] = [];
+      const statusOrder = ['PENDING_INBOUND', 'INBOUND', 'PACKED', 'CUSTOMS_EXPORT', 'DEPARTED', 'IN_TRANSIT', 'ARRIVED', 'CUSTOMS_IMPORT', 'DELIVERING', 'DELIVERED'];
+      const currentIdx = statusOrder.indexOf(sub.sub_status);
+      const labels = d.business_line === 'AIR'
+        ? ['待入库', '已入库', '已装板', '出口报关', '已发车', '空运中', '已落地', '清关中', '派送中', '已签收']
+        : ['待入库', '已入库', '已装柜', '出口报关', '已发车', '海运中', '已到港', '清关中', '派送中', '已签收'];
+      for (let i = 0; i < labels.length; i++) {
+        nodes.push({ label: labels[i], done: i <= currentIdx, time: i === currentIdx ? undefined : undefined });
+      }
+      return { nodes, currentIdx, labels };
+    };
+
     return (
       <>
         {/* 子运单物流状态 */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>物流状态栏</Text>
-          {(d.subOrders || []).length === 0 ? (
-            <Text style={styles.emptyHint}>暂无子运单</Text>
-          ) : (
-            (d.subOrders || []).map((sub) => {
-              const sites = tracking[sub.id] || [];
-              // 找出所有节点中最新的 eventTime
-              let latestTime = '';
-              for (const site of sites) {
-                for (const node of (site.nodes || [])) {
-                  if (node.eventTime && (!latestTime || node.eventTime > latestTime)) {
-                    latestTime = node.eventTime;
-                  }
+          <Text style={styles.sectionTitle}>物流状态栏 ({(d.subOrders || []).length} 个子运单)</Text>
+          {(d.subOrders || []).map((sub) => {
+            const sites = tracking[sub.id] || [];
+            // 找出所有节点中最新的 eventTime
+            let latestTime = '';
+            for (const site of sites) {
+              for (const node of (site.nodes || [])) {
+                if (node.eventTime && (!latestTime || node.eventTime > latestTime)) {
+                  latestTime = node.eventTime;
                 }
               }
-              return (
-                <View key={sub.id} style={styles.subTrackingCard}>
-                  <View style={styles.subTrackingHeader}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.subTrackingNo}>{sub.sub_order_no}</Text>
-                      <Text style={styles.subTrackingMeta}>
-                        {sub.pieces}件 · {sub.actual_weight_kg}kg
-                        {sub.container_no ? ` · ${d.business_line === 'SEA' ? '柜号' : '集装号'} ${sub.container_no}` : ''}
-                      </Text>
-                    </View>
-                    <View style={[styles.subTrackingStatus, { backgroundColor: STATUS_META[sub.sub_status]?.bg || colors.borderLight }]}>
-                      <Text style={[styles.subTrackingStatusText, { color: STATUS_META[sub.sub_status]?.color || colors.textSecondary }]}>
-                        {STATUS_META[sub.sub_status]?.label || sub.sub_status}
-                      </Text>
-                    </View>
-                    {latestTime ? (
-                      <Text style={styles.subTrackingTime}>{formatTime(latestTime)}</Text>
-                    ) : null}
-                  </View>
+            }
 
-                  {sites.length > 0 ? (
-                    sites.map((site) => {
-                      const validNodes = (site.nodes || []).filter((n) => n.eventTime || n.nodeName);
-                      if (validNodes.length === 0) return null;
+            // 从子单字段收集时间信息
+            const subTimes: string[] = [];
+            if (sub.created_at) subTimes.push(sub.created_at);
+            if (sub.updated_at) subTimes.push(sub.updated_at);
+            if (sub.etd) subTimes.push(sub.etd);
+            if (sub.eta) subTimes.push(sub.eta);
+            if (sub.actual_departure) subTimes.push(sub.actual_departure);
+            if (sub.actual_arrival) subTimes.push(sub.actual_arrival);
+            const bestTime = latestTime || (subTimes.length > 0 ? subTimes.sort().reverse()[0] : '');
+
+            const { nodes, currentIdx, labels } = buildSubTimeline(sub);
+            const subMeta = STATUS_META[sub.sub_status] || { label: sub.sub_status, color: colors.textSecondary, bg: colors.borderLight };
+
+            return (
+              <View key={sub.id} style={styles.subTrackingCard}>
+                <View style={styles.subTrackingHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.subTrackingNo}>{sub.sub_order_no}</Text>
+                    <Text style={styles.subTrackingMeta}>
+                      {sub.pieces}件 · {sub.actual_weight_kg}kg
+                      {sub.container_no ? ` · ${d.business_line === 'SEA' ? '柜号' : '集装号'} ${sub.container_no}` : ''}
+                    </Text>
+                  </View>
+                  <View style={[styles.subTrackingStatus, { backgroundColor: subMeta.bg }]}>
+                    <Text style={[styles.subTrackingStatusText, { color: subMeta.color }]}>{subMeta.label}</Text>
+                  </View>
+                  {bestTime ? (
+                    <Text style={styles.subTrackingTime}>{formatTime(bestTime)}</Text>
+                  ) : null}
+                </View>
+
+                {sites.length > 0 ? (
+                  /* 有 API tracking 数据：按站点展示 */
+                  sites.map((site) => {
+                    const validNodes = (site.nodes || []).filter((n) => n.eventTime || n.nodeName);
+                    if (validNodes.length === 0) return null;
+                    return (
+                      <View key={site.siteCode} style={styles.siteBlock}>
+                        <Text style={styles.siteName}>{site.siteName || site.siteCode}</Text>
+                        <View style={styles.nodeRow}>
+                          {validNodes.map((node, ni) => (
+                            <View key={ni} style={styles.nodeTag}>
+                              <View style={[styles.nodeDot, { backgroundColor: nodeColor(node.statusCode) }]} />
+                              <Text style={styles.nodeLabel}>{node.nodeName || node.nodeCode}</Text>
+                              {node.eventTime ? (
+                                <Text style={styles.nodeTime}>{formatTime(node.eventTime)}</Text>
+                              ) : null}
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    );
+                  })
+                ) : (
+                  /* 无 tracking 数据：基于子单状态构建时间线 */
+                  <View style={styles.inlineTimeline}>
+                    {nodes.map((node, idx) => {
+                      const isCurrent = idx === currentIdx;
+                      const isPassed = idx < currentIdx;
                       return (
-                        <View key={site.siteCode} style={styles.siteBlock}>
-                          <Text style={styles.siteName}>{site.siteName || site.siteCode}</Text>
-                          <View style={styles.nodeRow}>
-                            {validNodes.map((node, ni) => (
-                              <View key={ni} style={styles.nodeTag}>
-                                <View style={[styles.nodeDot, { backgroundColor: nodeColor(node.statusCode) }]} />
-                                <Text style={styles.nodeLabel}>{node.nodeName || node.nodeCode}</Text>
-                                {node.eventTime ? (
-                                  <Text style={styles.nodeTime}>{formatTime(node.eventTime)}</Text>
-                                ) : null}
-                              </View>
-                            ))}
-                          </View>
+                        <View key={idx} style={styles.inlineTimelineRow}>
+                          <View style={[styles.inlineDot, isPassed && styles.inlineDotPassed, isCurrent && styles.inlineDotCurrent]} />
+                          {idx < nodes.length - 1 && <View style={[styles.inlineLine, isPassed && styles.inlineLinePassed]} />}
+                          <Text style={[styles.inlineLabel, (isPassed || isCurrent) && styles.inlineLabelActive]} numberOfLines={1}>
+                            {node.label}
+                          </Text>
+                          {isCurrent && sub.updated_at ? (
+                            <Text style={styles.inlineTime}>{formatTime(sub.updated_at!)}</Text>
+                          ) : null}
                         </View>
                       );
-                    })
-                  ) : hasTracking ? null : (
-                    <Text style={styles.noTrackingHint}>暂无物流节点数据</Text>
-                  )}
-
-                  {/* DPN / Delivery */}
-                  {(d.dpnBySubOrder?.[sub.id] || []).map((dpn: any) => (
-                    <View key={dpn.dpn_no} style={styles.extraTag}>
-                      <Ionicons name="document-text-outline" size={12} color="#7C3AED" />
-                      <Text style={[styles.extraTagText, { color: '#7C3AED' }]}>DPN {dpn.dpn_no}</Text>
-                    </View>
-                  ))}
-                  {(d.deliveryTaskBySubOrder?.[sub.id] || []).map((dt: any) => (
-                    <View key={dt.task_no} style={styles.extraTag}>
-                      <Ionicons name="car-outline" size={12} color={colors.info} />
-                      <Text style={[styles.extraTagText, { color: colors.info }]}>配送 {dt.task_no}</Text>
-                    </View>
-                  ))}
-                </View>
-              );
-            })
-          )}
-        </View>
-
-        {/* 静态概览时间线(无 tracking 数据时显示) */}
-        {!hasTracking && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>物流轨迹（概览）</Text>
-            <View style={styles.timeline}>
-              {(d.business_line === 'AIR' ? TIMELINE_AIR : TIMELINE_SEA).map((node, idx) => {
-                const currentIdx = getProgressIndex(d.order_status);
-                const passed = idx <= currentIdx;
-                const isCurrent = idx === currentIdx;
-                return (
-                  <View key={node.key} style={styles.timelineRow}>
-                    <View style={styles.timelineLeft}>
-                      <View style={[styles.timelineDot, passed && styles.timelineDotActive, isCurrent && styles.timelineDotCurrent]}>
-                        <Ionicons name={node.icon as any} size={14} color={passed ? '#fff' : colors.textTertiary} />
-                      </View>
-                      {idx < 9 && <View style={[styles.timelineLine, passed && styles.timelineLineActive]} />}
-                    </View>
-                    <View style={styles.timelineRight}>
-                      <Text style={[styles.timelineLabel, passed && { color: colors.text, fontWeight: '600' }]}>{node.label}</Text>
-                    </View>
+                    })}
                   </View>
-                );
-              })}
-            </View>
-          </View>
-        )}
+                )}
+
+                {/* 子单时间摘要 */}
+                <View style={styles.timeSummary}>
+                  {sub.created_at ? <Text style={styles.timeSummaryItem}>创建 {formatTime(sub.created_at)}</Text> : null}
+                  {sub.etd ? <Text style={styles.timeSummaryItem}>ETD {sub.etd.slice(5, 10)}</Text> : null}
+                  {sub.eta ? <Text style={styles.timeSummaryItem}>ETA {sub.eta.slice(5, 10)}</Text> : null}
+                </View>
+
+                {/* DPN / Delivery */}
+                {(d.dpnBySubOrder?.[sub.id] || []).map((dpn: any) => (
+                  <View key={dpn.dpn_no} style={styles.extraTag}>
+                    <Ionicons name="document-text-outline" size={12} color="#7C3AED" />
+                    <Text style={[styles.extraTagText, { color: '#7C3AED' }]}>DPN {dpn.dpn_no}</Text>
+                  </View>
+                ))}
+                {(d.deliveryTaskBySubOrder?.[sub.id] || []).map((dt: any) => (
+                  <View key={dt.task_no} style={styles.extraTag}>
+                    <Ionicons name="car-outline" size={12} color={colors.info} />
+                    <Text style={[styles.extraTagText, { color: colors.info }]}>配送 {dt.task_no}</Text>
+                  </View>
+                ))}
+              </View>
+            );
+          })}
+        </View>
       </>
     );
   };
@@ -631,6 +658,18 @@ const styles = StyleSheet.create({
   noTrackingHint: { fontSize: font.xs, color: colors.textTertiary, paddingLeft: spacing.xs, paddingVertical: spacing.sm },
   extraTag: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing.xs, paddingLeft: spacing.xs },
   extraTagText: { fontSize: font.xs, fontWeight: '600' },
+  inlineTimeline: { paddingLeft: spacing.xs, paddingVertical: spacing.sm },
+  inlineTimelineRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 3, gap: 6 },
+  inlineDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.borderLight, marginRight: 4 },
+  inlineDotPassed: { backgroundColor: colors.success },
+  inlineDotCurrent: { backgroundColor: colors.primary },
+  inlineLine: { width: 1, height: 20, backgroundColor: colors.borderLight, position: 'absolute', left: 7, top: 14 },
+  inlineLinePassed: { backgroundColor: colors.success },
+  inlineLabel: { fontSize: 11, color: colors.textTertiary, width: 55 },
+  inlineLabelActive: { color: colors.text, fontWeight: '600' },
+  inlineTime: { fontSize: 11, fontFamily: font.mono, color: colors.primary },
+  timeSummary: { flexDirection: 'row', gap: spacing.md, paddingTop: spacing.xs, paddingLeft: spacing.xs, flexWrap: 'wrap' },
+  timeSummaryItem: { fontSize: 10, fontFamily: font.mono, color: colors.textTertiary },
   detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing.sm, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
   detailLabel: { fontSize: font.sm, color: colors.textSecondary },
   detailValue: { fontSize: font.sm, color: colors.text, fontWeight: '500', flex: 1, textAlign: 'right' },
