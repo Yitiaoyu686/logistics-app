@@ -59,7 +59,7 @@ export default function SubOrderDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
     subOrderId: string; subOrderNo: string; subStatus: string;
-    businessLine: string; parentOrderNo: string;
+    businessLine: string; parentOrderId: string;
   }>();
   const [sites, setSites] = useState<TrackingSite[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,8 +69,8 @@ export default function SubOrderDetailScreen() {
   const load = async () => {
     setLoading(true);
     try {
-      // 从全局缓存或 API 取 tracking 数据
-      const full = await orderApi.get(params.parentOrderNo || '');
+      // 从 API 取 tracking 数据（需要父订单 ID）
+      const full = await orderApi.get(params.parentOrderId || '');
       const tracking = full.data?.trackingBySubOrder || {};
       const rawSites = tracking[params.subOrderId || ''] || [];
       setSites(rawSites);

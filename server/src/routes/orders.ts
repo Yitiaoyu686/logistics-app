@@ -82,8 +82,10 @@ router.get('/:id/full', (req: Request, res: Response) => {
     const subId = String(ev.sub_order_id || '');
     if (!subId) continue;
     if (!trackingBySubOrder[subId]) trackingBySubOrder[subId] = [];
-    const siteCode = ev.node_code?.split(':')[0] || 'TRACKING';
-    const siteName = ev.location || ev.node_code || '物流节点';
+    // node_code 格式为 "SITE:NODE" 时拆分，否则全部归到 "物流追踪"
+    const parts = (ev.node_code || '').split(':');
+    const siteCode = parts.length >= 2 ? parts[0] : 'TRACKING';
+    const siteName = parts.length >= 2 ? (ev.location || parts[0]) : '物流追踪';
     let site = trackingBySubOrder[subId].find((s: any) => s.siteCode === siteCode);
     if (!site) {
       site = { siteCode, siteName, nodes: [] };

@@ -1183,6 +1183,55 @@ export function seedDatabase(): void {
   // job-air-loading 没有节点
 
   // ============================================================
+  // 9b. 子订单级追踪事件 — 每个子订单写入物流节点+时间
+  // ============================================================
+  let _stevSeq = 0;
+  const addSubTrack = (subOrderId: string, nodeCode: string, nodeName: string, eventTime: string, statusCode: string) => {
+    _stevSeq += 1;
+    db.prepare(`
+      INSERT INTO tms_tracking_event (id, business_line, event_scope, sub_order_id, node_code, node_name, event_type, status_code, event_time, created_at)
+      VALUES (?, 'SEA', 'SUB_ORDER', ?, ?, ?, 'LOGISTICS', ?, ?, datetime('now'))
+    `).run(`stev-${_stevSeq.toString().padStart(5,'0')}`, subOrderId, nodeCode, nodeName, statusCode, eventTime);
+  };
+
+  const allSubOrders = db.prepare('SELECT id, order_id, sub_order_no, sub_status, business_line FROM oms_sub_order').all() as any[];
+
+  // 给每个子订单写完整的追踪事件链
+  for (const s of allSubOrders) {
+    // 根据父订单创建时间生成合理的时间线
+    const baseDate = (s.created_at || '2026-05-18').slice(0, 10);
+    addSubTrack(s.id, 'INBOUND',       '已入库',   `${baseDate} 10:30:00`, 'COMPLETED');
+    addSubTrack(s.id, 'QUALITY_CHECK', '质检',     `${baseDate} 11:00:00`, 'COMPLETED');
+    addSubTrack(s.id, 'PACKING',       '已装箱',   `${baseDate} 14:00:00`, 'COMPLETED');
+  }
+
+  // 对已绑定到 JOB 的子订单追加更多节点
+  const subWithJob = db.prepare(`
+    SELECT r.sub_order_id, j.id as job_id, j.job_status, j.etd, j.eta
+    FROM tms_job_order_rel r JOIN tms_job j ON j.id = r.job_id
+  `).all() as any[];
+
+  for (const swj of subWithJob) {
+    const sid = swj.sub_order_id;
+    // 已离库
+    addSubTrack(sid, 'WAREHOUSE_OUT',  '已离库',     '2026-02-25 08:00:00', 'COMPLETED');
+    addSubTrack(sid, 'CUSTOMS_EXPORT', '出口报关',   '2026-02-25 14:00:00', 'COMPLETED');
+    addSubTrack(sid, 'CUSTOMS_RELEASE','海关放行',   '2026-02-26 10:00:00', 'COMPLETED');
+    addSubTrack(sid, 'DEPARTURE',      '已起运离港', '2026-02-27 06:00:00', 'COMPLETED');
+    addSubTrack(sid, 'IN_TRANSIT',     '在途海运',   '2026-03-01 12:00:00', 'COMPLETED');
+
+    if (swj.job_status === 'COMPLETED' || swj.job_status === 'ARRIVED') {
+      addSubTrack(sid, 'ARRIVAL',        '已到港',     '2026-03-21 09:00:00', 'COMPLETED');
+      addSubTrack(sid, 'CUSTOMS_IMPORT', '进口申报',   '2026-03-21 15:00:00', 'COMPLETED');
+      addSubTrack(sid, 'CUSTOMS_CLEARED','进口放行',   '2026-03-23 11:00:00', 'COMPLETED');
+      addSubTrack(sid, 'WAREHOUSE_IN',   '到达入仓',   '2026-03-24 16:00:00', 'COMPLETED');
+    }
+    if (swj.job_status === 'COMPLETED') {
+      addSubTrack(sid, 'SIGNED', '已签收', '2026-03-26 14:00:00', 'COMPLETED');
+    }
+  }
+
+  // ============================================================
   // 7. 调拨（3条，对齐 Web 调拨管理数据）
   // ============================================================
 

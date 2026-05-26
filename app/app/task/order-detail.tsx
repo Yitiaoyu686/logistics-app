@@ -182,7 +182,7 @@ export default function OrderDetailScreen() {
                   subOrderNo: sub.sub_order_no,
                   subStatus: sub.sub_status,
                   businessLine: d.business_line,
-                  parentOrderNo: d.order_no,
+                  parentOrderId: d.id,
                 },
               })}
             >
