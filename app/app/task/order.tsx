@@ -169,28 +169,46 @@ export default function OrderScreen({ embedded = false }: OrderScreenProps = {})
               {item.total_declared_pieces}件 · {item.total_declared_weight_kg}kg
             </Text>
             {hasSub && (
-              <TouchableOpacity onPress={(e) => { e.stopPropagation(); toggleExpand(item.id); }}>
+              <TouchableOpacity onPress={() => toggleExpand(item.id)}>
                 <Ionicons name={expanded ? 'chevron-up-circle' : 'chevron-down-circle'} size={16} color={colors.primary} />
               </TouchableOpacity>
             )}
           </View>
-          {item.consignee_name ? (
-            <Text style={styles.consigneeText} numberOfLines={1}>→ {item.consignee_name}</Text>
-          ) : null}
-          {['PENDING_INBOUND', 'INBOUND'].includes(item.order_status) && (
-            <TouchableOpacity
-              style={styles.cancelChip}
-              onPress={(e) => {
-                e.stopPropagation();
+          <View style={styles.footerActions}>
+            <TouchableOpacity onPress={() => router.push({ pathname: '/task/order-edit' as any, params: { id: item.id } })}>
+              <Text style={styles.actionLink}>编辑</Text>
+            </TouchableOpacity>
+            {['PENDING_INBOUND', 'INBOUND', 'PENDING_DEPARTURE'].includes(item.order_status) && (
+              <TouchableOpacity onPress={() => {
                 Alert.alert('取消订单', `确认取消 ${item.order_no} 吗？`, [
                   { text: '保留', style: 'cancel' },
                   { text: '确认取消', style: 'destructive', onPress: () => Alert.alert('已提交', '订单取消申请已提交') },
                 ]);
-              }}
-            >
-              <Text style={styles.cancelChipText}>取消</Text>
-            </TouchableOpacity>
-          )}
+              }}>
+                <Text style={styles.actionLinkDanger}>取消</Text>
+              </TouchableOpacity>
+            )}
+            {item.order_status === 'SUSPENDED' && (
+              <TouchableOpacity onPress={() => {
+                Alert.alert('恢复订单', `确认恢复 ${item.order_no} 吗？`, [
+                  { text: '取消', style: 'cancel' },
+                  { text: '确认恢复', onPress: () => Alert.alert('已恢复', '订单已恢复') },
+                ]);
+              }}>
+                <Text style={styles.actionLinkSuccess}>恢复</Text>
+              </TouchableOpacity>
+            )}
+            {!['SUSPENDED', 'CANCELLED', 'COMPLETED'].includes(item.order_status) && (
+              <TouchableOpacity onPress={() => {
+                Alert.alert('暂停订单', `确认暂停 ${item.order_no} 吗？`, [
+                  { text: '取消', style: 'cancel' },
+                  { text: '确认暂停', style: 'destructive', onPress: () => Alert.alert('已暂停', '订单已暂停') },
+                ]);
+              }}>
+                <Text style={styles.actionLinkWarn}>暂停</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -324,8 +342,11 @@ const styles = StyleSheet.create({
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: spacing.sm, borderTopWidth: 0.5, borderTopColor: colors.borderLight },
   footerText: { fontSize: font.xs, color: colors.textSecondary },
   consigneeText: { fontSize: font.xs, color: colors.textSecondary, maxWidth: '45%' },
-  cancelChip: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.dangerLight, backgroundColor: colors.dangerLight },
-  cancelChipText: { fontSize: 10, color: colors.danger, fontWeight: '600' },
+  footerActions: { flexDirection: 'row', gap: spacing.sm },
+  actionLink: { fontSize: font.xs, color: colors.info, fontWeight: '600' },
+  actionLinkDanger: { fontSize: font.xs, color: colors.danger, fontWeight: '600' },
+  actionLinkWarn: { fontSize: font.xs, color: colors.warning, fontWeight: '600' },
+  actionLinkSuccess: { fontSize: font.xs, color: colors.success, fontWeight: '600' },
   serviceTag: { paddingHorizontal: 5, paddingVertical: 1, borderRadius: 3 },
   serviceTagText: { fontSize: 9, fontWeight: '700' },
   subOrderSection: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.bg, borderRadius: radius.md, padding: spacing.sm, marginBottom: spacing.sm },
