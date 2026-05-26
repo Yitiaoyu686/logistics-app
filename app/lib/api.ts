@@ -6,7 +6,7 @@ const LOCAL_URL = 'http://localhost:3001/api';
 const LAN_URL = 'http://192.168.3.127:3001/api';
 
 const BASE_URL = Platform.OS === 'web'
-  ? '/api'
+  ? 'http://localhost:3001/api'
   : LAN_URL;
 
 async function getToken(): Promise<string | null> {
