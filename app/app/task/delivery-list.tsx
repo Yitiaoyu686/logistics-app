@@ -70,6 +70,13 @@ export default function DeliveryListScreen() {
     setRefreshing(false);
   };
 
+  const stats = useMemo(() => ({
+    total: list.length,
+    inProgress: list.filter((d) => ['PENDING', 'IN_DELIVERY'].includes(d.status)).length,
+    signed: list.filter((d) => d.status === 'SIGNED').length,
+    failed: list.filter((d) => d.status === 'FAILED').length,
+  }), [list]);
+
   const filtered = useMemo(() => {
     let items = list;
     if (statusFilter !== 'ALL') {
@@ -151,6 +158,13 @@ export default function DeliveryListScreen() {
         </View>
       </View>
 
+      <View style={styles.statsRow}>
+        <View style={styles.statCard}><Text style={styles.statValue}>{stats.total}</Text><Text style={styles.statLabel}>总数</Text></View>
+        <View style={styles.statCard}><Text style={styles.statValue}>{stats.inProgress}</Text><Text style={styles.statLabel}>执行中</Text></View>
+        <View style={styles.statCard}><Text style={[styles.statValue, { color: colors.success }]}>{stats.signed}</Text><Text style={styles.statLabel}>已签收</Text></View>
+        <View style={styles.statCard}><Text style={[styles.statValue, { color: colors.danger }]}>{stats.failed}</Text><Text style={styles.statLabel}>失败</Text></View>
+      </View>
+
       <View style={styles.filterRow}>
         {STATUS_FILTERS.map((f) => (
           <Pressable
@@ -195,6 +209,11 @@ const styles = StyleSheet.create({
   searchRow: { paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm, backgroundColor: colors.card },
   searchInputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bg, borderRadius: radius.md, paddingHorizontal: spacing.md, height: 40, gap: spacing.sm },
   searchInput: { flex: 1, fontSize: font.md, color: colors.text },
+
+  statsRow: { flexDirection: 'row', paddingHorizontal: spacing.sm, paddingVertical: spacing.sm, backgroundColor: colors.card, gap: spacing.sm },
+  statCard: { flex: 1, alignItems: 'center', backgroundColor: colors.bg, borderRadius: radius.md, paddingVertical: spacing.sm },
+  statValue: { fontSize: font.lg, fontWeight: '700', color: colors.primary },
+  statLabel: { fontSize: font.xs, color: colors.textTertiary, marginTop: 2 },
 
   filterRow: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: spacing.xs, backgroundColor: colors.card, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
   filterChip: { paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.full, backgroundColor: colors.bg },

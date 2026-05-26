@@ -72,6 +72,12 @@ export default function PickupListScreen() {
     setRefreshing(false);
   };
 
+  const stats = useMemo(() => ({
+    total: list.length,
+    notified: list.filter((p) => p.notify_status === 'NOTIFIED' || p.notify_status === 'PICKED_UP' || p.pickup_status === 'NOTIFIED').length,
+    pickedUp: list.filter((p) => p.pickup_status === 'COMPLETED' || p.notify_status === 'PICKED_UP').length,
+  }), [list]);
+
   const handleNotify = async (item: PickupItem) => {
     try {
       await deliveryApi.notifyPickup(item.id);
@@ -179,6 +185,12 @@ export default function PickupListScreen() {
         </View>
       </View>
 
+      <View style={styles.statsRow}>
+        <View style={styles.statCard}><Text style={styles.statValue}>{stats.total}</Text><Text style={styles.statLabel}>总数</Text></View>
+        <View style={styles.statCard}><Text style={styles.statValue}>{stats.notified}</Text><Text style={styles.statLabel}>已通知</Text></View>
+        <View style={styles.statCard}><Text style={[styles.statValue, { color: colors.success }]}>{stats.pickedUp}</Text><Text style={styles.statLabel}>已核销</Text></View>
+      </View>
+
       <View style={styles.filterRow}>
         {STATUS_FILTERS.map((f) => (
           <Pressable
@@ -223,6 +235,11 @@ const styles = StyleSheet.create({
   searchRow: { paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm, backgroundColor: colors.card },
   searchInputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bg, borderRadius: radius.md, paddingHorizontal: spacing.md, height: 40, gap: spacing.sm },
   searchInput: { flex: 1, fontSize: font.md, color: colors.text },
+
+  statsRow: { flexDirection: 'row', paddingHorizontal: spacing.sm, paddingVertical: spacing.sm, backgroundColor: colors.card, gap: spacing.sm },
+  statCard: { flex: 1, alignItems: 'center', backgroundColor: colors.bg, borderRadius: radius.md, paddingVertical: spacing.sm },
+  statValue: { fontSize: font.lg, fontWeight: '700', color: colors.primary },
+  statLabel: { fontSize: font.xs, color: colors.textTertiary, marginTop: 2 },
 
   filterRow: { flexDirection: 'row', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: spacing.sm, backgroundColor: colors.card, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
   filterChip: { paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.full, backgroundColor: colors.bg },
