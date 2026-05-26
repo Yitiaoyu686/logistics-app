@@ -440,6 +440,17 @@ export default function OrderCreateScreen() {
 
   const renderStep2 = () => (
     <ScrollView contentContainerStyle={styles.scroll}>
+      <View style={styles.step2Toolbar}>
+        <TouchableOpacity style={styles.pasteBtn} onPress={() => setShowPasteModal(true)}>
+          <Ionicons name="clipboard-outline" size={16} color={colors.primary} />
+          <Text style={styles.pasteBtnText}>粘贴识别</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.addPkgBtn} onPress={addPackage}>
+          <Ionicons name="add-circle-outline" size={16} color={colors.primary} />
+          <Text style={styles.addPkgBtnText}>手动添加</Text>
+        </TouchableOpacity>
+      </View>
+
       {packages.length > 0 && (
         <View style={styles.summaryBar}>
           <Text style={styles.summaryText}>共 {packages.length} 个包裹 · {totalPieces} 件</Text>
@@ -450,32 +461,30 @@ export default function OrderCreateScreen() {
         <View style={styles.emptyPackagesHint}>
           <Ionicons name="cube-outline" size={36} color={colors.textTertiary} />
           <Text style={styles.emptyPackagesTitle}>暂未添加包裹</Text>
-          <Text style={styles.emptyPackagesDesc}>可使用下方「粘贴识别」快速录入</Text>
+          <Text style={styles.emptyPackagesDesc}>使用「粘贴识别」快速录入</Text>
         </View>
       )}
 
       {packages.length > 0 && (
-        <View style={styles.section}>
+        <View>
           <View style={styles.tableHeader}>
-            <Text style={[styles.thText, { flex: 1.2 }]}>快递公司</Text>
-            <Text style={[styles.thText, { flex: 1.8 }]}>快递单号</Text>
-            <Text style={[styles.thText, { flex: 1 }]}>品类</Text>
-            <Text style={[styles.thText, { flex: 0.6 }]}>件数</Text>
-            <View style={{ width: 28 }} />
+            <Text style={[styles.thText, styles.thCompany]}>快递公司</Text>
+            <Text style={[styles.thText, styles.thTracking]}>快递单号</Text>
+            <Text style={[styles.thText, styles.thCategory]}>品类</Text>
+            <Text style={[styles.thText, styles.thPieces]}>件数</Text>
+            <View style={{ width: 24 }} />
           </View>
           {packages.map((pkg, idx) => (
             <View key={idx} style={styles.tableRow}>
               <TouchableOpacity
-                style={[styles.tableInput, { flex: 1.2, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
+                style={[styles.tableInput, styles.tdCompany]}
                 onPress={() => openExpressPicker(idx)}
               >
-                <Text style={{ fontSize: font.sm, color: pkg.expressCompany ? colors.text : colors.textTertiary }}>
-                  {pkg.expressCompany || '选择'}
-                </Text>
-                <Ionicons name="chevron-down" size={12} color={colors.textTertiary} />
+                <Text style={styles.tdText} numberOfLines={1}>{pkg.expressCompany || '选择'}</Text>
+                <Ionicons name="chevron-down" size={10} color={colors.textTertiary} />
               </TouchableOpacity>
               <TextInput
-                style={[styles.tableInput, { flex: 1.8 }]}
+                style={[styles.tableInput, styles.tdTracking]}
                 value={pkg.trackingNo}
                 onChangeText={(v) => updatePackage(idx, { trackingNo: v })}
                 placeholder="单号"
@@ -483,38 +492,27 @@ export default function OrderCreateScreen() {
                 autoCapitalize="characters"
               />
               <TextInput
-                style={[styles.tableInput, { flex: 1 }]}
+                style={[styles.tableInput, styles.tdCategory]}
                 value={pkg.goodsCategory}
                 onChangeText={(v) => updatePackage(idx, { goodsCategory: v })}
                 placeholder="品类"
                 placeholderTextColor={colors.textTertiary}
               />
               <TextInput
-                style={[styles.tableInput, { flex: 0.6 }]}
+                style={[styles.tableInput, styles.tdPieces]}
                 value={String(pkg.pieces || '')}
                 onChangeText={(v) => updatePackage(idx, { pieces: Number(v) || 0 })}
                 placeholder="0"
                 placeholderTextColor={colors.textTertiary}
                 keyboardType="numeric"
               />
-              <TouchableOpacity onPress={() => removePackage(idx)} style={{ padding: 4 }}>
-                <Ionicons name="close-circle" size={18} color={colors.textTertiary} />
+              <TouchableOpacity onPress={() => removePackage(idx)} style={styles.rowDelBtn}>
+                <Ionicons name="close-circle" size={16} color={colors.textTertiary} />
               </TouchableOpacity>
             </View>
           ))}
         </View>
       )}
-
-      <View style={styles.step2Actions}>
-        <TouchableOpacity style={styles.pasteBtn} onPress={() => setShowPasteModal(true)}>
-          <Ionicons name="clipboard-outline" size={18} color={colors.primary} />
-          <Text style={styles.pasteBtnText}>粘贴识别</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.addPkgBtn} onPress={addPackage}>
-          <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
-          <Text style={styles.addPkgBtnText}>手动添加</Text>
-        </TouchableOpacity>
-      </View>
     </ScrollView>
   );
 
@@ -978,13 +976,29 @@ const styles = StyleSheet.create({
   chipText: { fontSize: font.sm, color: colors.textSecondary },
   chipTextActive: { color: '#fff', fontWeight: '600' },
 
-  tableHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.sm, paddingVertical: spacing.sm, backgroundColor: colors.bg, borderRadius: radius.sm, marginBottom: spacing.xs },
+  tableHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4, paddingVertical: spacing.sm, backgroundColor: colors.bg, borderRadius: radius.sm, marginBottom: spacing.xs },
   thText: { fontSize: font.xs, fontWeight: '600', color: colors.textTertiary },
-  tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight, gap: spacing.sm },
-  tableInput: { borderWidth: 0.5, borderColor: colors.border, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 6, fontSize: font.sm, color: colors.text, backgroundColor: colors.bg },
+  thCompany: { width: 68 },
+  thTracking: { width: 0, flex: 1 },
+  thCategory: { width: 58 },
+  thPieces: { width: 36, textAlign: 'center' },
+  tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight, gap: 4 },
+  tableInput: { borderWidth: 0.5, borderColor: colors.border, borderRadius: radius.sm, paddingHorizontal: 4, paddingVertical: 5, fontSize: 12, color: colors.text, backgroundColor: colors.bg },
+  tdCompany: { width: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  tdTracking: { width: 0, flex: 1 },
+  tdCategory: { width: 58 },
+  tdPieces: { width: 36, textAlign: 'center' },
+  tdText: { fontSize: 12, color: colors.text, flex: 1 },
+  rowDelBtn: { padding: 2, width: 24, alignItems: 'center' },
   chipRowCompact: { gap: 4, paddingVertical: 2 },
   chipSmall: { paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
   chipSmallText: { fontSize: font.xs, color: colors.textSecondary },
+
+  step2Toolbar: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  addPkgBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, padding: spacing.sm, borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.primary, borderRadius: radius.md, backgroundColor: colors.primaryLight },
+  addPkgBtnText: { fontSize: font.sm, color: colors.primary, fontWeight: '600' },
+  pasteBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, padding: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.primaryLight },
+  pasteBtnText: { fontSize: font.sm, color: colors.primary, fontWeight: '600' },
 
   summaryBar: { backgroundColor: colors.primaryLight, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md },
   summaryText: { fontSize: font.sm, color: colors.primary, fontWeight: '600', textAlign: 'center' },
@@ -996,12 +1010,6 @@ const styles = StyleSheet.create({
   row2: { flexDirection: 'row', gap: spacing.md },
   row3: { flexDirection: 'row', gap: spacing.sm },
 
-  addPkgBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, padding: spacing.md, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.primary, borderRadius: radius.md, backgroundColor: colors.primaryLight },
-  addPkgBtnText: { fontSize: font.md, color: colors.primary, fontWeight: '600' },
-
-  step2Actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  pasteBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, padding: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.primaryLight },
-  pasteBtnText: { fontSize: font.md, color: colors.primary, fontWeight: '600' },
   pasteHint: { fontSize: font.xs, color: colors.textTertiary, marginBottom: spacing.md, lineHeight: 18 },
   pasteInput: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md, fontSize: font.sm, color: colors.text, fontFamily: font.mono, minHeight: 120, backgroundColor: colors.card },
   pasteActions: { marginTop: spacing.md },
