@@ -25,6 +25,7 @@ interface CustomerOption {
 interface PackageItem {
   expressCompany: string;
   trackingNo: string;
+  goodsCategory: string;
   pieces: number;
 }
 
@@ -111,17 +112,22 @@ export default function OrderCreateScreen() {
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [customerKeyword, setCustomerKeyword] = useState('');
 
-  // Step 2: 包裹列表 — 如果从无订单快递过来，预填一条
+  // Step 2: 包裹列表
   const [packages, setPackages] = useState<PackageItem[]>(() => {
     if (params.trackingNo) {
       return [{
         expressCompany: (params.expressCompany as string) || '顺丰',
         trackingNo: params.trackingNo as string,
+        goodsCategory: '电子产品',
         pieces: Number(params.pieces) || 1,
       }];
     }
     return [];
   });
+  const [showExpressPicker, setShowExpressPicker] = useState(false);
+  const [editingPkgIdx, setEditingPkgIdx] = useState(0);
+  const [showPasteModal, setShowPasteModal] = useState(false);
+  const [pasteText, setPasteText] = useState('');
 
   // Step 3: 发货 + 收货信息
   const [customerDetail, setCustomerDetail] = useState<CustomerDetail | null>(null);
@@ -184,7 +190,7 @@ export default function OrderCreateScreen() {
   const isSea = businessLine === 'SEA';
 
   const addPackage = () => {
-    setPackages([...packages, { expressCompany: '顺丰', trackingNo: '', pieces: 1 }]);
+    setPackages([...packages, { expressCompany: '顺丰', trackingNo: '', goodsCategory: '日用百货', pieces: 1 }]);
   };
 
   const removePackage = (idx: number) => {
@@ -193,6 +199,51 @@ export default function OrderCreateScreen() {
 
   const updatePackage = (idx: number, patch: Partial<PackageItem>) => {
     setPackages(packages.map((p, i) => i === idx ? { ...p, ...patch } : p));
+  };
+
+  const handlePaste = () => {
+    const text = pasteText.trim();
+    if (!text) return;
+    // 按行拆分,再按空格/tab/中文逗号解析每行
+    const lines = text.split(/[\n\r]+/).filter((l) => l.trim());
+    const parsed: PackageItem[] = [];
+    for (const line of lines) {
+      // 尝试匹配: 快递公司 单号 品类 件数 (顺序可能变化)
+      const parts = line.split(/[\s\t,，]+/).filter(Boolean);
+      if (parts.length < 2) continue;
+      let company = '顺丰';
+      let trackingNo = '';
+      let goodsCategory = '日用百货';
+      let pieces = 1;
+
+      // 识别快递公司
+      const companyIdx = parts.findIndex((p) => EXPRESS_COMPANIES.includes(p));
+      if (companyIdx >= 0) {
+        company = parts[companyIdx];
+        parts.splice(companyIdx, 1);
+      }
+      // 识别件数(数字+件)
+      const pcsIdx = parts.findIndex((p) => /^\d+件?$/.test(p));
+      if (pcsIdx >= 0) {
+        pieces = parseInt(parts[pcsIdx].replace('件', ''), 10) || 1;
+        parts.splice(pcsIdx, 1);
+      }
+      // 剩余:长的当单号,短的当品类
+      for (const p of parts) {
+        if (/^[A-Za-z0-9]{8,}$/.test(p) && !trackingNo) {
+          trackingNo = p;
+        } else if (p.length <= 8) {
+          goodsCategory = p;
+        }
+      }
+      if (!trackingNo && parts.length > 0) trackingNo = parts[0];
+      parsed.push({ expressCompany: company, trackingNo, goodsCategory, pieces });
+    }
+    if (parsed.length > 0) {
+      setPackages([...packages, ...parsed]);
+      setShowPasteModal(false);
+      setPasteText('');
+    }
   };
 
   const handleNext = () => {
@@ -275,6 +326,7 @@ export default function OrderCreateScreen() {
         items: packages.map((p) => ({
           expressCompany: p.expressCompany,
           trackingNo: p.trackingNo,
+          goodsCategory: p.goodsCategory,
           pieces: p.pieces,
         })),
       });
@@ -381,6 +433,11 @@ export default function OrderCreateScreen() {
     </ScrollView>
   );
 
+  const openExpressPicker = (idx: number) => {
+    setEditingPkgIdx(idx);
+    setShowExpressPicker(true);
+  };
+
   const renderStep2 = () => (
     <ScrollView contentContainerStyle={styles.scroll}>
       {packages.length > 0 && (
@@ -393,53 +450,53 @@ export default function OrderCreateScreen() {
         <View style={styles.emptyPackagesHint}>
           <Ionicons name="cube-outline" size={36} color={colors.textTertiary} />
           <Text style={styles.emptyPackagesTitle}>暂未添加包裹</Text>
-          <Text style={styles.emptyPackagesDesc}>包裹可在后续环节补录，现在可以跳过</Text>
+          <Text style={styles.emptyPackagesDesc}>可使用下方「粘贴识别」快速录入</Text>
         </View>
       )}
 
       {packages.length > 0 && (
         <View style={styles.section}>
-          {/* 表头 */}
           <View style={styles.tableHeader}>
-            <Text style={[styles.thText, { flex: 1.5 }]}>快递公司</Text>
-            <Text style={[styles.thText, { flex: 2 }]}>快递单号</Text>
-            <Text style={[styles.thText, { flex: 0.8 }]}>件数</Text>
+            <Text style={[styles.thText, { flex: 1.2 }]}>快递公司</Text>
+            <Text style={[styles.thText, { flex: 1.8 }]}>快递单号</Text>
+            <Text style={[styles.thText, { flex: 1 }]}>品类</Text>
+            <Text style={[styles.thText, { flex: 0.6 }]}>件数</Text>
             <View style={{ width: 28 }} />
           </View>
           {packages.map((pkg, idx) => (
             <View key={idx} style={styles.tableRow}>
-              <View style={{ flex: 1.5 }}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRowCompact}>
-                  {EXPRESS_COMPANIES.map((c) => (
-                    <TouchableOpacity
-                      key={c}
-                      style={[styles.chipSmall, pkg.expressCompany === c && styles.chipActive]}
-                      onPress={() => updatePackage(idx, { expressCompany: c })}
-                    >
-                      <Text style={[styles.chipSmallText, pkg.expressCompany === c && styles.chipTextActive]}>{c}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-              <View style={{ flex: 2 }}>
-                <TextInput
-                  style={styles.tableInput}
-                  value={pkg.trackingNo}
-                  onChangeText={(v) => updatePackage(idx, { trackingNo: v })}
-                  placeholder="快递单号"
-                  placeholderTextColor={colors.textTertiary}
-                />
-              </View>
-              <View style={{ flex: 0.8 }}>
-                <TextInput
-                  style={styles.tableInput}
-                  value={String(pkg.pieces || '')}
-                  onChangeText={(v) => updatePackage(idx, { pieces: Number(v) || 0 })}
-                  placeholder="0"
-                  placeholderTextColor={colors.textTertiary}
-                  keyboardType="numeric"
-                />
-              </View>
+              <TouchableOpacity
+                style={[styles.tableInput, { flex: 1.2, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
+                onPress={() => openExpressPicker(idx)}
+              >
+                <Text style={{ fontSize: font.sm, color: pkg.expressCompany ? colors.text : colors.textTertiary }}>
+                  {pkg.expressCompany || '选择'}
+                </Text>
+                <Ionicons name="chevron-down" size={12} color={colors.textTertiary} />
+              </TouchableOpacity>
+              <TextInput
+                style={[styles.tableInput, { flex: 1.8 }]}
+                value={pkg.trackingNo}
+                onChangeText={(v) => updatePackage(idx, { trackingNo: v })}
+                placeholder="单号"
+                placeholderTextColor={colors.textTertiary}
+                autoCapitalize="characters"
+              />
+              <TextInput
+                style={[styles.tableInput, { flex: 1 }]}
+                value={pkg.goodsCategory}
+                onChangeText={(v) => updatePackage(idx, { goodsCategory: v })}
+                placeholder="品类"
+                placeholderTextColor={colors.textTertiary}
+              />
+              <TextInput
+                style={[styles.tableInput, { flex: 0.6 }]}
+                value={String(pkg.pieces || '')}
+                onChangeText={(v) => updatePackage(idx, { pieces: Number(v) || 0 })}
+                placeholder="0"
+                placeholderTextColor={colors.textTertiary}
+                keyboardType="numeric"
+              />
               <TouchableOpacity onPress={() => removePackage(idx)} style={{ padding: 4 }}>
                 <Ionicons name="close-circle" size={18} color={colors.textTertiary} />
               </TouchableOpacity>
@@ -448,10 +505,16 @@ export default function OrderCreateScreen() {
         </View>
       )}
 
-      <TouchableOpacity style={styles.addPkgBtn} onPress={addPackage}>
-        <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
-        <Text style={styles.addPkgBtnText}>添加包裹</Text>
-      </TouchableOpacity>
+      <View style={styles.step2Actions}>
+        <TouchableOpacity style={styles.pasteBtn} onPress={() => setShowPasteModal(true)}>
+          <Ionicons name="clipboard-outline" size={18} color={colors.primary} />
+          <Text style={styles.pasteBtnText}>粘贴识别</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.addPkgBtn} onPress={addPackage}>
+          <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
+          <Text style={styles.addPkgBtnText}>手动添加</Text>
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 
@@ -634,6 +697,78 @@ export default function OrderCreateScreen() {
             </>
           )}
         </View>
+
+        {/* 快递公司选择器 */}
+        <Modal visible={showExpressPicker} transparent animationType="slide" onRequestClose={() => setShowExpressPicker(false)}>
+          <View style={styles.modalMask}>
+            <View style={styles.modalSheet}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>快递公司</Text>
+                <TouchableOpacity onPress={() => setShowExpressPicker(false)}>
+                  <Ionicons name="close" size={24} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={{ maxHeight: 420 }}>
+                {EXPRESS_COMPANIES.map((c) => {
+                  const isActive = packages[editingPkgIdx]?.expressCompany === c;
+                  return (
+                    <TouchableOpacity
+                      key={c}
+                      style={[styles.pickerOption, isActive && styles.pickerOptionActive]}
+                      onPress={() => {
+                        updatePackage(editingPkgIdx, { expressCompany: c });
+                        setShowExpressPicker(false);
+                      }}
+                    >
+                      <Text style={[styles.pickerOptionText, isActive && styles.pickerOptionTextActive]}>{c}</Text>
+                      {isActive && <Ionicons name="checkmark" size={18} color={colors.primary} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
+        {/* 智能粘贴识别 */}
+        <Modal visible={showPasteModal} transparent animationType="slide" onRequestClose={() => setShowPasteModal(false)}>
+          <View style={styles.modalMask}>
+            <View style={styles.modalSheet}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>粘贴识别</Text>
+                <TouchableOpacity onPress={() => { setShowPasteModal(false); setPasteText(''); }}>
+                  <Ionicons name="close" size={24} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.pasteHint}>
+                粘贴快递信息,每行一个包裹{'\n'}
+                格式: 快递公司 单号 品类 件数{'\n'}
+                例: 顺丰 SF1234567890 电子产品 2件
+              </Text>
+              <TextInput
+                style={styles.pasteInput}
+                value={pasteText}
+                onChangeText={setPasteText}
+                placeholder="顺丰 SF1234567890 电子产品 2件&#10;韵达 YT9876543210 服装 3件"
+                placeholderTextColor={colors.textTertiary}
+                multiline
+                numberOfLines={6}
+                textAlignVertical="top"
+                autoFocus
+              />
+              <View style={styles.pasteActions}>
+                <TouchableOpacity
+                  style={[styles.pasteSubmit, !pasteText.trim() && styles.btnDisabled]}
+                  onPress={handlePaste}
+                  disabled={!pasteText.trim()}
+                >
+                  <Ionicons name="scan-outline" size={18} color="#fff" />
+                  <Text style={styles.pasteSubmitText}>识别并添加</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
         {/* 客户选择弹窗 */}
         <Modal visible={showCustomerPicker} transparent animationType="slide" onRequestClose={() => setShowCustomerPicker(false)}>
@@ -863,6 +998,20 @@ const styles = StyleSheet.create({
 
   addPkgBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, padding: spacing.md, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.primary, borderRadius: radius.md, backgroundColor: colors.primaryLight },
   addPkgBtnText: { fontSize: font.md, color: colors.primary, fontWeight: '600' },
+
+  step2Actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  pasteBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, padding: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.primaryLight },
+  pasteBtnText: { fontSize: font.md, color: colors.primary, fontWeight: '600' },
+  pasteHint: { fontSize: font.xs, color: colors.textTertiary, marginBottom: spacing.md, lineHeight: 18 },
+  pasteInput: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md, fontSize: font.sm, color: colors.text, fontFamily: font.mono, minHeight: 120, backgroundColor: colors.card },
+  pasteActions: { marginTop: spacing.md },
+  pasteSubmit: { flexDirection: 'row', height: 48, backgroundColor: colors.primary, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  pasteSubmitText: { color: '#fff', fontSize: font.md, fontWeight: '600' },
+
+  pickerOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.lg, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
+  pickerOptionActive: { backgroundColor: colors.primaryLight },
+  pickerOptionText: { fontSize: font.md, color: colors.text },
+  pickerOptionTextActive: { color: colors.primary, fontWeight: '600' },
 
   recipientCard: { borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm },
   recipientCardActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
