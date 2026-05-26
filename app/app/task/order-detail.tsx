@@ -43,6 +43,19 @@ interface RelatedDpn {
   to_site?: string;
 }
 
+interface TrackingNode {
+  nodeCode: string;
+  nodeName: string;
+  statusCode: string;
+  eventTime: string;
+}
+
+interface TrackingSite {
+  siteCode: string;
+  siteName: string;
+  nodes: TrackingNode[];
+}
+
 interface OrderDetail {
   id: string;
   order_no: string;
@@ -75,6 +88,10 @@ interface OrderDetail {
   fees: any[];
   relatedJobs?: RelatedJob[];
   relatedDpns?: RelatedDpn[];
+  trackingBySubOrder?: Record<string, TrackingSite[]>;
+  jobBindingBySubOrder?: Record<string, any[]>;
+  dpnBySubOrder?: Record<string, any[]>;
+  deliveryTaskBySubOrder?: Record<string, any[]>;
 }
 
 const SERVICE_TYPE_LABEL: Record<string, string> = {
@@ -165,35 +182,139 @@ export default function OrderDetailScreen() {
     }
   };
 
+  const formatTime = (iso?: string) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const M = String(d.getMonth() + 1).padStart(2, '0');
+    const D = String(d.getDate()).padStart(2, '0');
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    return `${M}/${D} ${h}:${m}`;
+  };
+
+  const nodeColor = (code: string) => {
+    const s = code.toUpperCase();
+    if (/EXCEPTION|FAILED|CANCEL/.test(s)) return colors.danger;
+    if (/DELIVER|SIGNED|COMPLETED|ARRIVED/.test(s)) return colors.success;
+    if (/TRANSIT|DEPART|ASSIGNED|DELIVERING/.test(s)) return colors.primary;
+    if (/PENDING/.test(s)) return colors.warning;
+    return colors.textSecondary;
+  };
+
   const renderOverview = (d: OrderDetail) => {
-    const currentIdx = getProgressIndex(d.order_status);
-    const timelineNodes = d.business_line === 'AIR' ? TIMELINE_AIR : TIMELINE_SEA;
+    const tracking = d.trackingBySubOrder || {};
+    const hasTracking = Object.keys(tracking).length > 0;
+
     return (
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>物流轨迹</Text>
-        <View style={styles.timeline}>
-          {timelineNodes.map((node, idx) => {
-            const passed = idx <= currentIdx;
-            const isCurrent = idx === currentIdx;
-            return (
-              <View key={node.key} style={styles.timelineRow}>
-                <View style={styles.timelineLeft}>
-                  <View style={[styles.timelineDot, passed && styles.timelineDotActive, isCurrent && styles.timelineDotCurrent]}>
-                    <Ionicons name={node.icon as any} size={14} color={passed ? '#fff' : colors.textTertiary} />
+      <>
+        {/* 子运单物流状态 */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>物流状态栏</Text>
+          {(d.subOrders || []).length === 0 ? (
+            <Text style={styles.emptyHint}>暂无子运单</Text>
+          ) : (
+            (d.subOrders || []).map((sub) => {
+              const sites = tracking[sub.id] || [];
+              // 找出所有节点中最新的 eventTime
+              let latestTime = '';
+              for (const site of sites) {
+                for (const node of (site.nodes || [])) {
+                  if (node.eventTime && (!latestTime || node.eventTime > latestTime)) {
+                    latestTime = node.eventTime;
+                  }
+                }
+              }
+              return (
+                <View key={sub.id} style={styles.subTrackingCard}>
+                  <View style={styles.subTrackingHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.subTrackingNo}>{sub.sub_order_no}</Text>
+                      <Text style={styles.subTrackingMeta}>
+                        {sub.pieces}件 · {sub.actual_weight_kg}kg
+                        {sub.container_no ? ` · ${d.business_line === 'SEA' ? '柜号' : '集装号'} ${sub.container_no}` : ''}
+                      </Text>
+                    </View>
+                    <View style={[styles.subTrackingStatus, { backgroundColor: STATUS_META[sub.sub_status]?.bg || colors.borderLight }]}>
+                      <Text style={[styles.subTrackingStatusText, { color: STATUS_META[sub.sub_status]?.color || colors.textSecondary }]}>
+                        {STATUS_META[sub.sub_status]?.label || sub.sub_status}
+                      </Text>
+                    </View>
+                    {latestTime ? (
+                      <Text style={styles.subTrackingTime}>{formatTime(latestTime)}</Text>
+                    ) : null}
                   </View>
-                  {idx < timelineNodes.length - 1 && (
-                    <View style={[styles.timelineLine, passed && styles.timelineLineActive]} />
+
+                  {sites.length > 0 ? (
+                    sites.map((site) => {
+                      const validNodes = (site.nodes || []).filter((n) => n.eventTime || n.nodeName);
+                      if (validNodes.length === 0) return null;
+                      return (
+                        <View key={site.siteCode} style={styles.siteBlock}>
+                          <Text style={styles.siteName}>{site.siteName || site.siteCode}</Text>
+                          <View style={styles.nodeRow}>
+                            {validNodes.map((node, ni) => (
+                              <View key={ni} style={styles.nodeTag}>
+                                <View style={[styles.nodeDot, { backgroundColor: nodeColor(node.statusCode) }]} />
+                                <Text style={styles.nodeLabel}>{node.nodeName || node.nodeCode}</Text>
+                                {node.eventTime ? (
+                                  <Text style={styles.nodeTime}>{formatTime(node.eventTime)}</Text>
+                                ) : null}
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      );
+                    })
+                  ) : hasTracking ? null : (
+                    <Text style={styles.noTrackingHint}>暂无物流节点数据</Text>
                   )}
+
+                  {/* DPN / Delivery */}
+                  {(d.dpnBySubOrder?.[sub.id] || []).map((dpn: any) => (
+                    <View key={dpn.dpn_no} style={styles.extraTag}>
+                      <Ionicons name="document-text-outline" size={12} color="#7C3AED" />
+                      <Text style={[styles.extraTagText, { color: '#7C3AED' }]}>DPN {dpn.dpn_no}</Text>
+                    </View>
+                  ))}
+                  {(d.deliveryTaskBySubOrder?.[sub.id] || []).map((dt: any) => (
+                    <View key={dt.task_no} style={styles.extraTag}>
+                      <Ionicons name="car-outline" size={12} color={colors.info} />
+                      <Text style={[styles.extraTagText, { color: colors.info }]}>配送 {dt.task_no}</Text>
+                    </View>
+                  ))}
                 </View>
-                <View style={styles.timelineRight}>
-                  <Text style={[styles.timelineLabel, passed && { color: colors.text, fontWeight: '600' }]}>{node.label}</Text>
-                  {isCurrent && <Text style={styles.timelineNote}>当前节点</Text>}
-                </View>
-              </View>
-            );
-          })}
+              );
+            })
+          )}
         </View>
-      </View>
+
+        {/* 静态概览时间线(无 tracking 数据时显示) */}
+        {!hasTracking && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>物流轨迹（概览）</Text>
+            <View style={styles.timeline}>
+              {(d.business_line === 'AIR' ? TIMELINE_AIR : TIMELINE_SEA).map((node, idx) => {
+                const currentIdx = getProgressIndex(d.order_status);
+                const passed = idx <= currentIdx;
+                const isCurrent = idx === currentIdx;
+                return (
+                  <View key={node.key} style={styles.timelineRow}>
+                    <View style={styles.timelineLeft}>
+                      <View style={[styles.timelineDot, passed && styles.timelineDotActive, isCurrent && styles.timelineDotCurrent]}>
+                        <Ionicons name={node.icon as any} size={14} color={passed ? '#fff' : colors.textTertiary} />
+                      </View>
+                      {idx < 9 && <View style={[styles.timelineLine, passed && styles.timelineLineActive]} />}
+                    </View>
+                    <View style={styles.timelineRight}>
+                      <Text style={[styles.timelineLabel, passed && { color: colors.text, fontWeight: '600' }]}>{node.label}</Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
+      </>
     );
   };
 
@@ -491,6 +612,25 @@ const styles = StyleSheet.create({
   timelineRight: { flex: 1, paddingTop: 4, paddingBottom: spacing.md },
   timelineLabel: { fontSize: font.sm, color: colors.textTertiary },
   timelineNote: { fontSize: font.xs, color: colors.primary, marginTop: 2 },
+  emptyHint: { fontSize: font.sm, color: colors.textTertiary, textAlign: 'center', paddingVertical: spacing.lg },
+
+  subTrackingCard: { backgroundColor: colors.bg, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.md },
+  subTrackingHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  subTrackingNo: { fontSize: font.sm, fontFamily: font.mono, fontWeight: '700', color: colors.primary, flex: 1 },
+  subTrackingMeta: { fontSize: font.xs, color: colors.textSecondary },
+  subTrackingStatus: { paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.sm },
+  subTrackingStatusText: { fontSize: font.xs, fontWeight: '600' },
+  subTrackingTime: { fontSize: font.xs, fontFamily: font.mono, color: colors.textTertiary },
+  siteBlock: { marginTop: spacing.sm, paddingLeft: spacing.xs },
+  siteName: { fontSize: font.xs, fontWeight: '700', color: colors.textSecondary, marginBottom: 4 },
+  nodeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  nodeTag: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.card, paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.sm },
+  nodeDot: { width: 6, height: 6, borderRadius: 3 },
+  nodeLabel: { fontSize: 12, color: colors.text, fontWeight: '500' },
+  nodeTime: { fontSize: 11, fontFamily: font.mono, color: colors.textTertiary },
+  noTrackingHint: { fontSize: font.xs, color: colors.textTertiary, paddingLeft: spacing.xs, paddingVertical: spacing.sm },
+  extraTag: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: spacing.xs, paddingLeft: spacing.xs },
+  extraTagText: { fontSize: font.xs, fontWeight: '600' },
   detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing.sm, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
   detailLabel: { fontSize: font.sm, color: colors.textSecondary },
   detailValue: { fontSize: font.sm, color: colors.text, fontWeight: '500', flex: 1, textAlign: 'right' },
