@@ -62,6 +62,7 @@ export const jobApi = {
     return api.get(`/jobs${qs}`);
   },
   get: (jobNo: string) => api.get(`/jobs/${jobNo}`),
+  create: (data: any) => api.post('/jobs', data),
   update: (jobNo: string, data: any) => api.put(`/jobs/${jobNo}`, data),
   addEvent: (data: any) => api.post('/v2/tms/tracking-events', data),
   createShippingUnit: (data: any) => api.post('/v2/tms/shipping-units', data),

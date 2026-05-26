@@ -1,13 +1,14 @@
 import { useMemo, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, FlatList,
-  SafeAreaView, ActivityIndicator, RefreshControl, Pressable,
+  SafeAreaView, ActivityIndicator, RefreshControl, Pressable, Modal, Alert,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, font } from '../../lib/theme';
 import { jobApi } from '../../lib/api';
 import { safeBack } from '../../lib/nav';
+import { useBusinessLine } from '../../lib/business-line';
 
 type StatusFilter = 'ALL' | 'PACKING' | 'SEALED' | 'CUSTOMS_EXPORT' | 'DEPARTED';
 
@@ -53,6 +54,25 @@ export default function JobListScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
+  const [createVisible, setCreateVisible] = useState(false);
+  const [routeText, setRouteText] = useState('');
+  const [containerNo, setContainerNo] = useState('');
+  const [serviceType, setServiceType] = useState('特快');
+  const [cargoType, setCargoType] = useState('普货');
+  const [station, setStation] = useState('');
+  const [creating, setCreating] = useState(false);
+  const { isSea } = useBusinessLine();
+
+  const handleCreateRoute = async () => {
+    if (!routeText) { Alert.alert('请填写线路'); return; }
+    setCreating(true);
+    try {
+      await jobApi.create({ route: routeText, containerNo, serviceType, cargoType, station, businessLine: isSea ? 'SEA' : 'AIR' });
+      Alert.alert('创建成功', '线路已创建', [{ text: '确定', onPress: () => { setCreateVisible(false); setRouteText(''); setContainerNo(''); setStation(''); load(); } }]);
+    } catch {
+      Alert.alert('创建失败', '请重试');
+    } finally { setCreating(false); }
+  };
 
   useFocusEffect(useCallback(() => { load(); }, []));
 
@@ -150,7 +170,9 @@ export default function JobListScreen() {
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.navTitle}>装箱发货</Text>
-        <View style={styles.navBtn} />
+        <TouchableOpacity style={styles.navBtn} onPress={() => setCreateVisible(true)}>
+          <Ionicons name="add" size={24} color={colors.primary} />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.searchRow}>
@@ -217,6 +239,50 @@ export default function JobListScreen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
         />
       )}
+      <Modal visible={createVisible} transparent animationType="slide" onRequestClose={() => setCreateVisible(false)}>
+        <View style={styles.modalMask}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>创建线路</Text>
+              <TouchableOpacity onPress={() => setCreateVisible(false)}>
+                <Ionicons name="close" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.modalBody}>
+              <Text style={styles.fieldLabel}>线路 *</Text>
+              <TextInput style={styles.fieldInput} placeholder="如 CAN.CHN→LOS.NGN" placeholderTextColor={colors.textTertiary} value={routeText} onChangeText={setRouteText} />
+              {isSea && (
+                <>
+                  <Text style={styles.fieldLabel}>集装箱号</Text>
+                  <TextInput style={styles.fieldInput} placeholder="如 MSKU1234567" placeholderTextColor={colors.textTertiary} value={containerNo} onChangeText={setContainerNo} />
+                </>
+              )}
+              <Text style={styles.fieldLabel}>服务类型</Text>
+              <View style={styles.chipRow}>
+                {['特快', '普快'].map((t) => (
+                  <TouchableOpacity key={t} style={[styles.chip, serviceType === t && styles.chipActive]} onPress={() => setServiceType(t)}>
+                    <Text style={[styles.chipText, serviceType === t && styles.chipTextActive]}>{t}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={styles.fieldLabel}>货物类型</Text>
+              <View style={styles.chipRow}>
+                {['普货', '非普货'].map((t) => (
+                  <TouchableOpacity key={t} style={[styles.chip, cargoType === t && styles.chipActive]} onPress={() => setCargoType(t)}>
+                    <Text style={[styles.chipText, cargoType === t && styles.chipTextActive]}>{t}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={styles.fieldLabel}>站点</Text>
+              <TextInput style={styles.fieldInput} placeholder="如 IKEJ STA" placeholderTextColor={colors.textTertiary} value={station} onChangeText={setStation} />
+              <TouchableOpacity style={[styles.modalSubmit, (!routeText || creating) && styles.btnDisabled]} onPress={handleCreateRoute} disabled={!routeText || creating}>
+                <Text style={styles.modalSubmitText}>{creating ? '创建中...' : '确认创建'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -268,4 +334,21 @@ const styles = StyleSheet.create({
   statText: { fontSize: font.xs, color: colors.text, fontWeight: '600' },
   dateRow: { flexDirection: 'row', gap: spacing.sm },
   dateText: { fontSize: font.xs, color: colors.textTertiary, fontFamily: font.mono },
+
+  modalMask: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  modalSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radius.xxl, borderTopRightRadius: radius.xxl, padding: spacing.lg, maxHeight: '85%' },
+  modalHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginBottom: spacing.lg },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg },
+  modalTitle: { fontSize: font.lg, fontWeight: '700', color: colors.text },
+  modalBody: { gap: spacing.sm },
+  fieldLabel: { fontSize: font.sm, fontWeight: '600', color: colors.textSecondary, marginTop: spacing.sm },
+  fieldInput: { backgroundColor: colors.card, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: 12, fontSize: font.md, color: colors.text, borderWidth: 0.5, borderColor: colors.borderLight },
+  chipRow: { flexDirection: 'row', gap: spacing.sm, marginTop: 4 },
+  chip: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.full, backgroundColor: colors.borderLight },
+  chipActive: { backgroundColor: colors.primaryLight },
+  chipText: { fontSize: font.sm, color: colors.textSecondary },
+  chipTextActive: { color: colors.primary, fontWeight: '600' },
+  modalSubmit: { backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: 14, alignItems: 'center', marginTop: spacing.lg },
+  modalSubmitText: { fontSize: font.md, color: '#fff', fontWeight: '700' },
+  btnDisabled: { opacity: 0.4 },
 });
