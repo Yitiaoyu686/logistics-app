@@ -21,8 +21,11 @@ export default function DpnCreateScreen() {
   const router = useRouter();
   const [fromSite, setFromSite] = useState('拉各斯起运站');
   const [toSite, setToSite] = useState('');
+  const [recipientName, setRecipientName] = useState('');
+  const [recipientPhone, setRecipientPhone] = useState('');
+  const [recipientAddress, setRecipientAddress] = useState('');
+  const [executeDate, setExecuteDate] = useState('');
   const [method, setMethod] = useState<DeliveryMethod>('DELIVERY');
-  const [eta, setEta] = useState('');
   const [remark, setRemark] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -39,8 +42,11 @@ export default function DpnCreateScreen() {
         dpnType: 'DELIVERY',
         fromSite,
         toSite,
+        recipientName: recipientName || undefined,
+        recipientPhone: recipientPhone || undefined,
+        recipientAddress: recipientAddress || undefined,
+        executeDate: executeDate || undefined,
         deliveryMethod: method,
-        eta: eta || undefined,
         remark: remark || undefined,
       });
       const goBind = () =>
@@ -97,6 +103,13 @@ export default function DpnCreateScreen() {
           </View>
 
           <View style={styles.section}>
+            <Text style={styles.sectionTitle}>发往信息</Text>
+            <Field label="发至名字 *" value={recipientName} onChange={setRecipientName} placeholder="录入" />
+            <Field label="发至电话 *" value={recipientPhone} onChange={setRecipientPhone} placeholder="录入" keyboardType="phone-pad" />
+            <Field label="发至地址 *" value={recipientAddress} onChange={setRecipientAddress} placeholder="录入" multiline />
+          </View>
+
+          <View style={styles.section}>
             <Text style={styles.sectionTitle}>派送方式</Text>
             <View style={{ flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' }}>
               {METHODS.map((m) => (
@@ -131,7 +144,7 @@ export default function DpnCreateScreen() {
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>时间</Text>
-            <Field label="预计送达" value={eta} onChange={setEta} placeholder="YYYY-MM-DD" />
+            <Field label="执行日期" value={executeDate} onChange={setExecuteDate} placeholder="YYYY-MM-DD" />
           </View>
 
           <View style={styles.section}>
@@ -171,18 +184,21 @@ export default function DpnCreateScreen() {
   );
 }
 
-function Field({ label, value, onChange, placeholder }: {
+function Field({ label, value, onChange, placeholder, keyboardType, multiline }: {
   label: string; value: string; onChange: (v: string) => void; placeholder: string;
+  keyboardType?: 'default' | 'phone-pad'; multiline?: boolean;
 }) {
   return (
     <View style={styles.formItem}>
       <Text style={styles.formLabel}>{label}</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, multiline && { height: 72, textAlignVertical: 'top' }]}
         value={value}
         onChangeText={onChange}
         placeholder={placeholder}
         placeholderTextColor={colors.textTertiary}
+        keyboardType={keyboardType || 'default'}
+        multiline={multiline}
       />
     </View>
   );

@@ -61,6 +61,26 @@ export default function DestInboundListScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [keyword, setKeyword] = useState('');
+  const [country, setCountry] = useState('ALL');
+  const [city, setCity] = useState('ALL');
+  const [station, setStation] = useState('ALL');
+
+  const countries = ['ALL', '尼日利亚', '加纳'];
+  const cities: Record<string, string[]> = {
+    'ALL': [],
+    '尼日利亚': ['ALL', '拉各斯', '阿布贾', '卡诺'],
+    '加纳': ['ALL', '阿克拉'],
+  };
+  const stations: Record<string, string[]> = {
+    'ALL': [],
+    '拉各斯': ['ALL', 'IKEJ STA', 'VI STA', 'CV STA'],
+    '阿布贾': ['ALL', 'ABUJ STA'],
+    '卡诺': ['ALL', 'KAN STA'],
+    '阿克拉': ['ALL', 'ACC STA'],
+  };
+
+  const showCities = country !== 'ALL';
+  const showStations = showCities && city !== 'ALL';
 
   useFocusEffect(useCallback(() => { load(); }, []));
 
@@ -90,16 +110,28 @@ export default function DestInboundListScreen() {
   };
 
   const data = useMemo(() => {
-    const items: ListItem[] = tab === 'JOB' ? jobs : dpns;
-    if (!keyword) return items;
-    const k = keyword.toLowerCase();
-    return items.filter((item) => {
-      if (item.kind === 'JOB') {
-        return item.job_no?.toLowerCase().includes(k) || item.container_no?.toLowerCase().includes(k);
-      }
-      return item.dpn_no?.toLowerCase().includes(k);
-    });
-  }, [tab, jobs, dpns, keyword]);
+    let items: ListItem[] = tab === 'JOB' ? jobs : dpns;
+    if (keyword) {
+      const k = keyword.toLowerCase();
+      items = items.filter((item) => {
+        if (item.kind === 'JOB') {
+          return item.job_no?.toLowerCase().includes(k) || item.container_no?.toLowerCase().includes(k);
+        }
+        return item.dpn_no?.toLowerCase().includes(k);
+      });
+    }
+    // 三级筛选(仅JOB tab有 dest 相关字段)
+    if (tab === 'JOB' && country !== 'ALL') {
+      items = items.filter((item) => {
+        const j = item as JobInbound;
+        const destStr = j.dest_port || '';
+        if (country === '尼日利亚') return /LOS|ABV|KAN|IKEJ|VI/i.test(destStr);
+        if (country === '加纳') return /ACC/i.test(destStr);
+        return true;
+      });
+    }
+    return items;
+  }, [tab, jobs, dpns, keyword, country]);
 
   const renderJobItem = (item: JobInbound) => {
     const meta = JOB_STATUS_META[item.job_status] || { label: item.job_status, color: colors.textSecondary, bg: colors.borderLight };
@@ -217,6 +249,36 @@ export default function DestInboundListScreen() {
         </View>
       </View>
 
+      {tab === 'JOB' && (
+        <View style={styles.filterSection}>
+          <View style={styles.filterChipRow}>
+            {countries.map((c) => (
+              <TouchableOpacity key={c} style={[styles.filterChip, country === c && styles.filterChipActive]} onPress={() => { setCountry(c); setCity('ALL'); setStation('ALL'); }}>
+                <Text style={[styles.filterChipText, country === c && styles.filterChipTextActive]}>{c === 'ALL' ? '全部国家' : c}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {showCities && (
+            <View style={styles.filterChipRow}>
+              {cities[country]?.map((c) => (
+                <TouchableOpacity key={c} style={[styles.filterChip, styles.filterChipSub, city === c && styles.filterChipActive]} onPress={() => { setCity(c); setStation('ALL'); }}>
+                  <Text style={[styles.filterChipText, city === c && styles.filterChipTextActive]}>{c === 'ALL' ? '全部城市' : c}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          {showStations && (
+            <View style={styles.filterChipRow}>
+              {stations[city]?.map((s) => (
+                <TouchableOpacity key={s} style={[styles.filterChip, styles.filterChipSub, station === s && styles.filterChipActive]} onPress={() => setStation(s)}>
+                  <Text style={[styles.filterChipText, station === s && styles.filterChipTextActive]}>{s === 'ALL' ? '全部站点' : s}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
+
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.primary} /></View>
       ) : data.length === 0 ? (
@@ -257,6 +319,14 @@ const styles = StyleSheet.create({
   searchRow: { paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm },
   searchInputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: radius.md, paddingHorizontal: spacing.md, height: 40, gap: spacing.sm },
   searchInput: { flex: 1, fontSize: font.md, color: colors.text },
+
+  filterSection: { paddingHorizontal: spacing.md, paddingBottom: spacing.sm, gap: spacing.xs },
+  filterChipRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
+  filterChip: { paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.full, backgroundColor: colors.card, borderWidth: 0.5, borderColor: colors.borderLight },
+  filterChipSub: { backgroundColor: colors.bg },
+  filterChipActive: { backgroundColor: colors.primaryLight, borderColor: colors.primary },
+  filterChipText: { fontSize: font.xs, color: colors.textSecondary },
+  filterChipTextActive: { color: colors.primary, fontWeight: '600' },
 
   listContent: { padding: spacing.md, gap: spacing.sm },
   card: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg },
