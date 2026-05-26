@@ -203,6 +203,65 @@ export default function NoOrderExpressScreen() {
     }
   };
 
+  // 编辑 modal
+  const [editTarget, setEditTarget] = useState<UnmatchedPackage | null>(null);
+  const [editTrackingNo, setEditTrackingNo] = useState('');
+  const [editExpressCo, setEditExpressCo] = useState('');
+  const [editSenderName, setEditSenderName] = useState('');
+  const [editSenderPhone, setEditSenderPhone] = useState('');
+  const [editPieces, setEditPieces] = useState('1');
+  const [editWeight, setEditWeight] = useState('');
+  const [editing, setEditing] = useState(false);
+
+  const openEdit = (item: UnmatchedPackage) => {
+    setEditTarget(item);
+    setEditTrackingNo(item.tracking_no);
+    setEditExpressCo(item.express_company || '顺丰');
+    setEditSenderName(item.sender_name || '');
+    setEditSenderPhone(item.sender_phone || '');
+    setEditPieces(String(item.pieces));
+    setEditWeight(String(item.gross_weight_kg || ''));
+  };
+  const handleEdit = async () => {
+    if (!editTarget) return;
+    setEditing(true);
+    try {
+      await warehouseApi.updateUnmatched(editTarget.id, { trackingNo: editTrackingNo, expressCompany: editExpressCo, senderName: editSenderName, senderPhone: editSenderPhone, pieces: Number(editPieces), grossWeightKg: Number(editWeight) });
+      Alert.alert('已更新', '', [{ text: '确定', onPress: () => { setEditTarget(null); load(); } }]);
+    } catch {
+      Alert.alert('更新失败');
+    } finally { setEditing(false); }
+  };
+
+  // 通知
+  const [notifyTarget, setNotifyTarget] = useState<UnmatchedPackage | null>(null);
+  const [notifyContent, setNotifyContent] = useState('');
+  const openNotify = (item: UnmatchedPackage) => { setNotifyTarget(item); setNotifyContent(`${item.tracking_no} 快递已到达仓库，请确认订单信息`); };
+  const handleNotify = () => {
+    Alert.alert('通知已发送', notifyContent, [{ text: '确定', onPress: () => setNotifyTarget(null) }]);
+  };
+
+  // 退回
+  const [returnTarget, setReturnTarget] = useState<UnmatchedPackage | null>(null);
+  const [returnReason, setReturnReason] = useState('');
+  const openReturn = (item: UnmatchedPackage) => { setReturnTarget(item); setReturnReason(''); };
+  const handleReturn = async () => {
+    if (!returnTarget || !returnReason) return;
+    try {
+      await warehouseApi.returnUnmatched(returnTarget.id, { reason: returnReason });
+      Alert.alert('已退回', '已创建退运单', [{ text: '确定', onPress: () => { setReturnTarget(null); load(); } }]);
+    } catch { Alert.alert('退回失败'); }
+  };
+
+  const handleDelete = (item: UnmatchedPackage) => {
+    Alert.alert('确认删除', `确定删除 ${item.tracking_no} 吗？`, [
+      { text: '取消', style: 'cancel' },
+      { text: '删除', style: 'destructive', onPress: async () => {
+        try { await warehouseApi.deleteUnmatched(item.id); load(); } catch { Alert.alert('删除失败'); }
+      }},
+    ]);
+  };
+
   const renderItem = ({ item }: { item: UnmatchedPackage }) => (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
@@ -222,13 +281,31 @@ export default function NoOrderExpressScreen() {
       )}
       {item.status === 'PENDING' && (
         <View style={styles.cardActions}>
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.actionBtnPrimary]}
-            onPress={() => openMatch(item)}
-          >
+          <TouchableOpacity style={styles.actionBtnMini} onPress={() => openEdit(item)}>
+            <Ionicons name="create-outline" size={12} color={colors.info} />
+            <Text style={styles.actionBtnMiniText}>编辑</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionBtnMini} onPress={() => openNotify(item)}>
+            <Ionicons name="notifications-outline" size={12} color={colors.warning} />
+            <Text style={styles.actionBtnMiniText}>通知</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.actionBtn, styles.actionBtnPrimary]} onPress={() => openMatch(item)}>
             <Ionicons name="link" size={14} color="#fff" />
             <Text style={styles.actionBtnText}>匹配订单</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.actionBtnMini} onPress={() => openReturn(item)}>
+            <Ionicons name="return-down-back-outline" size={12} color={colors.danger} />
+            <Text style={styles.actionBtnMiniTextDanger}>退回</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionBtnMini} onPress={() => handleDelete(item)}>
+            <Ionicons name="trash-outline" size={12} color={colors.danger} />
+            <Text style={styles.actionBtnMiniTextDanger}>删除</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      {item.status === 'MATCHED' && (
+        <View style={styles.cardFooterSimple}>
+          <Text style={styles.matchedHint}>已匹配</Text>
         </View>
       )}
     </View>
@@ -353,6 +430,7 @@ export default function NoOrderExpressScreen() {
       </Modal>
 
       {/* Match Modal */}
+      {/* ... existing match modal content ... */}
       <Modal visible={!!matchTarget} transparent animationType="slide" onRequestClose={() => setMatchTarget(null)}>
         <View style={styles.modalMask}>
           <View style={styles.modalSheet}>
@@ -362,52 +440,115 @@ export default function NoOrderExpressScreen() {
                 <Ionicons name="close" size={24} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
-
             {matchTarget && (
               <>
                 <View style={styles.infoCard}>
                   <Text style={styles.infoTitle}>{matchTarget.tracking_no}</Text>
                   <Text style={styles.infoLine}>{matchTarget.express_company || '-'} · {matchTarget.pieces}件 · {matchTarget.gross_weight_kg}kg</Text>
                   <Text style={styles.infoLine}>发件人：{matchTarget.sender_name || '-'}</Text>
-                  {matchTarget.customer_hint && (
-                    <Text style={styles.hintInModal}>{matchTarget.customer_hint}</Text>
-                  )}
+                  {matchTarget.customer_hint && <Text style={styles.hintInModal}>{matchTarget.customer_hint}</Text>}
                 </View>
-
                 <View style={styles.searchInputWrap}>
                   <Ionicons name="search-outline" size={18} color={colors.textTertiary} />
-                  <TextInput
-                    style={styles.searchInput}
-                    placeholder="搜索客户名/编号/电话"
-                    placeholderTextColor={colors.textTertiary}
-                    value={matchKeyword}
-                    onChangeText={setMatchKeyword}
-                  />
+                  <TextInput style={styles.searchInput} placeholder="搜索客户名/编号/电话" placeholderTextColor={colors.textTertiary} value={matchKeyword} onChangeText={setMatchKeyword} />
                 </View>
-
                 <ScrollView style={{ maxHeight: 400, marginTop: spacing.md }}>
                   {filteredCustomers.length === 0 ? (
                     <Text style={styles.emptyText}>无匹配客户</Text>
                   ) : (
                     filteredCustomers.map((c) => (
-                      <TouchableOpacity
-                        key={c.id}
-                        style={styles.custOption}
-                        onPress={() => handleMatchTo(c)}
-                        disabled={matching}
-                      >
-                        <View style={styles.custAvatar}>
-                          <Text style={styles.custAvatarText}>{c.customerName?.[0]}</Text>
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.custName}>{c.customerName}</Text>
-                          <Text style={styles.custCode}>{c.customerCode} · {c.contactPhone}</Text>
-                        </View>
+                      <TouchableOpacity key={c.id} style={styles.custOption} onPress={() => handleMatchTo(c)} disabled={matching}>
+                        <View style={styles.custAvatar}><Text style={styles.custAvatarText}>{c.customerName?.[0]}</Text></View>
+                        <View style={{ flex: 1 }}><Text style={styles.custName}>{c.customerName}</Text><Text style={styles.custCode}>{c.customerCode} · {c.contactPhone}</Text></View>
                         <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
                       </TouchableOpacity>
                     ))
                   )}
                 </ScrollView>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Edit Modal */}
+      <Modal visible={!!editTarget} transparent animationType="slide" onRequestClose={() => setEditTarget(null)}>
+        <View style={styles.modalMask}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>编辑无单快递</Text>
+              <TouchableOpacity onPress={() => setEditTarget(null)}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
+            </View>
+            <ScrollView contentContainerStyle={{ paddingBottom: spacing.md }}>
+              <FormField label="快递单号 *" value={editTrackingNo} onChangeText={setEditTrackingNo} placeholder="必填" />
+              <Text style={styles.formLabel}>快递公司</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingVertical: spacing.xs }}>
+                {EXPRESS_COMPANIES.map((c) => (
+                  <TouchableOpacity key={c} style={[styles.chip, editExpressCo === c && styles.chipActive]} onPress={() => setEditExpressCo(c)}>
+                    <Text style={[styles.chipText, editExpressCo === c && styles.chipTextActive]}>{c}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <FormField label="收件人" value={editSenderName} onChangeText={setEditSenderName} placeholder="选填" />
+              <FormField label="收件电话" value={editSenderPhone} onChangeText={setEditSenderPhone} placeholder="选填" keyboardType="phone-pad" />
+              <View style={styles.row2}>
+                <View style={{ flex: 1 }}><FormField label="件数" value={editPieces} onChangeText={setEditPieces} placeholder="1" keyboardType="numeric" /></View>
+                <View style={{ flex: 1 }}><FormField label="重量(kg)" value={editWeight} onChangeText={setEditWeight} placeholder="0" keyboardType="decimal-pad" /></View>
+              </View>
+            </ScrollView>
+            <TouchableOpacity style={[styles.submitBtn, editing && styles.btnDisabled]} onPress={handleEdit} disabled={editing}>
+              {editing ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>保存</Text>}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Notify Modal */}
+      <Modal visible={!!notifyTarget} transparent animationType="slide" onRequestClose={() => setNotifyTarget(null)}>
+        <View style={styles.modalMask}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>通知客户</Text>
+              <TouchableOpacity onPress={() => setNotifyTarget(null)}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
+            </View>
+            <Text style={styles.formLabel}>通知内容</Text>
+            <TextInput style={[styles.input, { height: 100, textAlignVertical: 'top' }]} value={notifyContent} onChangeText={setNotifyContent} multiline maxLength={200} />
+            <Text style={{ fontSize: font.xs, color: colors.textTertiary, textAlign: 'right', marginTop: 4 }}>{notifyContent.length}/200</Text>
+            <TouchableOpacity style={styles.submitBtn} onPress={handleNotify}>
+              <Text style={styles.submitBtnText}>发送通知</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Return Modal */}
+      <Modal visible={!!returnTarget} transparent animationType="slide" onRequestClose={() => setReturnTarget(null)}>
+        <View style={styles.modalMask}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>退运处理</Text>
+              <TouchableOpacity onPress={() => setReturnTarget(null)}><Ionicons name="close" size={24} color={colors.textSecondary} /></TouchableOpacity>
+            </View>
+            {returnTarget && (
+              <>
+                <View style={styles.infoCard}>
+                  <Text style={styles.infoTitle}>{returnTarget.tracking_no}</Text>
+                  <Text style={styles.infoLine}>{returnTarget.express_company || '-'}</Text>
+                </View>
+                <Text style={styles.formLabel}>退运原因 *</Text>
+                {['客户取消', '货物损坏', '禁运物品', '货物不符', '客户拒收', '无人认领', '其他'].map((r) => (
+                  <TouchableOpacity key={r} style={[styles.reasonRow, returnReason === r && styles.reasonRowActive]} onPress={() => setReturnReason(r)}>
+                    <Ionicons name={returnReason === r ? 'radio-button-on' : 'radio-button-off'} size={18} color={returnReason === r ? colors.danger : colors.textTertiary} />
+                    <Text style={[styles.reasonText, returnReason === r && styles.reasonTextActive]}>{r}</Text>
+                  </TouchableOpacity>
+                ))}
+                <View style={styles.hintBanner}>
+                  <Ionicons name="alert-circle-outline" size={16} color={colors.warning} />
+                  <Text style={styles.hintText}>确认后将自动创建退运单</Text>
+                </View>
+                <TouchableOpacity style={[styles.submitBtn, { backgroundColor: colors.danger }, !returnReason && styles.btnDisabled]} onPress={handleReturn} disabled={!returnReason}>
+                  <Text style={styles.submitBtnText}>确认退运并创建退运单</Text>
+                </TouchableOpacity>
               </>
             )}
           </View>
@@ -470,10 +611,20 @@ const styles = StyleSheet.create({
   statusText: { fontSize: font.xs, fontWeight: '600' },
   detailLine: { fontSize: font.xs, color: colors.textSecondary, marginBottom: 2 },
   hintLine: { fontSize: font.xs, color: colors.warning, marginTop: 4, fontStyle: 'italic' },
-  cardActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.md },
+  cardActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.xs, marginTop: spacing.md, flexWrap: 'wrap' },
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.md },
   actionBtnPrimary: { backgroundColor: colors.primary },
   actionBtnText: { color: '#fff', fontSize: font.sm, fontWeight: '600' },
+  actionBtnMini: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderLight },
+  actionBtnMiniText: { fontSize: font.xs, color: colors.textSecondary },
+  actionBtnMiniTextDanger: { fontSize: font.xs, color: colors.danger },
+  cardFooterSimple: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: spacing.md },
+  matchedHint: { fontSize: font.xs, color: colors.success },
+
+  reasonRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm },
+  reasonRowActive: { backgroundColor: colors.dangerLight, borderRadius: radius.md },
+  reasonText: { fontSize: font.sm, color: colors.textSecondary },
+  reasonTextActive: { color: colors.danger, fontWeight: '600' },
 
   modalMask: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modalSheet: { backgroundColor: colors.bg, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.lg, maxHeight: '90%' },
