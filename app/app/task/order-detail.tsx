@@ -24,15 +24,6 @@ interface SubOrder {
   actual_arrival?: string;
 }
 
-interface PackageItem {
-  id: string;
-  express_company: string;
-  tracking_no: string;
-  goods_name: string;
-  pieces: number;
-  declared_weight_kg: number;
-}
-
 interface RelatedJob {
   id: string;
   job_no: string;
@@ -90,7 +81,7 @@ interface OrderDetail {
   remark: string | null;
   created_at: string;
   subOrders: SubOrder[];
-  packages: PackageItem[];
+  packages: any[];
   fees: any[];
   relatedJobs?: RelatedJob[];
   relatedDpns?: RelatedDpn[];
@@ -114,44 +105,12 @@ const STATUS_META: Record<string, { label: string; color: string; bg: string }> 
   ARRIVED:         { label: '已到达', color: colors.taskDelivery,  bg: '#fce7f3' },
   DELIVERED:       { label: '已签收', color: colors.textSecondary, bg: colors.borderLight },
 };
-const TIMELINE_SEA = [
-  { key: 'CREATED',        label: '已下单',   icon: 'document-text-outline' },
-  { key: 'INBOUND',        label: '已入库',   icon: 'archive-outline' },
-  { key: 'PACKED',         label: '已装柜',   icon: 'cube-outline' },
-  { key: 'CUSTOMS_EXPORT', label: '出口报关', icon: 'reader-outline' },
-  { key: 'DEPARTED',       label: '已发车',   icon: 'car-outline' },
-  { key: 'IN_TRANSIT',     label: '海运中',   icon: 'boat-outline' },
-  { key: 'ARRIVED',        label: '已到港',   icon: 'flag-outline' },
-  { key: 'CUSTOMS_IMPORT', label: '清关中',   icon: 'shield-checkmark-outline' },
-  { key: 'DELIVERING',     label: '派送中',   icon: 'bicycle-outline' },
-  { key: 'DELIVERED',      label: '已签收',   icon: 'checkmark-circle-outline' },
-];
-
-const TIMELINE_AIR = [
-  { key: 'CREATED',        label: '已下单',   icon: 'document-text-outline' },
-  { key: 'INBOUND',        label: '已入库',   icon: 'archive-outline' },
-  { key: 'PACKED',         label: '已装板',   icon: 'cube-outline' },
-  { key: 'CUSTOMS_EXPORT', label: '出口报关', icon: 'reader-outline' },
-  { key: 'DEPARTED',       label: '已发车',   icon: 'car-outline' },
-  { key: 'IN_TRANSIT',     label: '空运中',   icon: 'airplane-outline' },
-  { key: 'ARRIVED',        label: '已落地',   icon: 'flag-outline' },
-  { key: 'CUSTOMS_IMPORT', label: '清关中',   icon: 'shield-checkmark-outline' },
-  { key: 'DELIVERING',     label: '派送中',   icon: 'bicycle-outline' },
-  { key: 'DELIVERED',      label: '已签收',   icon: 'checkmark-circle-outline' },
-];
-
-type TabKey = 'overview' | 'info' | 'cargo' | 'fees';
+type TabKey = 'overview' | 'info' | 'fees';
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'overview', label: '概览' },
   { key: 'info', label: '信息' },
-  { key: 'cargo', label: '货物' },
   { key: 'fees', label: '费用' },
 ];
-
-function getProgressIndex(status: string): number {
-  const order = ['PENDING_INBOUND', 'INBOUND', 'PACKED', 'CUSTOMS_EXPORT', 'DEPARTED', 'IN_TRANSIT', 'ARRIVED', 'CUSTOMS_IMPORT', 'DELIVERING', 'DELIVERED'];
-  return order.indexOf(status);
-}
 
 function DetailRow({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
@@ -168,7 +127,6 @@ export default function OrderDetailScreen() {
   const [detail, setDetail] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
-  const [cargoModal, setCargoModal] = useState<PackageItem | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -198,152 +156,71 @@ export default function OrderDetailScreen() {
     return `${M}/${D} ${h}:${m}`;
   };
 
-  const nodeColor = (code: string) => {
-    const s = code.toUpperCase();
-    if (/EXCEPTION|FAILED|CANCEL/.test(s)) return colors.danger;
-    if (/DELIVER|SIGNED|COMPLETED|ARRIVED/.test(s)) return colors.success;
-    if (/TRANSIT|DEPART|ASSIGNED|DELIVERING/.test(s)) return colors.primary;
-    if (/PENDING/.test(s)) return colors.warning;
-    return colors.textSecondary;
-  };
+  const STATUS_ORDER = ['PENDING_INBOUND', 'INBOUND', 'PACKED', 'CUSTOMS_EXPORT', 'DEPARTED', 'IN_TRANSIT', 'ARRIVED', 'CUSTOMS_IMPORT', 'DELIVERING', 'DELIVERED'];
 
-  const renderOverview = (d: OrderDetail) => {
-    const tracking = d.trackingBySubOrder || {};
-    const hasTracking = Object.keys(tracking).length > 0;
-
-    // 从子单状态构建简易物流节点
-    const buildSubTimeline = (sub: SubOrder) => {
-      const nodes: { label: string; time?: string; done: boolean }[] = [];
-      const statusOrder = ['PENDING_INBOUND', 'INBOUND', 'PACKED', 'CUSTOMS_EXPORT', 'DEPARTED', 'IN_TRANSIT', 'ARRIVED', 'CUSTOMS_IMPORT', 'DELIVERING', 'DELIVERED'];
-      const currentIdx = statusOrder.indexOf(sub.sub_status);
-      const labels = d.business_line === 'AIR'
-        ? ['待入库', '已入库', '已装板', '出口报关', '已发车', '空运中', '已落地', '清关中', '派送中', '已签收']
-        : ['待入库', '已入库', '已装柜', '出口报关', '已发车', '海运中', '已到港', '清关中', '派送中', '已签收'];
-      for (let i = 0; i < labels.length; i++) {
-        nodes.push({ label: labels[i], done: i <= currentIdx, time: i === currentIdx ? undefined : undefined });
-      }
-      return { nodes, currentIdx, labels };
-    };
-
-    return (
-      <>
-        {/* 子运单物流状态 */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>物流状态栏 ({(d.subOrders || []).length} 个子运单)</Text>
-          {(d.subOrders || []).map((sub) => {
-            const sites = tracking[sub.id] || [];
-            // 找出所有节点中最新的 eventTime
-            let latestTime = '';
-            for (const site of sites) {
-              for (const node of (site.nodes || [])) {
-                if (node.eventTime && (!latestTime || node.eventTime > latestTime)) {
-                  latestTime = node.eventTime;
-                }
-              }
-            }
-
-            // 从子单字段收集时间信息
-            const subTimes: string[] = [];
-            if (sub.created_at) subTimes.push(sub.created_at);
-            if (sub.updated_at) subTimes.push(sub.updated_at);
-            if (sub.etd) subTimes.push(sub.etd);
-            if (sub.eta) subTimes.push(sub.eta);
-            if (sub.actual_departure) subTimes.push(sub.actual_departure);
-            if (sub.actual_arrival) subTimes.push(sub.actual_arrival);
-            const bestTime = latestTime || (subTimes.length > 0 ? subTimes.sort().reverse()[0] : '');
-
-            const { nodes, currentIdx, labels } = buildSubTimeline(sub);
-            const subMeta = STATUS_META[sub.sub_status] || { label: sub.sub_status, color: colors.textSecondary, bg: colors.borderLight };
-
-            return (
-              <View key={sub.id} style={styles.subTrackingCard}>
-                <View style={styles.subTrackingHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.subTrackingNo}>{sub.sub_order_no}</Text>
-                    <Text style={styles.subTrackingMeta}>
-                      {sub.pieces}件 · {sub.actual_weight_kg}kg
-                      {sub.container_no ? ` · ${d.business_line === 'SEA' ? '柜号' : '集装号'} ${sub.container_no}` : ''}
-                    </Text>
-                  </View>
-                  <View style={[styles.subTrackingStatus, { backgroundColor: subMeta.bg }]}>
-                    <Text style={[styles.subTrackingStatusText, { color: subMeta.color }]}>{subMeta.label}</Text>
-                  </View>
-                  {bestTime ? (
-                    <Text style={styles.subTrackingTime}>{formatTime(bestTime)}</Text>
-                  ) : null}
+  const renderOverview = (d: OrderDetail) => (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>子运单 ({(d.subOrders || []).length})</Text>
+      {(d.subOrders || []).length === 0 ? (
+        <Text style={styles.emptyHint}>暂无子运单</Text>
+      ) : (
+        (d.subOrders || []).map((sub) => {
+          const subMeta = STATUS_META[sub.sub_status] || { label: sub.sub_status, color: colors.textSecondary, bg: colors.borderLight };
+          const currentIdx = STATUS_ORDER.indexOf(sub.sub_status);
+          const currentLabel = d.business_line === 'AIR'
+            ? ['待入库', '已入库', '已装板', '出口报关', '已发车', '空运中', '已落地', '清关中', '派送中', '已签收'][currentIdx]
+            : ['待入库', '已入库', '已装柜', '出口报关', '已发车', '海运中', '已到港', '清关中', '派送中', '已签收'][currentIdx];
+          return (
+            <TouchableOpacity
+              key={sub.id}
+              style={styles.subCardLarge}
+              activeOpacity={0.7}
+              onPress={() => router.push({
+                pathname: '/task/sub-order-detail' as any,
+                params: {
+                  subOrderId: sub.id,
+                  subOrderNo: sub.sub_order_no,
+                  subStatus: sub.sub_status,
+                  businessLine: d.business_line,
+                  parentOrderNo: d.order_no,
+                },
+              })}
+            >
+              <View style={styles.subCardHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.subCardNo}>{sub.sub_order_no}</Text>
+                  <Text style={styles.subCardMeta}>
+                    {sub.pieces || 0}件 · {sub.actual_weight_kg || 0}kg
+                    {sub.container_no ? ` · ${d.business_line === 'SEA' ? '柜号' : '集装号'} ${sub.container_no}` : ''}
+                  </Text>
                 </View>
-
-                {sites.length > 0 ? (
-                  /* 有 API tracking 数据：按站点展示 */
-                  sites.map((site) => {
-                    const validNodes = (site.nodes || []).filter((n) => n.eventTime || n.nodeName);
-                    if (validNodes.length === 0) return null;
-                    return (
-                      <View key={site.siteCode} style={styles.siteBlock}>
-                        <Text style={styles.siteName}>{site.siteName || site.siteCode}</Text>
-                        <View style={styles.nodeRow}>
-                          {validNodes.map((node, ni) => (
-                            <View key={ni} style={styles.nodeTag}>
-                              <View style={[styles.nodeDot, { backgroundColor: nodeColor(node.statusCode) }]} />
-                              <Text style={styles.nodeLabel}>{node.nodeName || node.nodeCode}</Text>
-                              {node.eventTime ? (
-                                <Text style={styles.nodeTime}>{formatTime(node.eventTime)}</Text>
-                              ) : null}
-                            </View>
-                          ))}
-                        </View>
-                      </View>
-                    );
-                  })
-                ) : (
-                  /* 无 tracking 数据：基于子单状态构建时间线 */
-                  <View style={styles.inlineTimeline}>
-                    {nodes.map((node, idx) => {
-                      const isCurrent = idx === currentIdx;
-                      const isPassed = idx < currentIdx;
-                      return (
-                        <View key={idx} style={styles.inlineTimelineRow}>
-                          <View style={[styles.inlineDot, isPassed && styles.inlineDotPassed, isCurrent && styles.inlineDotCurrent]} />
-                          {idx < nodes.length - 1 && <View style={[styles.inlineLine, isPassed && styles.inlineLinePassed]} />}
-                          <Text style={[styles.inlineLabel, (isPassed || isCurrent) && styles.inlineLabelActive]} numberOfLines={1}>
-                            {node.label}
-                          </Text>
-                          {isCurrent && sub.updated_at ? (
-                            <Text style={styles.inlineTime}>{formatTime(sub.updated_at!)}</Text>
-                          ) : null}
-                        </View>
-                      );
-                    })}
-                  </View>
-                )}
-
-                {/* 子单时间摘要 */}
-                <View style={styles.timeSummary}>
-                  {sub.created_at ? <Text style={styles.timeSummaryItem}>创建 {formatTime(sub.created_at)}</Text> : null}
-                  {sub.etd ? <Text style={styles.timeSummaryItem}>ETD {sub.etd.slice(5, 10)}</Text> : null}
-                  {sub.eta ? <Text style={styles.timeSummaryItem}>ETA {sub.eta.slice(5, 10)}</Text> : null}
+                <View style={[styles.statusBadge, { backgroundColor: subMeta.bg }]}>
+                  <Text style={[styles.statusText, { color: subMeta.color }]}>{subMeta.label}</Text>
                 </View>
-
-                {/* DPN / Delivery */}
-                {(d.dpnBySubOrder?.[sub.id] || []).map((dpn: any) => (
-                  <View key={dpn.dpn_no} style={styles.extraTag}>
-                    <Ionicons name="document-text-outline" size={12} color="#7C3AED" />
-                    <Text style={[styles.extraTagText, { color: '#7C3AED' }]}>DPN {dpn.dpn_no}</Text>
-                  </View>
-                ))}
-                {(d.deliveryTaskBySubOrder?.[sub.id] || []).map((dt: any) => (
-                  <View key={dt.task_no} style={styles.extraTag}>
-                    <Ionicons name="car-outline" size={12} color={colors.info} />
-                    <Text style={[styles.extraTagText, { color: colors.info }]}>配送 {dt.task_no}</Text>
-                  </View>
-                ))}
               </View>
-            );
-          })}
-        </View>
-      </>
-    );
-  };
+
+              <View style={styles.subCardProgress}>
+                <View style={styles.progressBar}>
+                  <View style={[styles.progressFill, { width: `${Math.max(5, currentIdx >= 0 ? (currentIdx / 9) * 100 : 0)}%` }]} />
+                </View>
+                <Text style={styles.progressLabel}>{currentIdx >= 0 ? `当前：${currentLabel}` : sub.sub_status}</Text>
+              </View>
+
+              <View style={styles.subCardTimes}>
+                {sub.created_at ? <Text style={styles.timeTag}>创建 {formatTime(sub.created_at)}</Text> : null}
+                {sub.updated_at ? <Text style={styles.timeTag}>更新 {formatTime(sub.updated_at!)}</Text> : null}
+              </View>
+
+              <View style={styles.subCardFooter}>
+                <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+                <Text style={styles.viewDetailHint}>查看物流详情</Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })
+      )}
+    </View>
+  );
 
   const renderInfo = (d: OrderDetail) => (
     <>
@@ -375,50 +252,6 @@ export default function OrderDetailScreen() {
         {d.consignee_email && <DetailRow label="邮箱" value={d.consignee_email} />}
         <DetailRow label="国家 / 城市" value={[d.consignee_country, d.consignee_city].filter(Boolean).join(' · ') || '-'} />
         <DetailRow label="地址" value={d.consignee_address || '-'} />
-      </View>
-    </>
-  );
-
-  const renderCargo = (d: OrderDetail) => (
-    <>
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>子运单 ({d.subOrders?.length || 0})</Text>
-        {(d.subOrders || []).map((sub) => (
-          <TouchableOpacity
-            key={sub.id}
-            style={styles.subCard}
-            onPress={() => Alert.alert('子运单详情', `${sub.sub_order_no}\n${sub.pieces}件 · ${sub.actual_weight_kg}kg${sub.container_no ? `\n${d.business_line === 'SEA' ? '柜号' : '集装号'}: ${sub.container_no}` : ''}\n状态: ${STATUS_META[sub.sub_status]?.label || sub.sub_status}`)}
-          >
-            <View style={styles.subHeader}>
-              <Text style={styles.subNo}>{sub.sub_order_no}</Text>
-              <Text style={styles.subStatus}>{STATUS_META[sub.sub_status]?.label || sub.sub_status}</Text>
-            </View>
-            <Text style={styles.subInfo}>
-              {sub.pieces}件 · {sub.actual_weight_kg}kg{sub.container_no ? ` · ${d.business_line === 'SEA' ? '柜号' : '集装号'} ${sub.container_no}` : ''}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>包裹清单 ({d.packages?.length || 0})</Text>
-        {(d.packages || []).map((p) => (
-          <TouchableOpacity
-            key={p.id}
-            style={styles.pkgRow}
-            onPress={() => setCargoModal(p)}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={styles.pkgGoods}>{p.goods_name || '未命名货物'}</Text>
-              <Text style={styles.pkgTracking}>{p.express_company} · {p.tracking_no}</Text>
-            </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.pkgWeight}>{p.declared_weight_kg}kg</Text>
-              <Text style={styles.pkgPieces}>{p.pieces}件</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={14} color={colors.textTertiary} style={{ marginLeft: 4 }} />
-          </TouchableOpacity>
-        ))}
       </View>
     </>
   );
@@ -570,32 +403,9 @@ export default function OrderDetailScreen() {
           <ScrollView contentContainerStyle={styles.content}>
             {activeTab === 'overview' && renderOverview(detail)}
             {activeTab === 'info' && renderInfo(detail)}
-            {activeTab === 'cargo' && renderCargo(detail)}
             {activeTab === 'fees' && renderFees(detail)}
           </ScrollView>
 
-          {/* 包裹详情 Modal */}
-          <Modal visible={!!cargoModal} transparent animationType="fade" onRequestClose={() => setCargoModal(null)}>
-            <View style={styles.cargoModalMask}>
-              <View style={styles.cargoModalSheet}>
-                <View style={styles.cargoModalHeader}>
-                  <Text style={styles.cargoModalTitle}>包裹详情</Text>
-                  <TouchableOpacity onPress={() => setCargoModal(null)}>
-                    <Ionicons name="close" size={22} color={colors.textSecondary} />
-                  </TouchableOpacity>
-                </View>
-                {cargoModal && (
-                  <>
-                    <View style={styles.cargoModalRow}><Text style={styles.cargoModalLabel}>品名</Text><Text style={styles.cargoModalValue}>{cargoModal.goods_name || '-'}</Text></View>
-                    <View style={styles.cargoModalRow}><Text style={styles.cargoModalLabel}>快递公司</Text><Text style={styles.cargoModalValue}>{cargoModal.express_company}</Text></View>
-                    <View style={styles.cargoModalRow}><Text style={styles.cargoModalLabel}>快递单号</Text><Text style={styles.cargoModalValue}>{cargoModal.tracking_no}</Text></View>
-                    <View style={styles.cargoModalRow}><Text style={styles.cargoModalLabel}>件数</Text><Text style={styles.cargoModalValue}>{cargoModal.pieces} 件</Text></View>
-                    <View style={styles.cargoModalRow}><Text style={styles.cargoModalLabel}>重量</Text><Text style={styles.cargoModalValue}>{cargoModal.declared_weight_kg} kg</Text></View>
-                  </>
-                )}
-              </View>
-            </View>
-          </Modal>
         </>
       )}
     </View>
@@ -673,23 +483,18 @@ const styles = StyleSheet.create({
   detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing.sm, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
   detailLabel: { fontSize: font.sm, color: colors.textSecondary },
   detailValue: { fontSize: font.sm, color: colors.text, fontWeight: '500', flex: 1, textAlign: 'right' },
-  subCard: { backgroundColor: colors.bg, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, borderLeftWidth: 3, borderLeftColor: colors.primary },
-  subHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  subNo: { fontSize: font.sm, fontFamily: font.mono, fontWeight: '600', color: colors.primary },
-  subStatus: { fontSize: font.xs, color: colors.textSecondary },
-  subInfo: { fontSize: font.xs, color: colors.textSecondary },
-  pkgRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
-  pkgGoods: { fontSize: font.sm, color: colors.text, fontWeight: '500' },
-  pkgTracking: { fontSize: font.xs, color: colors.textSecondary, marginTop: 2 },
-  pkgWeight: { fontSize: font.sm, color: colors.primary, fontWeight: '600' },
-  pkgPieces: { fontSize: font.xs, color: colors.textTertiary, marginTop: 1 },
-  cargoModalMask: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: spacing.lg },
-  cargoModalSheet: { backgroundColor: colors.card, borderRadius: radius.xl, padding: spacing.lg, width: '100%', maxWidth: 320 },
-  cargoModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg },
-  cargoModalTitle: { fontSize: font.lg, fontWeight: '700', color: colors.text },
-  cargoModalRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing.sm, borderBottomWidth: 0.5, borderBottomColor: colors.borderLight },
-  cargoModalLabel: { fontSize: font.sm, color: colors.textSecondary },
-  cargoModalValue: { fontSize: font.sm, color: colors.text, fontWeight: '500' },
+  subCardLarge: { backgroundColor: colors.bg, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.borderLight },
+  subCardHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginBottom: spacing.md },
+  subCardNo: { fontSize: font.md, fontFamily: font.mono, fontWeight: '700', color: colors.primary },
+  subCardMeta: { fontSize: font.xs, color: colors.textSecondary, marginTop: 2 },
+  subCardProgress: { marginBottom: spacing.sm },
+  progressBar: { height: 4, backgroundColor: colors.borderLight, borderRadius: 2, marginBottom: spacing.xs },
+  progressFill: { height: 4, backgroundColor: colors.primary, borderRadius: 2 },
+  progressLabel: { fontSize: font.xs, color: colors.textSecondary, marginTop: 2 },
+  subCardTimes: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.sm, flexWrap: 'wrap' },
+  timeTag: { fontSize: 11, fontFamily: font.mono, color: colors.textTertiary },
+  subCardFooter: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingTop: spacing.sm, borderTopWidth: 0.5, borderTopColor: colors.borderLight },
+  viewDetailHint: { fontSize: font.xs, color: colors.primary },
   relCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, backgroundColor: colors.bg, borderRadius: radius.md, marginBottom: spacing.xs, borderLeftWidth: 3, borderLeftColor: colors.primary },
   relNo: { fontSize: font.sm, fontFamily: font.mono, fontWeight: '700', color: colors.primary },
   relSub: { fontSize: font.xs, color: colors.textSecondary, marginTop: 2 },
