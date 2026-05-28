@@ -45,3 +45,4 @@ logistics_v2.db
 *.db-wal
 *.sqlite-shm
 *.sqlite-wal
+server/logistics.db
